@@ -111,3 +111,65 @@ export const importRequestSchema = z.strictObject({
   withdrawMissing: z.boolean().default(false),
   sourceLabel: trimmed(120).default(''),
 });
+
+// ---------------------------------------------------------------- activities, meals, stations, scans
+
+const isoDateTime = z.iso.datetime({ offset: true });
+
+export const activityInputSchema = z.strictObject({
+  name: trimmed(80).min(1),
+  description: trimmed(1000).default(''),
+  location: trimmed(120).default(''),
+  instructions: trimmed(2000).default(''),
+  startsAt: isoDateTime.nullable().default(null),
+  endsAt: isoDateTime.nullable().default(null),
+  capacity: z.number().int().positive().max(10000).nullable().default(null),
+  capacityPolicy: z.enum(['warn', 'block']).default('warn'),
+  trackSignOut: z.boolean().default(false),
+  allowRepeat: z.boolean().default(true),
+  bookingRequired: z.boolean().default(false),
+});
+export const activityPatchSchema = activityInputSchema.partial().extend({ status: z.enum(['active', 'cancelled']).optional() });
+
+export const mealInputSchema = z.strictObject({
+  name: trimmed(80).min(1),
+  location: trimmed(120).default(''),
+  startsAt: isoDateTime.nullable().default(null),
+  endsAt: isoDateTime.nullable().default(null),
+});
+export const mealPatchSchema = mealInputSchema.partial().extend({ status: z.enum(['active', 'cancelled']).optional() });
+
+export const stationInputSchema = z.strictObject({
+  name: trimmed(60).min(1),
+  contextType: z.enum(['activity', 'meal', 'site']),
+  contextId: z.uuid().nullable(),
+  hours: z.number().int().min(1).max(168).default(24),
+});
+
+const hex64 = z.string().regex(/^[0-9a-f]{64}$/);
+
+export const scanUploadSchema = z.strictObject({
+  deviceId: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/),
+  scans: z
+    .array(
+      z.strictObject({
+        id: z.uuid(),
+        contextType: z.enum(['activity', 'meal', 'site']),
+        contextId: z.uuid().nullable(),
+        direction: z.enum(['in', 'out']),
+        deviceTime: isoDateTime,
+        method: z.enum(['qr', 'code', 'manual']),
+        /** sha256("credential:" + token) for QR scans; sha256("code:" + eventId + ":" + CODE) for typed codes. */
+        credentialHash: hex64.optional(),
+        codeHash: hex64.optional(),
+        /** Manual lookup by name (fallback); recorded as such in reports. */
+        registrationId: z.uuid().optional(),
+      }),
+    )
+    .min(1)
+    .max(200),
+});
+export type ScanUpload = z.infer<typeof scanUploadSchema>;
+export type ScanUploadItem = ScanUpload['scans'][number];
+
+export const voidScanSchema = z.strictObject({ reason: trimmed(200).min(3, 'Give a reason for the correction') });

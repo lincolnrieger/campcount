@@ -8,7 +8,9 @@ import { adminRoutes } from './routes/admin';
 import { authRoutes } from './routes/auth';
 import { eventRoutes } from './routes/events';
 import { meRoutes } from './routes/me';
+import { operationsRoutes } from './routes/operations';
 import { rosterRoutes } from './routes/roster';
+import { pairingRoutes, scanRoutes } from './routes/scans';
 import { staffRoutes } from './routes/staff';
 import { runMaintenance } from './services/maintenance';
 
@@ -25,6 +27,9 @@ app.route('/admin', adminRoutes);
 app.route('/events', eventRoutes);
 app.route('/events/:eventId/staff', staffRoutes);
 app.route('/events/:eventId', rosterRoutes);
+app.route('/events/:eventId', operationsRoutes);
+app.route('/events/:eventId', scanRoutes);
+app.route('/stations', pairingRoutes);
 
 app.notFound((c) => c.json({ error: { code: 'not_found', message: 'Not found.' } }, 404));
 
