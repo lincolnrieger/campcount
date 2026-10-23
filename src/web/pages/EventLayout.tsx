@@ -32,6 +32,9 @@ export function EventLayout() {
   const tabs: { to: string; label: string; show: boolean }[] = [
     { to: '', label: 'Overview', show: true },
     { to: 'roster', label: 'Roster', show: can('roster.view') },
+    { to: 'activities', label: 'Activities', show: event.features.activities && can('activities.manage') },
+    { to: 'meals', label: 'Meals', show: event.features.meals && can('meals.manage') },
+    { to: 'stations', label: 'Stations', show: can('stations.manage') },
     { to: 'staff', label: 'Staff', show: can('staff.manage') },
   ];
 

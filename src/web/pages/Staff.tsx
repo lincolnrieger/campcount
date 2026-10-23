@@ -4,6 +4,7 @@ import { ApiFailure, api } from '../api';
 import { Field, Loading, Notice } from '../components/ui';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
+import type { Activity } from './Activities';
 
 interface StaffRow {
   assignmentId: string;
@@ -22,7 +23,8 @@ export function Staff() {
   const { event } = useEvent();
   const staff = useApi<{ staff: StaffRow[] }>(`/events/${event.id}/staff`);
   const roles = useApi<{ roles: Role[] }>('/me/roles');
-  const [form, setForm] = useState({ email: '', displayName: '', roleKey: 'activity_leader' });
+  const activities = useApi<{ activities: Activity[] }>(`/events/${event.id}/activities`);
+  const [form, setForm] = useState({ email: '', displayName: '', roleKey: 'activity_leader', activityId: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<{ tone: 'ok' | 'stop'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -35,7 +37,12 @@ export function Staff() {
     setErrors({});
     try {
       await api(`/events/${event.id}/staff`, {
-        body: { email: form.email, roleKey: form.roleKey, ...(form.displayName ? { displayName: form.displayName } : {}) },
+        body: {
+          email: form.email,
+          roleKey: form.roleKey,
+          ...(form.displayName ? { displayName: form.displayName } : {}),
+          ...(selectedRole?.scope === 'activity' && form.activityId ? { activityId: form.activityId } : {}),
+        },
       });
       setMessage({ tone: 'ok', text: `Added ${form.email} as ${selectedRole?.name ?? form.roleKey}.` });
       setForm({ ...form, email: '', displayName: '' });
@@ -145,7 +152,21 @@ export function Staff() {
           </select>
         </Field>
         {selectedRole?.scope === 'activity' && (
-          <p className="field-hint">This gives access to all activities. Limiting a leader to one activity comes with the Activities screen.</p>
+          <Field id="staff-activity" label="Activity" hint="Leaders only see and scan the activity you choose.">
+            <select
+              id="staff-activity"
+              className="input"
+              value={form.activityId}
+              onChange={(e) => setForm({ ...form, activityId: e.target.value })}
+            >
+              <option value="">All activities</option>
+              {activities.data?.activities.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </Field>
         )}
         <button className="btn" disabled={busy || !form.email}>
           {busy ? 'Adding…' : 'Add to event'}

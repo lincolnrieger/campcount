@@ -15,8 +15,9 @@ export function Layout() {
           {isAdmin && <Link to="/admin/users">People</Link>}
           {me?.kind === 'user' && <span className="visually-hidden">Signed in as </span>}
           {me?.kind === 'user' && <span className="hide-narrow">{me.user.displayName}</span>}
+          {me?.kind === 'station' && <span>Shared station</span>}
           <button type="button" className="btn-link" onClick={() => void signOut()}>
-            Sign out
+            {me?.kind === 'station' ? 'Unpair' : 'Sign out'}
           </button>
         </nav>
       </header>

@@ -11,6 +11,11 @@ import { Staff } from './pages/Staff';
 import { Import } from './pages/Import';
 import { Lanyards } from './pages/Lanyards';
 import { Roster } from './pages/Roster';
+import { Activities } from './pages/Activities';
+import { Meals } from './pages/Meals';
+import { Pair } from './pages/Pair';
+import { Scan } from './pages/Scan';
+import { Stations } from './pages/Stations';
 import { useSession } from './session';
 
 function RequireSignIn({ children }: { children: ReactNode }) {
@@ -21,11 +26,22 @@ function RequireSignIn({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/** Stations go straight to their one scanner; people see their events. */
+function Home() {
+  const { me } = useSession();
+  if (me?.kind === 'station') {
+    const { eventId, contextType, contextId } = me.station;
+    return <Navigate to={`/events/${eventId}/scan/${contextType}${contextId ? `/${contextId}` : ''}`} replace />;
+  }
+  return <Events />;
+}
+
 export function App() {
   return (
     <Routes>
       <Route path="/sign-in" element={<SignIn />} />
       <Route path="/sign-in/verify" element={<VerifyLink />} />
+      <Route path="/pair" element={<Pair />} />
       <Route
         element={
           <RequireSignIn>
@@ -33,7 +49,8 @@ export function App() {
           </RequireSignIn>
         }
       >
-        <Route index element={<Events />} />
+        <Route index element={<Home />} />
+        <Route path="events/:eventId/scan/:type/:contextId?" element={<Scan />} />
         <Route path="events/new" element={<NewEvent />} />
         <Route path="events/:eventId" element={<EventLayout />}>
           <Route index element={<EventOverview />} />
@@ -41,6 +58,9 @@ export function App() {
           <Route path="roster" element={<Roster />} />
           <Route path="import" element={<Import />} />
           <Route path="lanyards" element={<Lanyards />} />
+          <Route path="activities" element={<Activities />} />
+          <Route path="meals" element={<Meals />} />
+          <Route path="stations" element={<Stations />} />
         </Route>
         <Route path="admin/users" element={<AdminUsers />} />
         <Route path="*" element={<p>That page doesn't exist.</p>} />

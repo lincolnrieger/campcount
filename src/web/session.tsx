@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ApiFailure, api } from './api';
+import { clearDevice, countUnsynced } from './offline/db';
 import type { Me } from './types';
 
 interface SessionState {
@@ -27,7 +28,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  /** Signing out wipes the rosters cached for offline scanning. */
   const signOut = useCallback(async () => {
+    const waiting = await countUnsynced().catch(() => 0);
+    if (
+      waiting > 0 &&
+      !window.confirm(
+        `${waiting} scans on this phone have not uploaded yet. If you sign out now they will be lost. Get signal and wait for them to upload, or press OK to sign out anyway.`,
+      )
+    ) {
+      return;
+    }
+    await clearDevice(true).catch(() => undefined);
     await api('/auth/sign-out', { method: 'POST' }).catch(() => undefined);
     setMe(null);
   }, []);

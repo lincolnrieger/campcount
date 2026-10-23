@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ApiFailure, api } from '../api';
+import { ScanLauncher } from '../components/ScanLauncher';
 import { Notice } from '../components/ui';
 import type { EventFeatures, EventStatus } from '../../shared/schemas';
 import { EVENT_TRANSITIONS } from '../../shared/lifecycle';
@@ -59,7 +60,9 @@ export function EventOverview() {
         </Notice>
       )}
       {event.description && <p>{event.description}</p>}
+      <ScanLauncher event={event} />
 
+      {can('event.configure') && (
       <section aria-labelledby="features-heading" className="narrow">
         <h2 id="features-heading">Features</h2>
         <FeatureChecklist value={features} onChange={setFeatures} disabled={!editable || busy} />
@@ -73,6 +76,7 @@ export function EventOverview() {
           </button>
         )}
       </section>
+      )}
 
       {transitions.length > 0 && (
         <section aria-labelledby="status-heading" className="narrow">
