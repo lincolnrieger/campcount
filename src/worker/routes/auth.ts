@@ -66,14 +66,20 @@ authRoutes.post('/request', async (c) => {
     // The token is in the URL fragment: it is never sent to a server, so mail
     // scanners that pre-fetch links (e.g. Microsoft Safe Links) cannot use it.
     const link = `${new URL(c.req.url).origin}/sign-in/verify#t=${linkToken}`;
-    await sendEmail(c.env, {
-      to: email,
-      subject: `Your CampCount sign-in code: ${code}`,
-      text:
-        `Your CampCount sign-in code is ${code}\n\n` +
-        `Or open this link and press "Sign in":\n${link}\n\n` +
-        `The code expires in ${CODE_TTL_MINUTES} minutes. If you did not ask for it, ignore this email.`,
-    });
+    try {
+      await sendEmail(c.env, {
+        to: email,
+        subject: `Your CampCount sign-in code: ${code}`,
+        text:
+          `Your CampCount sign-in code is ${code}\n\n` +
+          `Or open this link and press "Sign in":\n${link}\n\n` +
+          `The code expires in ${CODE_TTL_MINUTES} minutes. If you did not ask for it, ignore this email.`,
+      });
+    } catch (err) {
+      // Operator-facing detail goes to the logs (no address or code is logged).
+      console.error(`Sign-in email could not be sent: ${err instanceof Error ? err.message : String(err)}`);
+      throw new ApiError(503, 'email_unavailable', 'The sign-in email could not be sent. Please tell your CampCount administrator.');
+    }
   }
   return c.json({ ok: true });
 });

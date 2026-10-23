@@ -124,3 +124,29 @@ describe('request hardening', () => {
     expect(res.headers.get('Cache-Control')).toBe('no-store');
   });
 });
+
+describe('configuration errors', () => {
+  it('reports a missing AUTH_SECRET clearly instead of a generic error', async () => {
+    const { app } = await import('../src/worker/index');
+    const res = await app.request(
+      '/api/auth/request',
+      { method: 'POST', headers: { Origin: 'http://localhost', 'Content-Type': 'application/json' }, body: '{"email":"a@b.test"}' },
+      { ...testEnv, AUTH_SECRET: '' },
+    );
+    expect(res.status).toBe(503);
+    expect((await json(res)).error.code).toBe('not_configured');
+  });
+
+  it('reports email delivery failure clearly', async () => {
+    const user = await createUser();
+    const { app } = await import('../src/worker/index');
+    const failing = { send: async () => { throw new Error('domain not verified'); } };
+    const res = await app.request(
+      '/api/auth/request',
+      { method: 'POST', headers: { Origin: 'http://localhost', 'Content-Type': 'application/json' }, body: JSON.stringify({ email: user.email }) },
+      { ...testEnv, EMAIL: failing },
+    );
+    expect(res.status).toBe(503);
+    expect((await json(res)).error.code).toBe('email_unavailable');
+  });
+});

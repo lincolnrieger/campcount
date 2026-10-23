@@ -12,7 +12,7 @@ export default defineConfig(async () => {
           bindings: {
             TEST_MIGRATIONS: migrations,
             ENVIRONMENT: 'test',
-            AUTH_SECRET: 'test-secret-not-for-production',
+            AUTH_SECRET: 'test-secret-not-for-production-0123456789',
           },
         },
       }),
