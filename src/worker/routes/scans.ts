@@ -18,7 +18,7 @@ import type { Principal } from '../services/principal';
 import { can } from '../services/principal';
 import { SESSION_COOKIE, createSession } from '../services/sessions';
 import { getEventRow } from './events';
-import { displayName } from './roster';
+import { displayName } from '../../shared/names';
 
 export const scanRoutes = new Hono<AppEnv>();
 

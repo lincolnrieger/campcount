@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { credentialUrl, formatShortCode } from '../../shared/credentials';
+import { displayName } from '../../shared/names';
 import { isEditable } from '../../shared/lifecycle';
 import type { ImportRow } from '../../shared/schemas';
 import { importRequestSchema } from '../../shared/schemas';
@@ -25,9 +26,7 @@ async function runInBatches(db: D1Database, statements: D1PreparedStatement[]): 
   }
 }
 
-export function displayName(first: string, preferred: string, last: string): string {
-  return `${preferred || first} ${last.slice(0, 1)}`.trim() + (last ? '.' : '');
-}
+export { displayName };
 
 async function editableEvent(c: AppContext, eventId: string) {
   const event = await getEventRow(c.env.DB, eventId);
@@ -160,13 +159,14 @@ function rowStatements(db: D1Database, eventId: string, row: ImportRow, dietaryP
     db
       .prepare(
         `INSERT INTO registrations (id, event_id, person_id, kind, section, group_name, position, role_label, team,
-            source_status, photo_consent, status, dietary_source_hash, created_at, updated_at)
-         VALUES (?, ?, ${personRef}, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
+            source_status, photo_consent, status, dietary_source_hash, dietary_review_pending, created_at, updated_at)
+         VALUES (?, ?, ${personRef}, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
          ON CONFLICT (event_id, person_id) DO UPDATE SET
            kind = excluded.kind, section = excluded.section, group_name = excluded.group_name,
            position = excluded.position, role_label = excluded.role_label, team = excluded.team,
            source_status = excluded.source_status, photo_consent = excluded.photo_consent, status = 'active',
            dietary_source_hash = CASE WHEN ? THEN registrations.dietary_source_hash ELSE excluded.dietary_source_hash END,
+           dietary_review_pending = excluded.dietary_review_pending,
            updated_at = excluded.updated_at`,
       )
       .bind(
@@ -183,6 +183,7 @@ function rowStatements(db: D1Database, eventId: string, row: ImportRow, dietaryP
         row.photoConsent,
         // A brand-new registration with unreviewed dietary text starts with no fingerprint, so it stays flagged.
         dietaryPending ? null : row.dietaryFingerprint,
+        dietaryPending ? 1 : 0,
         now,
         now,
         dietaryPending ? 1 : 0,

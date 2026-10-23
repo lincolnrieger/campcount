@@ -74,6 +74,9 @@ CREATE TABLE events (
   created_at            TEXT NOT NULL,
   updated_at            TEXT NOT NULL,
   closed_at             TEXT,
+  sensitive_purged_at   TEXT,   -- set when dietary, consent and card data were deleted under the retention policy
+  records_purged_at     TEXT,   -- set when named attendance records were deleted; archive_summary keeps the totals
+  archive_summary       TEXT,   -- JSON totals retained indefinitely for annual reporting
   CHECK (ends_on >= starts_on)
 );
 
@@ -192,6 +195,7 @@ CREATE TABLE registrations (
   photo_consent         TEXT NOT NULL DEFAULT 'unknown' CHECK (photo_consent IN ('yes', 'no', 'unknown')),
   status                TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'withdrawn')),
   dietary_source_hash   TEXT,   -- hash of source text, to detect changes on re-import; never the text itself
+  dietary_review_pending INTEGER NOT NULL DEFAULT 0 CHECK (dietary_review_pending IN (0, 1)),
   created_at            TEXT NOT NULL,
   updated_at            TEXT NOT NULL,
   UNIQUE (event_id, person_id)

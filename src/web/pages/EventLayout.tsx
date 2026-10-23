@@ -31,10 +31,12 @@ export function EventLayout() {
   const can = (p: Permission) => event.permissions.includes(p);
   const tabs: { to: string; label: string; show: boolean }[] = [
     { to: '', label: 'Overview', show: true },
+    { to: 'live', label: 'Live', show: can('reports.view') && event.status !== 'draft' },
     { to: 'roster', label: 'Roster', show: can('roster.view') },
     { to: 'activities', label: 'Activities', show: event.features.activities && can('activities.manage') },
     { to: 'meals', label: 'Meals', show: event.features.meals && can('meals.manage') },
     { to: 'stations', label: 'Stations', show: can('stations.manage') },
+    { to: 'close-out', label: 'Close-out', show: can('reports.view') && event.status !== 'draft' },
     { to: 'staff', label: 'Staff', show: can('staff.manage') },
   ];
 

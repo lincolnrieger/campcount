@@ -16,6 +16,8 @@ import { Meals } from './pages/Meals';
 import { Pair } from './pages/Pair';
 import { Scan } from './pages/Scan';
 import { Stations } from './pages/Stations';
+import { Live } from './pages/Live';
+import { CloseOut } from './pages/CloseOut';
 import { useSession } from './session';
 
 function RequireSignIn({ children }: { children: ReactNode }) {
@@ -61,6 +63,8 @@ export function App() {
           <Route path="activities" element={<Activities />} />
           <Route path="meals" element={<Meals />} />
           <Route path="stations" element={<Stations />} />
+          <Route path="live" element={<Live />} />
+          <Route path="close-out" element={<CloseOut />} />
         </Route>
         <Route path="admin/users" element={<AdminUsers />} />
         <Route path="*" element={<p>That page doesn't exist.</p>} />

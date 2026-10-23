@@ -56,6 +56,8 @@ export type EventStatus = (typeof EVENT_STATUSES)[number];
 
 export const eventTransitionSchema = z.strictObject({
   to: z.enum(EVENT_STATUSES),
+  /** Required to archive while reconciliation items remain; recorded in the audit log. */
+  acknowledgeOpenItems: z.boolean().default(false),
 });
 
 export const createAssignmentSchema = z.strictObject({

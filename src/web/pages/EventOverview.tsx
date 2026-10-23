@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ApiFailure, api } from '../api';
 import { ScanLauncher } from '../components/ScanLauncher';
+import { Exports } from './CloseOut';
 import { Notice } from '../components/ui';
 import type { EventFeatures, EventStatus } from '../../shared/schemas';
 import { EVENT_TRANSITIONS } from '../../shared/lifecycle';
@@ -61,6 +62,7 @@ export function EventOverview() {
       )}
       {event.description && <p>{event.description}</p>}
       <ScanLauncher event={event} />
+      {!can('reports.view') && <Exports />}
 
       {can('event.configure') && (
       <section aria-labelledby="features-heading" className="narrow">

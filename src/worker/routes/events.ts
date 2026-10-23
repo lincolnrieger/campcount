@@ -7,6 +7,7 @@ import { parseBody, requirePermission, requirePrincipal, requireUser } from '../
 import { badRequest, conflict, notFound } from '../lib/errors';
 import { nowIso } from '../lib/time';
 import { auditStatement } from '../services/audit';
+import { loadEventModel, openItems } from '../services/reports';
 import { can, eventPermissions } from '../services/principal';
 
 export interface EventRow {
@@ -186,7 +187,7 @@ eventRoutes.patch('/:eventId', async (c) => {
 
 eventRoutes.post('/:eventId/transition', async (c) => {
   const eventId = c.req.param('eventId');
-  const { to } = await parseBody(c, eventTransitionSchema);
+  const { to, acknowledgeOpenItems } = await parseBody(c, eventTransitionSchema);
   requirePermission(c, 'event.view', { eventId });
   const user = requireUser(c);
   const row = await getEventRow(c.env.DB, eventId);
@@ -198,6 +199,13 @@ eventRoutes.post('/:eventId/transition', async (c) => {
   else requirePermission(c, 'event.close', { eventId });
   if (!canTransition(row.status, to)) {
     throw conflict(`An event cannot move from ${row.status} to ${to}.`);
+  }
+  let openCount = 0;
+  if (to === 'archived') {
+    openCount = openItems(await loadEventModel(c.env.DB, eventId, row.feature_site === 1)).length;
+    if (openCount > 0 && !acknowledgeOpenItems) {
+      throw conflict(`${openCount} attendance records still need reconciliation. Resolve them, or confirm archiving anyway.`);
+    }
   }
   const now = nowIso();
   const result = await c.env.DB.batch([
@@ -212,7 +220,7 @@ eventRoutes.post('/:eventId/transition', async (c) => {
       eventId,
       targetType: 'event',
       targetId: eventId,
-      detail: { from: row.status, to },
+      detail: { from: row.status, to, openItemsAcknowledged: openCount },
     }),
   ]);
   if (result[0]!.meta.changes !== 1) throw conflict('The event changed while you were editing. Reload and try again.');
