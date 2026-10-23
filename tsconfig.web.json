@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "types": [],
+    "tsBuildInfoFile": "node_modules/.tmp/web.tsbuildinfo",
+    "outDir": "node_modules/.tmp/web"
+  },
+  "include": ["src/web", "src/shared"]
+}

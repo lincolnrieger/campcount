@@ -1,0 +1,126 @@
+import { describe, expect, it } from 'vitest';
+import { devOutbox } from '../src/worker/services/email';
+import { api, createUser, json, testEnv } from './helpers';
+
+function lastEmailTo(email: string) {
+  const message = [...devOutbox].reverse().find((m) => m.to === email);
+  if (!message) throw new Error('no email');
+  return {
+    code: /code is (\d{6})/.exec(message.text)![1]!,
+    token: /#t=([A-Za-z0-9_-]+)/.exec(message.text)![1]!,
+  };
+}
+
+describe('sign-in', () => {
+  it('responds identically for unknown emails and sends nothing', async () => {
+    const before = devOutbox.length;
+    const res = await api('/auth/request', { body: { email: 'nobody@example.test' } });
+    expect(res.status).toBe(200);
+    expect(await json(res)).toEqual({ ok: true });
+    expect(devOutbox.length).toBe(before);
+  });
+
+  it('signs in with a code, sets a hardened cookie, and the code is single-use', async () => {
+    const user = await createUser();
+    await api('/auth/request', { body: { email: user.email.toUpperCase() } });
+    const { code } = lastEmailTo(user.email);
+
+    const res = await api('/auth/verify', { body: { email: user.email, code } });
+    expect(res.status).toBe(200);
+    const cookie = res.headers.get('Set-Cookie')!;
+    expect(cookie).toMatch(/^__Host-cc_session=/);
+    expect(cookie).toMatch(/HttpOnly/);
+    expect(cookie).toMatch(/Secure/);
+    expect(cookie).toMatch(/SameSite=Strict/);
+
+    const me = await api('/me', { cookie: cookie.split(';')[0] });
+    expect((await json(me)).user.email).toBe(user.email);
+
+    const replay = await api('/auth/verify', { body: { email: user.email, code } });
+    expect(replay.status).toBe(400);
+  });
+
+  it('signs in with the emailed link token exactly once', async () => {
+    const user = await createUser();
+    await api('/auth/request', { body: { email: user.email } });
+    const { token } = lastEmailTo(user.email);
+    expect((await api('/auth/verify', { body: { token } })).status).toBe(200);
+    expect((await api('/auth/verify', { body: { token } })).status).toBe(400);
+  });
+
+  it('locks a code after five wrong attempts', async () => {
+    const user = await createUser();
+    await api('/auth/request', { body: { email: user.email } });
+    const { code } = lastEmailTo(user.email);
+    const wrong = code === '000000' ? '111111' : '000000';
+    for (let i = 0; i < 5; i++) {
+      expect((await api('/auth/verify', { body: { email: user.email, code: wrong } })).status).toBe(400);
+    }
+    expect((await api('/auth/verify', { body: { email: user.email, code } })).status).toBe(400);
+  });
+
+  it('a newer code invalidates the older one', async () => {
+    const user = await createUser();
+    await api('/auth/request', { body: { email: user.email } });
+    const first = lastEmailTo(user.email);
+    await api('/auth/request', { body: { email: user.email } });
+    expect((await api('/auth/verify', { body: { email: user.email, code: first.code } })).status).toBe(400);
+  });
+
+  it('does not sign in disabled users', async () => {
+    const user = await createUser();
+    await testEnv.DB.prepare(`UPDATE users SET status = 'disabled' WHERE id = ?`).bind(user.id).run();
+    expect((await api('/me', { cookie: user.cookie })).status).toBe(401);
+    const before = devOutbox.length;
+    await api('/auth/request', { body: { email: user.email } });
+    expect(devOutbox.length).toBe(before);
+  });
+
+  it('sign-out revokes the session', async () => {
+    const user = await createUser();
+    expect((await api('/me', { cookie: user.cookie })).status).toBe(200);
+    await api('/auth/sign-out', { method: 'POST', cookie: user.cookie });
+    expect((await api('/me', { cookie: user.cookie })).status).toBe(401);
+  });
+
+  it('expires sessions after the idle timeout', async () => {
+    const user = await createUser();
+    await testEnv.DB.prepare(`UPDATE sessions SET last_seen_at = '2020-01-01T00:00:00.000Z' WHERE user_id = ?`)
+      .bind(user.id)
+      .run();
+    expect((await api('/me', { cookie: user.cookie })).status).toBe(401);
+  });
+});
+
+describe('request hardening', () => {
+  it('rejects writes from another origin', async () => {
+    const admin = await createUser({ platformAdmin: true });
+    const res = await api('/events', {
+      cookie: admin.cookie,
+      origin: 'https://evil.example',
+      body: { name: 'X', startsOn: '2026-12-01', endsOn: '2026-12-02' },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('rejects writes without an Origin header', async () => {
+    const res = await api('/auth/request', { origin: null, body: { email: 'a@b.test' } });
+    expect(res.status).toBe(403);
+  });
+
+  it('rejects unknown fields in request bodies', async () => {
+    const admin = await createUser({ platformAdmin: true });
+    const res = await api('/events', {
+      cookie: admin.cookie,
+      body: { name: 'X', startsOn: '2026-12-01', endsOn: '2026-12-02', isAdmin: true },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('sets security headers and hides internals on 404', async () => {
+    const res = await api('/does-not-exist');
+    expect(res.status).toBe(404);
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+  });
+});
