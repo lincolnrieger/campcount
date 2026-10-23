@@ -12,7 +12,7 @@ const grant = (eventId: string | null, perms: Permission[], activityId: string |
   activityId,
   permissions: new Set(perms),
 });
-const user = (...grants: AssignmentGrant[]): Principal => ({ kind: 'user', userId: 'u', email: 'e', displayName: 'd', grants });
+const user = (...grants: AssignmentGrant[]): Principal => ({ kind: 'user', userId: 'u', email: 'e', displayName: 'd', hasPassword: false, isDemo: false, grants });
 
 describe('can()', () => {
   it('scopes event permissions to their event', () => {

@@ -1,12 +1,13 @@
 import { Hono } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
-import { signInRequestSchema, signInVerifySchema } from '../../shared/schemas';
+import { passwordSignInSchema, setPasswordSchema, signInRequestSchema, signInVerifySchema } from '../../shared/schemas';
 import type { AppContext, AppEnv } from '../context';
-import { parseBody } from '../context';
+import { parseBody, requireUser } from '../context';
 import { ApiError } from '../lib/errors';
 import { hmacHex, randomDigits, randomToken, sha256Hex, timingSafeEqualHex } from '../lib/crypto';
 import { addMinutes, nowIso } from '../lib/time';
-import { audit } from '../services/audit';
+import { audit, auditStatement } from '../services/audit';
+import { dummyVerify, hashPassword, passwordProblem, verifyPassword } from '../lib/passwords';
 import { EmailSendError, sendEmail } from '../services/email';
 import { SESSION_COOKIE, createSession, revokeSession } from '../services/sessions';
 
@@ -140,7 +141,12 @@ authRoutes.post('/verify', async (c) => {
     .first();
   if (!active) throw INVALID();
 
-  const session = await createSession(c.env, { userId: challenge.user_id });
+  await startSession(c, challenge.user_id, 'token' in input ? 'link' : 'code');
+  return c.json({ ok: true });
+});
+
+export async function startSession(c: AppContext, userId: string, method: string): Promise<void> {
+  const session = await createSession(c.env, { userId });
   setCookie(c, SESSION_COOKIE, session.token, {
     httpOnly: true,
     secure: true,
@@ -148,11 +154,78 @@ authRoutes.post('/verify', async (c) => {
     path: '/',
     expires: new Date(session.expiresAt),
   });
-  await audit(c.env.DB, {
-    actor: { type: 'user', id: challenge.user_id },
-    action: 'auth.sign_in',
-    detail: { method: 'token' in input ? 'link' : 'code' },
-  });
+  await audit(c.env.DB, { actor: { type: 'user', id: userId }, action: 'auth.sign_in', detail: { method } });
+}
+
+const WRONG_PASSWORD = () => new ApiError(400, 'invalid_credentials', 'Email or password is incorrect.');
+
+/**
+ * Everyday sign-in with a password. Accounts without a password (and unknown
+ * emails) get the same answer, after the same amount of work.
+ */
+authRoutes.post('/password/sign-in', async (c) => {
+  const { email, password } = await parseBody(c, passwordSignInSchema);
+  await limitByIp(c, 'password');
+  await rateLimit(c, `password:${await sha256Hex(email)}`);
+
+  const user = await c.env.DB.prepare(`SELECT id, password_hash FROM users WHERE email = ? AND status = 'active'`)
+    .bind(email)
+    .first<{ id: string; password_hash: string | null }>();
+  if (!user?.password_hash) {
+    await dummyVerify(c.env.AUTH_SECRET, password);
+    throw WRONG_PASSWORD();
+  }
+  if (!(await verifyPassword(c.env.AUTH_SECRET, password, user.password_hash))) {
+    await audit(c.env.DB, { actor: { type: 'public' }, action: 'auth.password_failed', targetType: 'user', targetId: user.id });
+    throw WRONG_PASSWORD();
+  }
+  await startSession(c, user.id, 'password');
+  return c.json({ ok: true });
+});
+
+/** A session this recent may set a password without the current one (the "forgot password" path). */
+const FRESH_SESSION_MINUTES = 15;
+
+authRoutes.post('/password', async (c) => {
+  const user = requireUser(c);
+  const { password, currentPassword } = await parseBody(c, setPasswordSchema);
+  await rateLimit(c, `set-password:${user.userId}`);
+
+  const row = await c.env.DB.prepare(`SELECT password_hash FROM users WHERE id = ?`)
+    .bind(user.userId)
+    .first<{ password_hash: string | null }>();
+  if (row?.password_hash) {
+    const token = getCookie(c, SESSION_COOKIE)!;
+    const session = await c.env.DB.prepare(`SELECT created_at FROM sessions WHERE id_hash = ?`)
+      .bind(await sha256Hex(token))
+      .first<{ created_at: string }>();
+    const fresh = session && addMinutes(session.created_at, FRESH_SESSION_MINUTES) > nowIso();
+    if (!fresh) {
+      if (!currentPassword || !(await verifyPassword(c.env.AUTH_SECRET, currentPassword, row.password_hash))) {
+        throw new ApiError(400, 'invalid_credentials', 'Your current password is incorrect.');
+      }
+    }
+  }
+  const problem = passwordProblem(password, user.email);
+  if (problem) throw new ApiError(400, 'weak_password', problem, [{ path: 'password', message: problem }]);
+
+  const now = nowIso();
+  const currentHash = await sha256Hex(getCookie(c, SESSION_COOKIE)!);
+  await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE users SET password_hash = ?, password_set_at = ?, updated_at = ? WHERE id = ?`).bind(
+      await hashPassword(c.env.AUTH_SECRET, password),
+      now,
+      now,
+      user.userId,
+    ),
+    // Changing a password signs out every other device.
+    c.env.DB.prepare(`UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND id_hash <> ? AND revoked_at IS NULL`).bind(
+      now,
+      user.userId,
+      currentHash,
+    ),
+    auditStatement(c.env.DB, { actor: { type: 'user', id: user.userId }, action: row?.password_hash ? 'auth.password_changed' : 'auth.password_set' }),
+  ]);
   return c.json({ ok: true });
 });
 

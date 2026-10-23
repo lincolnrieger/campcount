@@ -5,7 +5,11 @@ import type { AppEnv } from '../context';
 import { parseBody, requirePermission, requireUser } from '../context';
 import { conflict, notFound } from '../lib/errors';
 import { nowIso } from '../lib/time';
-import { auditStatement } from '../services/audit';
+import { getCookie } from 'hono/cookie';
+import { audit, auditStatement } from '../services/audit';
+import { createDemoEvent, deleteDemoEvent } from '../services/demo';
+import { SESSION_COOKIE, revokeSession } from '../services/sessions';
+import { startSession } from './auth';
 
 export const adminRoutes = new Hono<AppEnv>();
 
@@ -108,4 +112,67 @@ adminRoutes.get('/audit', async (c) => {
     .bind(q.eventId ?? null, q.before ?? null)
     .all();
   return c.json({ entries: results });
+});
+
+// ---------------------------------------------------------------- demo mode
+
+const demoCreateSchema = z.strictObject({ participants: z.number().int().min(10).max(400).default(80) });
+
+adminRoutes.get('/demo', async (c) => {
+  requirePermission(c, 'platform.users.manage');
+  const { results: events } = await c.env.DB.prepare(
+    `SELECT e.id, e.name, e.status, e.created_at,
+            (SELECT count(*) FROM registrations r WHERE r.event_id = e.id) AS people
+       FROM events e WHERE e.is_demo = 1 ORDER BY e.created_at DESC`,
+  ).all<{ id: string; name: string; status: string; created_at: string; people: number }>();
+  const { results: users } = await c.env.DB.prepare(
+    `SELECT u.id, u.display_name, a.event_id, r.name AS role_name, act.name AS activity_name
+       FROM users u JOIN assignments a ON a.user_id = u.id AND a.revoked_at IS NULL
+       JOIN roles r ON r.id = a.role_id LEFT JOIN activities act ON act.id = a.activity_id
+      WHERE u.is_demo = 1 AND u.status = 'active' ORDER BY u.display_name`,
+  ).all<{ id: string; display_name: string; event_id: string; role_name: string; activity_name: string | null }>();
+  return c.json({
+    events: events.map((e) => ({
+      ...e,
+      accounts: users
+        .filter((u) => u.event_id === e.id)
+        .map((u) => ({ id: u.id, name: u.display_name, role: u.role_name, activity: u.activity_name })),
+    })),
+  });
+});
+
+adminRoutes.post('/demo', async (c) => {
+  requirePermission(c, 'platform.users.manage');
+  requirePermission(c, 'platform.events.create');
+  const actor = requireUser(c);
+  if (actor.isDemo) throw conflict('Demo accounts cannot create demo events.');
+  const { participants } = await parseBody(c, demoCreateSchema);
+  const { eventId } = await createDemoEvent(c.env, actor.userId, participants);
+  return c.json({ eventId }, 201);
+});
+
+adminRoutes.delete('/demo/:eventId', async (c) => {
+  requirePermission(c, 'platform.users.manage');
+  const actor = requireUser(c);
+  if (!(await deleteDemoEvent(c.env, actor.userId, c.req.param('eventId')))) throw notFound();
+  return c.json({ ok: true });
+});
+
+/**
+ * Sign in as a demo account to see CampCount as that role. Only accounts
+ * marked as demo can be used this way; it is recorded in the audit log.
+ * To get back, sign out and sign in as yourself.
+ */
+adminRoutes.post('/demo/users/:userId/switch', async (c) => {
+  requirePermission(c, 'platform.users.manage');
+  const actor = requireUser(c);
+  const target = await c.env.DB.prepare(`SELECT id FROM users WHERE id = ? AND is_demo = 1 AND status = 'active'`)
+    .bind(c.req.param('userId'))
+    .first<{ id: string }>();
+  if (!target) throw notFound();
+  const token = getCookie(c, SESSION_COOKIE);
+  if (token) await revokeSession(c.env, token);
+  await audit(c.env.DB, { actor: { type: 'user', id: actor.userId }, action: 'demo.switch_user', targetType: 'user', targetId: target.id });
+  await startSession(c, target.id, 'demo_switch');
+  return c.json({ ok: true });
 });

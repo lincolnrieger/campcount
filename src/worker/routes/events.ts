@@ -29,6 +29,7 @@ export interface EventRow {
   created_at: string;
   updated_at: string;
   closed_at: string | null;
+  is_demo: number;
 }
 
 const FEATURE_COLUMNS: Record<keyof EventFeatures, keyof EventRow> = {
@@ -55,6 +56,7 @@ export function eventDto(row: EventRow) {
       Object.entries(FEATURE_COLUMNS).map(([k, col]) => [k, row[col] === 1]),
     ) as EventFeatures,
     closedAt: row.closed_at,
+    isDemo: row.is_demo === 1,
   };
 }
 

@@ -14,6 +14,8 @@ export interface UserPrincipal {
   userId: string;
   email: string;
   displayName: string;
+  hasPassword: boolean;
+  isDemo: boolean;
   grants: AssignmentGrant[];
 }
 
