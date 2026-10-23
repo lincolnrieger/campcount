@@ -13,7 +13,7 @@ export const securityHeaders: MiddlewareHandler<AppEnv> = async (c, next) => {
   h.set('Referrer-Policy', 'no-referrer');
   h.set('X-Frame-Options', 'DENY');
   h.set('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
-  if (c.env.ENVIRONMENT === 'staging' || c.env.ENVIRONMENT === 'production') {
+  if (c.env.ENVIRONMENT === 'production') {
     h.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains');
   }
 };
@@ -25,9 +25,11 @@ export const securityHeaders: MiddlewareHandler<AppEnv> = async (c, next) => {
 export const sameOriginWrites: MiddlewareHandler<AppEnv> = async (c, next) => {
   const method = c.req.method;
   if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+    // Same-origin: the browser's Origin must match the host serving this request
+    // (campcount.com or the workers.dev address), so no origin list to maintain.
     const origin = c.req.header('Origin');
     const fetchSite = c.req.header('Sec-Fetch-Site');
-    if (origin !== c.env.APP_ORIGIN || (fetchSite && fetchSite !== 'same-origin')) {
+    if (origin !== new URL(c.req.url).origin || (fetchSite && fetchSite !== 'same-origin')) {
       throw new ApiError(403, 'bad_origin', 'Request blocked.');
     }
     const length = Number(c.req.header('Content-Length') ?? '0');

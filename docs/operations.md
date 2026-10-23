@@ -92,11 +92,12 @@ The job runs daily at 03:17 UTC and records each purge in the audit log.
 
 ## Deployment, rollback and recovery
 
-- **Deploy:** merge to `main`; CI runs lint, type checks, tests and the build.
-  Production is deployed manually:
-  1. `npx wrangler d1 migrations apply DB --env production --remote`
-  2. `npm run deploy:production`
-- **Roll back code:** `npx wrangler rollback --env production`, which
+- **Deploy:** merging to `main` triggers Cloudflare Workers Builds, which
+  runs `npm run build` and then `npm run deploy`. The deploy applies any new
+  database migrations, then publishes the Worker. GitHub CI separately runs
+  lint, type checks, tests and the build on every push.
+- **Roll back code:** `npx wrangler rollback`, or in the dashboard
+  (Deployments, then the version's menu), which
   returns to the previous Worker version. Migrations are written to be
   additive. If a migration must be undone, restore the database (below).
 - **Back up before events:**
@@ -111,7 +112,7 @@ The job runs daily at 03:17 UTC and records each purge in the audit log.
   3. Rehearse a restore into the staging database before the first event.
 - **Secrets:** `AUTH_SECRET` signs sign-in codes and encrypts card tokens.
   If it leaks:
-  1. Rotate it with `wrangler secret put AUTH_SECRET --env production`.
+  1. Rotate it with `wrangler secret put AUTH_SECRET`.
      This signs everyone out and makes stored card tokens unreadable.
   2. Reissue and reprint every card for any open event.
 

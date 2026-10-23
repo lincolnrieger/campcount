@@ -7,12 +7,11 @@ export default defineConfig(async () => {
     plugins: [
       cloudflareTest({
         main: './src/worker/index.ts',
-        wrangler: { configPath: './wrangler.jsonc' },
+        wrangler: { configPath: './wrangler.jsonc', environment: 'dev' },
         miniflare: {
           bindings: {
             TEST_MIGRATIONS: migrations,
             ENVIRONMENT: 'test',
-            APP_ORIGIN: 'https://campcount.test',
             AUTH_SECRET: 'test-secret-not-for-production',
           },
         },

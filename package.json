@@ -3,14 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "CLOUDFLARE_ENV=dev vite",
     "build": "vite build",
     "typecheck": "tsc -b",
     "lint": "eslint .",
     "test": "vitest run",
-    "db:migrate:local": "wrangler d1 migrations apply DB --local",
-    "deploy:staging": "CLOUDFLARE_ENV=staging vite build && wrangler deploy",
-    "deploy:production": "CLOUDFLARE_ENV=production vite build && wrangler deploy"
+    "db:migrate:local": "wrangler d1 migrations apply DB --local --env dev",
+    "deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy"
   },
   "dependencies": {
     "@fontsource-variable/atkinson-hyperlegible-next": "^5.3.0",
