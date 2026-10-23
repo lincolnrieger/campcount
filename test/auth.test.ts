@@ -140,13 +140,46 @@ describe('configuration errors', () => {
   it('reports email delivery failure clearly', async () => {
     const user = await createUser();
     const { app } = await import('../src/worker/index');
-    const failing = { send: async () => { throw new Error('domain not verified'); } };
+    const failing = {
+      send: async () => {
+        throw Object.assign(new Error('Sender domain not verified'), { code: 'E_SENDER_NOT_VERIFIED' });
+      },
+    };
     const res = await app.request(
       '/api/auth/request',
       { method: 'POST', headers: { Origin: 'http://localhost', 'Content-Type': 'application/json' }, body: JSON.stringify({ email: user.email }) },
       { ...testEnv, EMAIL: failing },
     );
     expect(res.status).toBe(503);
-    expect((await json(res)).error.code).toBe('email_unavailable');
+    const body = await json(res);
+    expect(body.error.code).toBe('email_unavailable');
+    expect(body.error.message).toContain('E_SENDER_NOT_VERIFIED');
+  });
+
+  it('sends a structured sender, plain text and HTML through the binding', async () => {
+    const user = await createUser();
+    const { app } = await import('../src/worker/index');
+    const sent: any[] = [];
+    const binding = { send: async (m: unknown) => (sent.push(m), { messageId: 'x' }) };
+    const res = await app.request(
+      '/api/auth/request',
+      { method: 'POST', headers: { Origin: 'http://localhost', 'Content-Type': 'application/json' }, body: JSON.stringify({ email: user.email }) },
+      { ...testEnv, EMAIL: binding, EMAIL_FROM: 'CampCount <no-reply@campcount.com>' },
+    );
+    expect(res.status).toBe(200);
+    expect(sent[0].from).toEqual({ name: 'CampCount', email: 'no-reply@campcount.com' });
+    expect(sent[0].to).toBe(user.email);
+    expect(sent[0].text).toMatch(/code is \d{6}/);
+    expect(sent[0].html).toContain('http://localhost/sign-in/verify#t=');
+  });
+});
+
+describe('parseSender', () => {
+  it('handles named, quoted and bare addresses', async () => {
+    const { parseSender } = await import('../src/worker/services/email');
+    expect(parseSender('CampCount <no-reply@campcount.com>')).toEqual({ name: 'CampCount', email: 'no-reply@campcount.com' });
+    expect(parseSender('"Camp Count" <a@b.com>')).toEqual({ name: 'Camp Count', email: 'a@b.com' });
+    expect(parseSender('<a@b.com>')).toBe('a@b.com');
+    expect(parseSender(' a@b.com ')).toBe('a@b.com');
   });
 });

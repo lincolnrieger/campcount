@@ -7,7 +7,7 @@ import { ApiError } from '../lib/errors';
 import { hmacHex, randomDigits, randomToken, sha256Hex, timingSafeEqualHex } from '../lib/crypto';
 import { addMinutes, nowIso } from '../lib/time';
 import { audit } from '../services/audit';
-import { sendEmail } from '../services/email';
+import { EmailSendError, sendEmail } from '../services/email';
 import { SESSION_COOKIE, createSession, revokeSession } from '../services/sessions';
 
 const CODE_TTL_MINUTES = 10;
@@ -66,6 +66,7 @@ authRoutes.post('/request', async (c) => {
     // The token is in the URL fragment: it is never sent to a server, so mail
     // scanners that pre-fetch links (e.g. Microsoft Safe Links) cannot use it.
     const link = `${new URL(c.req.url).origin}/sign-in/verify#t=${linkToken}`;
+    const minutes = CODE_TTL_MINUTES;
     try {
       await sendEmail(c.env, {
         to: email,
@@ -73,12 +74,22 @@ authRoutes.post('/request', async (c) => {
         text:
           `Your CampCount sign-in code is ${code}\n\n` +
           `Or open this link and press "Sign in":\n${link}\n\n` +
-          `The code expires in ${CODE_TTL_MINUTES} minutes. If you did not ask for it, ignore this email.`,
+          `The code expires in ${minutes} minutes. If you did not ask for it, ignore this email.`,
+        html:
+          `<p>Your CampCount sign-in code is</p>` +
+          `<p style="font-size:28px;font-weight:bold;letter-spacing:4px">${code}</p>` +
+          `<p>Or <a href="${link}">open this link</a> and press <strong>Sign in</strong>.</p>` +
+          `<p>The code expires in ${minutes} minutes. If you did not ask for it, ignore this email.</p>`,
       });
     } catch (err) {
-      // Operator-facing detail goes to the logs (no address or code is logged).
-      console.error(`Sign-in email could not be sent: ${err instanceof Error ? err.message : String(err)}`);
-      throw new ApiError(503, 'email_unavailable', 'The sign-in email could not be sent. Please tell your CampCount administrator.');
+      const reason = err instanceof EmailSendError ? err.code : 'UNKNOWN';
+      // Operator-facing detail goes to the logs (no address or sign-in code is logged).
+      console.error(`Sign-in email could not be sent: ${reason}: ${err instanceof Error ? err.message : String(err)}`);
+      throw new ApiError(
+        503,
+        'email_unavailable',
+        `The sign-in email could not be sent (${reason}). Please tell your CampCount administrator.`,
+      );
     }
   }
   return c.json({ ok: true });
