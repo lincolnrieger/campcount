@@ -48,5 +48,15 @@ why, and what is still open.
   revocable and the device can only scan.
 - **D-007 Opaque, event-scoped QR credentials.** Random 128-bit tokens
   (stored hashed) plus a short manual-entry code. No personal data is encoded.
+- **D-009 Browser-side, allowlisted import.** The MyScout export contains
+  Medicare numbers, addresses, guardian details and similar data. It is
+  parsed in the browser, and only the allowlisted fields
+  (`docs/requirements.md` §3) are sent to the server. The raw file is never
+  uploaded.
+- **D-010 Dietary review step.** Dietary text lives in MyScout's
+  `medical_conditions` column. A Director turns it into structured dietary
+  entries in the browser, and the original text is discarded.
+- **D-011 Self-sign-up uses the lanyard code**, not email or phone
+  verification (proposed; awaiting confirmation).
 - **D-008 Scale.** At 4 events/year of ~400 people, a single D1 database is
   far within limits.
