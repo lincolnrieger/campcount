@@ -183,3 +183,70 @@ describe('parseSender', () => {
     expect(parseSender(' a@b.com ')).toBe('a@b.com');
   });
 });
+
+describe('passwords', () => {
+  async function setPassword(cookie: string, password: string, currentPassword?: string) {
+    return api('/auth/password', { cookie, body: currentPassword ? { password, currentPassword } : { password } });
+  }
+
+  it('lets a signed-in user set a password, then sign in with it', async () => {
+    const user = await createUser();
+    expect((await json(await api('/me', { cookie: user.cookie }))).user.hasPassword).toBe(false);
+    expect((await setPassword(user.cookie, 'tent-pegs-and-billy-tea')).status).toBe(200);
+    expect((await json(await api('/me', { cookie: user.cookie }))).user.hasPassword).toBe(true);
+
+    const res = await api('/auth/password/sign-in', { body: { email: user.email.toUpperCase(), password: 'tent-pegs-and-billy-tea' } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Set-Cookie')).toMatch(/^__Host-cc_session=.*HttpOnly/);
+  });
+
+  it('stores a salted, peppered hash, never the password', async () => {
+    const user = await createUser();
+    await setPassword(user.cookie, 'tent-pegs-and-billy-tea');
+    const row = await testEnv.DB.prepare(`SELECT password_hash FROM users WHERE id = ?`).bind(user.id).first<{ password_hash: string }>();
+    expect(row!.password_hash).toMatch(/^pbkdf2\$100000\$[A-Za-z0-9_-]{22}\$[0-9a-f]{64}$/);
+    expect(row!.password_hash).not.toContain('billy');
+  });
+
+  it('gives the same answer for wrong passwords, unknown emails and accounts without a password', async () => {
+    const withPw = await createUser();
+    await setPassword(withPw.cookie, 'tent-pegs-and-billy-tea');
+    const noPw = await createUser();
+    const answers = await Promise.all([
+      api('/auth/password/sign-in', { body: { email: withPw.email, password: 'wrong-password-123' } }),
+      api('/auth/password/sign-in', { body: { email: 'nobody@example.test', password: 'wrong-password-123' } }),
+      api('/auth/password/sign-in', { body: { email: noPw.email, password: 'wrong-password-123' } }),
+    ]);
+    for (const res of answers) {
+      expect(res.status).toBe(400);
+      expect((await json(res)).error.message).toBe('Email or password is incorrect.');
+    }
+  });
+
+  it('rejects weak passwords', async () => {
+    const user = await createUser();
+    for (const weak of ['short', 'password12345', 'aaaaaaaaaaaa', `${user.email.split('@')[0]}-camp`]) {
+      expect((await setPassword(user.cookie, weak)).status).toBe(400);
+    }
+  });
+
+  it('needs the current password to change it once the session is no longer fresh, and signs out other devices', async () => {
+    const user = await createUser();
+    await setPassword(user.cookie, 'tent-pegs-and-billy-tea');
+    const other = await api('/auth/password/sign-in', { body: { email: user.email, password: 'tent-pegs-and-billy-tea' } });
+    const otherCookie = other.headers.get('Set-Cookie')!.split(';')[0]!;
+
+    await testEnv.DB.prepare(`UPDATE sessions SET created_at = '2020-01-01T00:00:00.000Z' WHERE user_id = ?`).bind(user.id).run();
+    expect((await setPassword(user.cookie, 'a-new-campfire-song')).status).toBe(400);
+    expect((await setPassword(user.cookie, 'a-new-campfire-song', 'tent-pegs-and-billy-tea')).status).toBe(200);
+    expect((await api('/me', { cookie: otherCookie })).status).toBe(401);
+    expect((await api('/me', { cookie: user.cookie })).status).toBe(200);
+  });
+
+  it('disabled users cannot sign in with a password', async () => {
+    const user = await createUser();
+    await setPassword(user.cookie, 'tent-pegs-and-billy-tea');
+    await testEnv.DB.prepare(`UPDATE users SET status = 'disabled' WHERE id = ?`).bind(user.id).run();
+    expect((await api('/auth/password/sign-in', { body: { email: user.email, password: 'tent-pegs-and-billy-tea' } })).status).toBe(400);
+  });
+});

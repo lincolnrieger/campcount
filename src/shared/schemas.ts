@@ -175,3 +175,15 @@ export type ScanUpload = z.infer<typeof scanUploadSchema>;
 export type ScanUploadItem = ScanUpload['scans'][number];
 
 export const voidScanSchema = z.strictObject({ reason: trimmed(200).min(3, 'Give a reason for the correction') });
+
+// ---------------------------------------------------------------- passwords
+
+export const passwordSignInSchema = z.strictObject({
+  email: emailSchema,
+  password: z.string().min(1).max(200),
+});
+
+export const setPasswordSchema = z.strictObject({
+  password: z.string().min(1).max(200),
+  currentPassword: z.string().max(200).optional(),
+});

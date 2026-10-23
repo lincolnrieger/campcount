@@ -1,0 +1,225 @@
+import type { Env } from '../env';
+import { randomInt } from '../lib/crypto';
+import { nowIso } from '../lib/time';
+import { auditStatement } from './audit';
+import { issueStatements } from './credentials';
+
+/**
+ * Demo data for testing CampCount end to end without real member data.
+ * Everything here is invented. Demo membership numbers start with "DEMO",
+ * which real Scouts membership numbers never do, and demo accounts use the
+ * reserved .invalid domain, so no email can ever be sent to them.
+ */
+
+const FIRST = [
+  'Ava', 'Noah', 'Mia', 'Leo', 'Isla', 'Kai', 'Zoe', 'Eli', 'Ruby', 'Max', 'Ivy', 'Sam', 'Ella', 'Finn', 'Lily', 'Jack', 'Nina',
+  'Theo', 'Aria', 'Oscar', 'Maya', 'Hugo', 'Chloe', 'Arlo', 'Willow', 'Harvey', 'Matilda', 'Archie', 'Evie', 'Ned', 'Poppy',
+  'Ollie', 'Frankie', 'Jasper', 'Indie', 'Remy', 'Sienna', 'Banjo', 'Tilly', 'Beau',
+];
+const LAST = [
+  'Nguyen', 'Smith', 'Patel', 'Brown', 'Wilson', 'Taylor', 'Lee', 'Martin', 'Clarke', 'Walker', 'Chen', 'Kelly', 'Rossi',
+  'Murphy', 'Singh', 'Hall', 'Young', 'King', 'Wright', 'Scott', 'Green', 'Baker', 'Adams', 'Hill', 'Campbell', 'Mitchell',
+];
+const GROUPS: { name: string; section: 'Joeys' | 'Cubs' | 'Scouts' | 'Venturers' }[] = [
+  { name: 'Wattle Creek Joey Mob', section: 'Joeys' },
+  { name: 'Wattle Creek Cub Pack', section: 'Cubs' },
+  { name: 'Red Gum Cub Pack', section: 'Cubs' },
+  { name: 'Red Gum Scout Troop', section: 'Scouts' },
+  { name: 'Saltbush Scout Troop', section: 'Scouts' },
+  { name: 'Saltbush Venturer Unit', section: 'Venturers' },
+];
+const DIETARY: [string, string, string][] = [
+  ['preference', 'Vegetarian', 'standard'],
+  ['preference', 'Vegetarian', 'standard'],
+  ['religious_cultural', 'Halal', 'standard'],
+  ['medical_diet', 'Gluten free (coeliac)', 'standard'],
+  ['intolerance', 'Lactose', 'standard'],
+  ['allergy', 'Peanut', 'anaphylactic'],
+  ['allergy', 'Egg', 'standard'],
+];
+
+const pick = <T>(list: readonly T[]): T => list[randomInt(list.length)]!;
+
+export const DEMO_ROLES = [
+  { key: 'camp_director', label: 'Director' },
+  { key: 'event_manager', label: 'Manager' },
+  { key: 'activity_leader', label: 'Activity leader' },
+  { key: 'meal_leader', label: 'Meal leader' },
+  { key: 'gate_volunteer', label: 'Gate volunteer' },
+] as const;
+
+export async function createDemoEvent(env: Env, adminUserId: string, participants: number): Promise<{ eventId: string }> {
+  const now = nowIso();
+  const tag = crypto.randomUUID().slice(0, 4).toUpperCase();
+  const eventId = crypto.randomUUID();
+  const today = now.slice(0, 10);
+  const end = new Date(Date.parse(today) + 2 * 86400_000).toISOString().slice(0, 10);
+  const db = env.DB;
+  const statements: D1PreparedStatement[] = [];
+
+  statements.push(
+    db
+      .prepare(
+        `INSERT INTO events (id, slug, name, description, location, starts_on, ends_on, status, feature_activities, feature_meals,
+           feature_site, feature_dietary, feature_photo, is_demo, created_by, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'Demo Activity Centre', ?, ?, 'open', 1, 1, 1, 1, 1, 1, ?, ?, ?)`,
+      )
+      .bind(
+        eventId,
+        `demo-${tag.toLowerCase()}-${today}`,
+        `Demo camp ${tag}`,
+        'Demo event with invented people, for testing. Safe to delete.',
+        today,
+        end,
+        adminUserId,
+        now,
+        now,
+      ),
+  );
+
+  // Activities and meals.
+  const activities = [
+    { name: 'Kayaking', location: 'Lake', capacity: 12, trackSignOut: 1 },
+    { name: 'Archery', location: 'Range', capacity: 10, trackSignOut: 1 },
+    { name: 'Climbing wall', location: 'Tower', capacity: 8, trackSignOut: 1 },
+    { name: 'Campfire craft', location: 'Hall', capacity: null, trackSignOut: 0 },
+  ].map((a) => ({ ...a, id: crypto.randomUUID() }));
+  for (const a of activities) {
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO activities (id, event_id, name, location, capacity, track_sign_out, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(a.id, eventId, a.name, a.location, a.capacity, a.trackSignOut, now, now),
+    );
+  }
+  for (const meal of ['Friday dinner', 'Saturday breakfast', 'Saturday lunch', 'Saturday dinner', 'Sunday breakfast']) {
+    statements.push(
+      db
+        .prepare(`INSERT INTO meal_services (id, event_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`)
+        .bind(crypto.randomUUID(), eventId, meal, now, now),
+    );
+  }
+
+  // People: youth across groups, plus a leader team.
+  const registrationIds: string[] = [];
+  const adults = Math.max(4, Math.round(participants / 8));
+  for (let i = 0; i < participants + adults; i++) {
+    const adult = i >= participants;
+    const group = pick(GROUPS);
+    const personId = crypto.randomUUID();
+    const registrationId = crypto.randomUUID();
+    const member = `DEMO${tag}-${String(i + 1).padStart(3, '0')}`;
+    registrationIds.push(registrationId);
+    statements.push(
+      db
+        .prepare(`INSERT INTO people (id, member_number, first_name, preferred_name, last_name, created_at, updated_at) VALUES (?, ?, ?, '', ?, ?, ?)`)
+        .bind(personId, member, pick(FIRST), pick(LAST), now, now),
+      db
+        .prepare(
+          `INSERT INTO registrations (id, event_id, person_id, kind, section, group_name, position, role_label, photo_consent, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          registrationId,
+          eventId,
+          personId,
+          adult ? 'adult' : 'youth',
+          adult ? 'Leaders' : group.section,
+          group.name,
+          adult ? 'Leader' : `${group.section.replace(/s$/, '')} member`,
+          adult ? 'Leader' : 'Participant',
+          randomInt(10) < 8 ? 'yes' : randomInt(2) ? 'no' : 'unknown',
+          now,
+          now,
+        ),
+    );
+    if (randomInt(100) < 18) {
+      const [category, item, severity] = pick(DIETARY);
+      statements.push(
+        db
+          .prepare(
+            `INSERT INTO dietary_entries (id, event_id, registration_id, category, item, severity, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .bind(crypto.randomUUID(), eventId, registrationId, category, item, severity, adminUserId, now),
+      );
+    }
+  }
+
+  // Demo staff accounts (cannot receive email: the .invalid domain is reserved).
+  for (const role of DEMO_ROLES) {
+    const userId = crypto.randomUUID();
+    statements.push(
+      db
+        .prepare(`INSERT INTO users (id, email, display_name, is_demo, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)`)
+        .bind(userId, `demo-${role.key.replace(/_/g, '-')}-${tag.toLowerCase()}@demo.invalid`, `Demo ${role.label}`, now, now),
+      db
+        .prepare(`INSERT INTO assignments (id, user_id, role_id, event_id, activity_id, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .bind(crypto.randomUUID(), userId, `role_${role.key}`, eventId, role.key === 'activity_leader' ? activities[0]!.id : null, adminUserId, now),
+    );
+  }
+  // The admin directs their own demo camp, so they can try every screen.
+  statements.push(
+    db
+      .prepare(`INSERT INTO assignments (id, user_id, role_id, event_id, created_by, created_at) VALUES (?, ?, 'role_camp_director', ?, ?, ?)`)
+      .bind(crypto.randomUUID(), adminUserId, eventId, adminUserId, now),
+    auditStatement(db, {
+      actor: { type: 'user', id: adminUserId },
+      action: 'demo.create',
+      eventId,
+      targetType: 'event',
+      targetId: eventId,
+      detail: { participants, adults },
+    }),
+  );
+
+  for (let i = 0; i < statements.length; i += 80) await db.batch(statements.slice(i, i + 80));
+  const cards = await issueStatements(env, eventId, registrationIds);
+  for (let i = 0; i < cards.length; i += 80) await db.batch(cards.slice(i, i + 80));
+  return { eventId };
+}
+
+/** Delete a demo event and everything in it, including its demo accounts and invented people. */
+export async function deleteDemoEvent(env: Env, adminUserId: string, eventId: string): Promise<boolean> {
+  const db = env.DB;
+  const event = await db.prepare(`SELECT id FROM events WHERE id = ? AND is_demo = 1`).bind(eventId).first();
+  if (!event) return false;
+  const people = await db.prepare(`SELECT person_id AS id FROM registrations WHERE event_id = ?`).bind(eventId).all<{ id: string }>();
+  const users = await db
+    .prepare(`SELECT DISTINCT a.user_id AS id FROM assignments a JOIN users u ON u.id = a.user_id WHERE a.event_id = ? AND u.is_demo = 1`)
+    .bind(eventId)
+    .all<{ id: string }>();
+
+  const statements: D1PreparedStatement[] = [
+    // Corrections reference the scans they replace, so remove them first.
+    db.prepare(`DELETE FROM scans WHERE event_id = ? AND supersedes_id IS NOT NULL`).bind(eventId),
+    db.prepare(`DELETE FROM scans WHERE event_id = ?`).bind(eventId),
+    db.prepare(`DELETE FROM events WHERE id = ?`).bind(eventId),
+  ];
+  const chunks = <T>(list: T[], size = 90) => Array.from({ length: Math.ceil(list.length / size) }, (_, i) => list.slice(i * size, i * size + size));
+  for (const chunk of chunks(people.results.map((p) => p.id))) {
+    statements.push(
+      db
+        .prepare(
+          `DELETE FROM people WHERE id IN (${chunk.map(() => '?').join(',')}) AND member_number LIKE 'DEMO%'
+             AND NOT EXISTS (SELECT 1 FROM registrations r WHERE r.person_id = people.id)`,
+        )
+        .bind(...chunk),
+    );
+  }
+  for (const chunk of chunks(users.results.map((u) => u.id))) {
+    statements.push(
+      db
+        .prepare(
+          `DELETE FROM users WHERE id IN (${chunk.map(() => '?').join(',')}) AND is_demo = 1
+             AND NOT EXISTS (SELECT 1 FROM assignments a WHERE a.user_id = users.id)`,
+        )
+        .bind(...chunk),
+    );
+  }
+  statements.push(
+    auditStatement(db, { actor: { type: 'user', id: adminUserId }, action: 'demo.delete', eventId, targetType: 'event', targetId: eventId }),
+  );
+  await db.batch(statements);
+  return true;
+}

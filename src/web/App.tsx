@@ -3,6 +3,9 @@ import type { ReactNode } from 'react';
 import { Layout } from './components/Layout';
 import { Loading } from './components/ui';
 import { AdminUsers } from './pages/AdminUsers';
+import { Admin } from './pages/Admin';
+import { AdminDemo } from './pages/AdminDemo';
+import { Account, SetPassword } from './pages/Account';
 import { EventLayout } from './pages/EventLayout';
 import { EventOverview } from './pages/EventOverview';
 import { Events, NewEvent } from './pages/Events';
@@ -68,7 +71,11 @@ export function App() {
           <Route path="close-out" element={<CloseOut />} />
           <Route path="roll-sheet" element={<RollSheet />} />
         </Route>
+        <Route path="admin" element={<Admin />} />
         <Route path="admin/users" element={<AdminUsers />} />
+        <Route path="admin/demo" element={<AdminDemo />} />
+        <Route path="account" element={<Account />} />
+        <Route path="account/password" element={<SetPassword />} />
         <Route path="*" element={<p>That page doesn't exist.</p>} />
       </Route>
     </Routes>

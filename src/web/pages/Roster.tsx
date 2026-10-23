@@ -132,24 +132,22 @@ export function Roster() {
                         {r.status === 'withdrawn' && ', withdrawn'}
                       </div>
                     </td>
-                    <td data-label="Group">{r.groupName}</td>
-                    <td data-label="Card">
+                    <td className="cell-plain">{r.groupName}</td>
+                    <td data-label="Card" className="cell-inline">
                       {r.shortCode ?? <span className="field-hint">Not issued</span>}
                       {r.shortCode && can('credentials.manage') && r.status === 'active' && (
-                        <div>
-                          <button className="btn-link field-hint" onClick={() => void replaceCard(r)}>
-                            Replace<span className="visually-hidden"> card for {r.displayName}</span>
-                          </button>
-                        </div>
+                        <button className="btn-link field-hint cell-action" onClick={() => void replaceCard(r)}>
+                          Replace<span className="visually-hidden"> card for {r.displayName}</span>
+                        </button>
                       )}
                     </td>
                     {event.features.photo && r.photoConsent !== undefined && (
-                      <td data-label="Photos">
-                        {r.photoConsent === 'yes' ? 'Yes' : <strong className="text-stop">{r.photoConsent === 'no' ? 'No photos' : 'Not recorded'}</strong>}
+                      <td className={r.photoConsent === 'yes' ? 'cell-plain hide-narrow' : 'cell-plain'}>
+                        {r.photoConsent === 'yes' ? 'Photos OK' : <strong className="text-stop">{r.photoConsent === 'no' ? 'No photos' : 'Photo consent not recorded'}</strong>}
                       </td>
                     )}
                     {r.dietary !== undefined && (
-                      <td data-label="Dietary">
+                      <td className="cell-plain">
                         {r.dietary.map((d, i) => (
                           <div key={i} className={d.category === 'allergy' ? 'text-stop' : undefined}>
                             {describeEntry(d)}

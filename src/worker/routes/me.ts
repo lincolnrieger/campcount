@@ -20,7 +20,13 @@ meRoutes.get('/', (c) => {
   }
   return c.json({
     kind: 'user',
-    user: { id: principal.userId, email: principal.email, displayName: principal.displayName },
+    user: {
+      id: principal.userId,
+      email: principal.email,
+      displayName: principal.displayName,
+      hasPassword: principal.hasPassword,
+      isDemo: principal.isDemo,
+    },
     platformPermissions: platformPermissions(principal),
   });
 });

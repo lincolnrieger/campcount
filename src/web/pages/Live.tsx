@@ -80,72 +80,46 @@ export function Live() {
       {meals.length > 0 && (
         <section>
           <h2>Meals</h2>
-          <div className="sheet-wrap">
-            <table className="sheet sheet-stack">
-              <thead>
-                <tr>
-                  <th scope="col">Meal</th>
-                  <th scope="col" className="num">Served</th>
-                  <th scope="col" className="num">Not recorded</th>
-                  <th scope="col" className="num">Repeat scans</th>
-                </tr>
-              </thead>
-              <tbody>
-                {meals.map((m) => (
-                  <tr key={m.key}>
-                    <td>
-                      <strong>{m.name}</strong>
-                    </td>
-                    <td className="num" data-label="Served">
-                      {m.people} of {m.expected}
-                    </td>
-                    <td className="num" data-label="Not recorded">
-                      {(m.expected ?? 0) - m.people}
-                    </td>
-                    <td className="num" data-label="Repeat scans">
-                      {m.duplicates}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ul className="stat-rows">
+            {meals.map((m) => (
+              <li key={m.key}>
+                <strong>{m.name}</strong>
+                <span className="stat-value">
+                  {m.people} <span>of {m.expected} served</span>
+                </span>
+                {m.duplicates > 0 && <span className="stat-note">{m.duplicates} repeat scans ignored</span>}
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
       {activities.length > 0 && (
         <section className="section-gap">
           <h2>Activities</h2>
-          <div className="sheet-wrap">
-            <table className="sheet sheet-stack">
-              <thead>
-                <tr>
-                  <th scope="col">Activity</th>
-                  <th scope="col" className="num">There now</th>
-                  <th scope="col" className="num">Different people</th>
-                  <th scope="col" className="num">To check</th>
-                </tr>
-              </thead>
-              <tbody>
-                {activities.map((a) => (
-                  <tr key={a.key}>
-                    <td>
-                      <strong>{a.name}</strong>
-                    </td>
-                    <td className="num" data-label="There now">
-                      {a.trackSignOut ? `${a.presentNow}${a.capacity ? ` of ${a.capacity}` : ''}` : 'Not tracked'}
-                    </td>
-                    <td className="num" data-label="Different people">
-                      {a.people}
-                    </td>
-                    <td className="num" data-label="To check">
-                      {a.needsReview || ''}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ul className="stat-rows">
+            {activities.map((a) => (
+              <li key={a.key}>
+                <strong>{a.name}</strong>
+                <span className="stat-value">
+                  {a.trackSignOut ? (
+                    <>
+                      {a.presentNow}
+                      {a.capacity ? ` / ${a.capacity}` : ''} <span>there now</span>
+                    </>
+                  ) : (
+                    <>
+                      {a.people} <span>people</span>
+                    </>
+                  )}
+                </span>
+                <span className="stat-note">
+                  {a.trackSignOut && `${a.people} people so far`}
+                  {a.needsReview > 0 && `${a.trackSignOut ? ', ' : ''}${a.needsReview} to check`}
+                </span>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

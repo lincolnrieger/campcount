@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { ApiFailure, api } from '../api';
 import { Field, Notice } from '../components/ui';
 import { useSession } from '../session';
+import type { Me } from '../types';
 
-function SignInFrame({ children }: { children: React.ReactNode }) {
+function SignInFrame({ children }: { children: ReactNode }) {
   return (
     <div className="signin">
       <div className="signin-band">
@@ -17,11 +18,21 @@ function SignInFrame({ children }: { children: React.ReactNode }) {
   );
 }
 
+const message = (err: unknown) => (err instanceof ApiFailure ? err.message : 'Something went wrong. Please try again.');
+
+/** After any sign-in: people without a password are asked to set one. */
+async function afterSignIn(refresh: () => Promise<void>, navigate: ReturnType<typeof useNavigate>) {
+  await refresh();
+  const me = await api<Me>('/me').catch(() => null);
+  navigate(me?.kind === 'user' && !me.user.hasPassword ? '/account/password?first=1' : '/', { replace: true });
+}
+
 export function SignIn() {
   const { refresh } = useSession();
   const navigate = useNavigate();
-  const [step, setStep] = useState<'email' | 'code'>('email');
+  const [step, setStep] = useState<'password' | 'code'>('password');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -31,63 +42,91 @@ export function SignIn() {
     if (step === 'code') codeInput.current?.focus();
   }, [step]);
 
-  async function requestCode(e: FormEvent) {
-    e.preventDefault();
+  async function run(action: () => Promise<void>) {
     setBusy(true);
     setError(null);
     try {
-      await api('/auth/request', { body: { email } });
-      setStep('code');
+      await action();
     } catch (err) {
-      setError(err instanceof ApiFailure ? err.message : 'Something went wrong.');
+      setError(message(err));
     } finally {
       setBusy(false);
     }
   }
 
-  async function verify(e: FormEvent) {
+  const signInWithPassword = (e: FormEvent) => {
     e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      await api('/auth/verify', { body: { email, code } });
-      await refresh();
-      navigate('/', { replace: true });
-    } catch (err) {
-      setError(err instanceof ApiFailure ? err.message : 'Something went wrong.');
-    } finally {
-      setBusy(false);
+    void run(async () => {
+      await api('/auth/password/sign-in', { body: { email, password } });
+      await afterSignIn(refresh, navigate);
+    });
+  };
+
+  const emailCode = () => {
+    if (!email.includes('@')) {
+      setError('Enter your email address first.');
+      return;
     }
-  }
+    void run(async () => {
+      await api('/auth/request', { body: { email } });
+      setStep('code');
+    });
+  };
+
+  const verifyCode = (e: FormEvent) => {
+    e.preventDefault();
+    void run(async () => {
+      await api('/auth/verify', { body: { email, code } });
+      await afterSignIn(refresh, navigate);
+    });
+  };
 
   return (
     <SignInFrame>
-      {step === 'email' ? (
-        <form onSubmit={requestCode} noValidate>
-          <h1>Sign in</h1>
-          <p className="lede">We'll email you a 6-digit code. No password needed.</p>
-          {error && <Notice tone="stop">{error}</Notice>}
-          <Field id="email" label="Email address">
-            <input
-              id="email"
-              className="input"
-              type="email"
-              autoComplete="email"
-              inputMode="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </Field>
-          <button className="btn btn-block" disabled={busy || !email}>
-            {busy ? 'Sending…' : 'Email me a code'}
-          </button>
-        </form>
+      {step === 'password' ? (
+        <>
+          <form onSubmit={signInWithPassword} noValidate>
+            <h1>Sign in</h1>
+            {error && <Notice tone="stop">{error}</Notice>}
+            <Field id="email" label="Email address">
+              <input
+                id="email"
+                className="input"
+                type="email"
+                autoComplete="username"
+                inputMode="email"
+                autoCapitalize="none"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </Field>
+            <Field id="password" label="Password">
+              <input
+                id="password"
+                className="input"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </Field>
+            <button className="btn btn-block" disabled={busy || !email || !password}>
+              {busy ? 'Signing in…' : 'Sign in'}
+            </button>
+          </form>
+          <div className="signin-alt">
+            <p>First time here, or forgot your password?</p>
+            <button type="button" className="btn btn-secondary btn-block" disabled={busy} onClick={emailCode}>
+              Email me a sign-in code
+            </button>
+          </div>
+        </>
       ) : (
-        <form onSubmit={verify} noValidate>
+        <form onSubmit={verifyCode} noValidate>
           <h1>Check your email</h1>
           <p className="lede">
-            If <strong>{email}</strong> has a CampCount account, a code is on its way. It expires in 10 minutes.
+            If <strong>{email}</strong> has a CampCount account, a 6-digit code is on its way. It expires in 10 minutes. Check your junk
+            folder too.
           </p>
           {error && <Notice tone="stop">{error}</Notice>}
           <Field id="code" label="Sign-in code">
@@ -107,8 +146,16 @@ export function SignIn() {
             {busy ? 'Checking…' : 'Sign in'}
           </button>
           <div className="actions">
-            <button type="button" className="btn-link" onClick={() => { setStep('email'); setCode(''); setError(null); }}>
-              Use a different email
+            <button
+              type="button"
+              className="btn-link"
+              onClick={() => {
+                setStep('password');
+                setCode('');
+                setError(null);
+              }}
+            >
+              Back
             </button>
           </div>
         </form>
@@ -135,10 +182,9 @@ export function VerifyLink() {
     try {
       await api('/auth/verify', { body: { token } });
       history.replaceState(null, '', window.location.pathname);
-      await refresh();
-      navigate('/', { replace: true });
+      await afterSignIn(refresh, navigate);
     } catch (err) {
-      setError(err instanceof ApiFailure ? err.message : 'Something went wrong.');
+      setError(message(err));
       setBusy(false);
     }
   }

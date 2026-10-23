@@ -55,6 +55,7 @@ export function Events() {
                     <Link to={`/events/${e.id}`}>
                       <strong>{e.name}</strong>
                     </Link>
+                    {e.isDemo && <span className="badge-demo">Demo</span>}
                     {e.location && <div className="field-hint">{e.location}</div>}
                   </td>
                   <td data-label="Dates">{formatDateRange(e.startsOn, e.endsOn)}</td>

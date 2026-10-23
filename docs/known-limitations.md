@@ -12,7 +12,8 @@ mitigation or a planned fix.
   built yet.
 - **Humanitix import** for activity bookings.
 - **Event templates.**
-- **Passkeys.** Sign-in is by emailed code only.
+- **Passkeys.** Sign-in is by password, or by emailed code for first sign-in
+  and forgotten passwords.
 - **Microsoft 365 (Entra ID) sign-in.** This needs Scouts SA IT approval.
 - **Editing dietary entries outside an import.** For now, change the note
   in MyScout and re-import.
@@ -40,6 +41,11 @@ mitigation or a planned fix.
   for review.
 - A card is a bearer credential: anyone holding someone's card can be
   scanned as them. Scanning staff should glance at the name shown.
+- Passwords are hashed with PBKDF2-SHA256 at 100,000 iterations, the
+  Workers maximum, plus a server-side pepper. That is weaker per guess than
+  Argon2, which Workers can't run natively. Rate limits and the pepper
+  compensate. Rotating `AUTH_SECRET` also resets every password, so people
+  then sign in with an emailed code and choose a new one.
 - Typed backup codes are 8 characters (about 10¹¹ combinations). Only
   signed-in staff can submit them.
 - Scan records are operational records, not proof of location, and do not

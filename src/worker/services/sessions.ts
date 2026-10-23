@@ -97,10 +97,10 @@ async function touch(env: Env, session: SessionRow, now: string): Promise<void> 
 
 export async function loadUserPrincipal(env: Env, userId: string): Promise<Principal | null> {
   const user = await env.DB.prepare(
-    `SELECT id, email, display_name FROM users WHERE id = ? AND status = 'active'`,
+    `SELECT id, email, display_name, password_hash IS NOT NULL AS has_password, is_demo FROM users WHERE id = ? AND status = 'active'`,
   )
     .bind(userId)
-    .first<{ id: string; email: string; display_name: string }>();
+    .first<{ id: string; email: string; display_name: string; has_password: number; is_demo: number }>();
   if (!user) return null;
 
   const { results } = await env.DB.prepare(
@@ -125,5 +125,13 @@ export async function loadUserPrincipal(env: Env, userId: string): Promise<Princ
     permissions: new Set((row.permissions ?? '').split(',').filter(Boolean) as Permission[]),
   }));
 
-  return { kind: 'user', userId: user.id, email: user.email, displayName: user.display_name, grants };
+  return {
+    kind: 'user',
+    userId: user.id,
+    email: user.email,
+    displayName: user.display_name,
+    hasPassword: user.has_password === 1,
+    isDemo: user.is_demo === 1,
+    grants,
+  };
 }
