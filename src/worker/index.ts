@@ -18,6 +18,14 @@ import { runMaintenance } from './services/maintenance';
 export const app = new Hono<AppEnv>().basePath('/api');
 
 app.use('*', securityHeaders);
+// Refuse to run without the secret that signs sign-in codes and encrypts card tokens.
+app.use('*', async (c, next) => {
+  if (!c.env.AUTH_SECRET || c.env.AUTH_SECRET.length < 32) {
+    console.error('AUTH_SECRET is not set (or shorter than 32 characters). Add it under Settings, Variables and Secrets.');
+    throw new ApiError(503, 'not_configured', 'CampCount is not fully set up yet. Please tell your CampCount administrator.');
+  }
+  await next();
+});
 app.use('*', sameOriginWrites);
 app.use('*', sessionMiddleware);
 
