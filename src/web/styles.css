@@ -1,0 +1,500 @@
+@import '@fontsource-variable/atkinson-hyperlegible-next';
+
+/*
+ * CampCount design tokens.
+ *
+ * Built for phones held at arm's length in sunlight: white surfaces, a deep
+ * eucalypt ink, and one hi-vis accent. Scan states always pair colour with an
+ * icon shape and a word, never colour alone.
+ */
+:root {
+  --ink: #17332b;            /* text, eucalypt-dark */
+  --ink-soft: #4a5f58;       /* secondary text (7.0:1 on white) */
+  --paper: #ffffff;
+  --leaf: #eef3f0;           /* quiet surface */
+  --rule: #c9d6d0;           /* table rules, borders */
+  --gum: #1f4d3f;            /* brand, primary actions */
+  --gum-press: #163a2f;
+  --hivis: #f5c542;          /* the one accent: focus, current context */
+
+  --ok: #1b6b38;
+  --ok-bg: #e3f3e8;
+  --warn: #8a4b00;
+  --warn-bg: #fff1d6;
+  --stop: #a3221b;
+  --stop-bg: #fde7e5;
+
+  --font: 'Atkinson Hyperlegible Next Variable', system-ui, sans-serif;
+  /* Type scale: 1.25 ratio from a 17px base. */
+  --t-sm: 0.875rem;
+  --t-base: 1.0625rem;
+  --t-md: 1.25rem;
+  --t-lg: 1.5625rem;
+  --t-xl: 1.953rem;
+  --t-xxl: 2.441rem;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+
+  --radius-control: 6px;
+  --tap: 48px;               /* minimum touch target */
+  --measure: 68ch;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: var(--t-base);
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.2;
+  margin: 0 0 var(--space-3);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+h1 { font-size: var(--t-xl); }
+h2 { font-size: var(--t-lg); }
+h3 { font-size: var(--t-md); }
+
+p {
+  margin: 0 0 var(--space-4);
+  max-width: var(--measure);
+}
+
+a {
+  color: var(--gum);
+  text-underline-offset: 0.15em;
+}
+
+:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px var(--hivis);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- shell */
+
+.shell {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--gum);
+  color: #fff;
+}
+.topbar a {
+  color: #fff;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 800;
+  font-size: var(--t-md);
+  text-decoration: none;
+}
+.topbar-nav {
+  display: flex;
+  gap: var(--space-4);
+  margin-left: auto;
+  align-items: center;
+  font-size: var(--t-sm);
+}
+
+.page {
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4) var(--space-7);
+}
+
+.page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+.page-head h1 {
+  margin: 0;
+}
+.lede {
+  color: var(--ink-soft);
+}
+
+/* Event sub-navigation: a ruled tab strip, the current one marked in hi-vis. */
+.subnav {
+  display: flex;
+  gap: var(--space-1);
+  overflow-x: auto;
+  border-bottom: 2px solid var(--rule);
+  margin-bottom: var(--space-5);
+}
+.subnav a {
+  padding: var(--space-3) var(--space-3);
+  color: var(--ink-soft);
+  text-decoration: none;
+  white-space: nowrap;
+  border-bottom: 4px solid transparent;
+  margin-bottom: -2px;
+  font-weight: 600;
+}
+.subnav a[aria-current='page'] {
+  color: var(--ink);
+  border-bottom-color: var(--hivis);
+}
+
+/* ---------------------------------------------------------------- controls */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--tap);
+  padding: 0 var(--space-5);
+  border: 2px solid var(--gum);
+  border-radius: var(--radius-control);
+  background: var(--gum);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+.btn:hover {
+  background: var(--gum-press);
+}
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.btn-secondary {
+  background: var(--paper);
+  color: var(--gum);
+}
+.btn-secondary:hover {
+  background: var(--leaf);
+}
+.btn-danger {
+  background: var(--paper);
+  color: var(--stop);
+  border-color: var(--stop);
+}
+.btn-danger:hover {
+  background: var(--stop-bg);
+}
+.btn-block {
+  width: 100%;
+}
+.btn-link {
+  background: none;
+  border: none;
+  padding: 0;
+  min-height: auto;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+}
+.field label,
+.field legend {
+  font-weight: 700;
+}
+.field-hint {
+  color: var(--ink-soft);
+  font-size: var(--t-sm);
+}
+.field-error {
+  color: var(--stop);
+  font-weight: 600;
+  font-size: var(--t-sm);
+}
+.input,
+select.input,
+textarea.input {
+  min-height: var(--tap);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 2px solid var(--ink-soft);
+  border-radius: var(--radius-control);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+.input[aria-invalid='true'] {
+  border-color: var(--stop);
+}
+.input-code {
+  font-size: var(--t-xl);
+  letter-spacing: 0.3em;
+  text-align: center;
+}
+
+.row {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+
+.check {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--rule);
+}
+.check input {
+  width: 1.4rem;
+  height: 1.4rem;
+  margin-top: 0.1rem;
+  accent-color: var(--gum);
+  flex: none;
+}
+.check strong {
+  display: block;
+}
+.check span {
+  color: var(--ink-soft);
+  font-size: var(--t-sm);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+/* ---------------------------------------------------------------- notices */
+
+.notice {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-left: 6px solid var(--ink-soft);
+  background: var(--leaf);
+  margin-bottom: var(--space-4);
+  max-width: var(--measure);
+}
+.notice p:last-child {
+  margin-bottom: 0;
+}
+.notice-ok { border-color: var(--ok); background: var(--ok-bg); }
+.notice-warn { border-color: var(--warn); background: var(--warn-bg); }
+.notice-stop { border-color: var(--stop); background: var(--stop-bg); }
+
+/* ---------------------------------------------------------------- roll sheet tables */
+
+/* Lists are ruled like a paper roll sheet rather than chopped into cards. */
+.sheet {
+  width: 100%;
+  border-collapse: collapse;
+}
+.sheet th {
+  text-align: left;
+  font-size: var(--t-sm);
+  color: var(--ink-soft);
+  font-weight: 700;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 2px solid var(--ink);
+}
+.sheet td {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+.sheet tr:last-child td {
+  border-bottom-width: 2px;
+  border-bottom-color: var(--ink);
+}
+.sheet .num {
+  text-align: right;
+}
+.sheet-wrap {
+  overflow-x: auto;
+}
+
+@media (max-width: 640px) {
+  /* Stack rows on phones: each row reads as a labelled block. */
+  .sheet-stack thead {
+    display: none;
+  }
+  .sheet-stack tr {
+    display: block;
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .sheet-stack td {
+    display: block;
+    border: none;
+    padding: var(--space-1) 0;
+  }
+  .sheet-stack td[data-label]::before {
+    content: attr(data-label) ': ';
+    color: var(--ink-soft);
+    font-size: var(--t-sm);
+  }
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-weight: 700;
+  font-size: var(--t-sm);
+}
+.status::before {
+  content: '';
+  width: 0.7em;
+  height: 0.7em;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+.status-open { color: var(--ok); }
+.status-open::before { background: currentColor; }
+.status-draft { color: var(--ink-soft); }
+.status-completed { color: var(--gum); }
+.status-completed::before { border-radius: 0; background: currentColor; }
+.status-cancelled,
+.status-archived { color: var(--ink-soft); }
+.status-cancelled::before { border-radius: 0; transform: rotate(45deg); }
+
+.empty {
+  padding: var(--space-6) 0;
+  border-top: 2px solid var(--ink);
+  border-bottom: 2px solid var(--ink);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2) var(--space-5);
+  margin: 0 0 var(--space-5);
+}
+.facts dt {
+  color: var(--ink-soft);
+}
+.facts dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------- sign-in */
+
+.signin {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+.signin-band {
+  background: var(--gum);
+  color: #fff;
+  padding: var(--space-6) var(--space-4) var(--space-5);
+}
+.signin-band .wordmark {
+  font-size: var(--t-xxl);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
+  /* The hi-vis underline echoes a lanyard strap. */
+  text-decoration: underline;
+  text-decoration-color: var(--hivis);
+  text-decoration-thickness: 0.18em;
+  text-underline-offset: 0.18em;
+}
+.signin-band p {
+  margin: var(--space-3) 0 0;
+  color: #dbe7e1;
+}
+.signin-body {
+  padding: var(--space-5) var(--space-4);
+  max-width: 28rem;
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .signin {
+    grid-template-rows: none;
+    grid-template-columns: minmax(18rem, 2fr) 3fr;
+  }
+  .signin-band {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: var(--space-7);
+  }
+  .signin-body {
+    align-self: center;
+    padding: var(--space-7);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+.fieldset-plain {
+  border: 0;
+  padding: 0;
+  margin: 0 0 var(--space-4);
+}
+.narrow {
+  max-width: 40rem;
+}
+.flush { margin: 0; }
+.section-gap { margin-top: var(--space-6); }
+
+@media (max-width: 480px) {
+  .hide-narrow {
+    display: none;
+  }
+}

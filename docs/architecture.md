@@ -23,8 +23,9 @@ Cloudflare D1 (location hint: Oceania) — Time Travel point-in-time restore
 Stack: TypeScript everywhere.
 - **Frontend**: Vite + React.
 - **Server**: Hono.
-- **Database**: Drizzle ORM. Migrations are SQL files reviewed in Git and
-  applied with `wrangler d1 migrations`.
+- **Database**: hand-written, parameterised SQL through D1 prepared
+  statements (no ORM: the SQL stays reviewable). Migrations are SQL files
+  reviewed in Git and applied with `wrangler d1 migrations`.
 - **Validation**: Zod schemas shared by client and server.
 - **Tests**: Vitest with `@cloudflare/vitest-pool-workers`, plus Playwright.
 - **CI/CD**: GitHub Actions, with dev, staging and prod environments.
@@ -40,7 +41,7 @@ Global (not event-scoped):
 - `login_codes`
 - `roles`, `role_permissions`
 - `people` (member_number UNIQUE, names) — minimal and non-sensitive
-- `audit_log` (append-only, hash-chained)
+- `audit_log` (append-only, enforced by database triggers)
 
 Event-scoped (every row carries `event_id`; every query filters on it):
 - `events` (dates, `Australia/Adelaide` timezone, lifecycle status, feature

@@ -21,9 +21,17 @@ export default tseslint.config(
     },
   },
   {
+    files: ['scripts/**/*.mjs', '*.config.{js,ts}'],
+    languageOptions: { globals: globals.node },
+  },
+  {
     files: ['src/web/**/*.{ts,tsx}'],
     languageOptions: { globals: globals.browser },
     plugins: { 'react-hooks': reactHooks },
-    rules: reactHooks.configs.recommended.rules,
+    rules: {
+      ...reactHooks.configs.recommended.rules,
+      // Data loading on mount legitimately sets state from an effect.
+      'react-hooks/set-state-in-effect': 'off',
+    },
   },
 );
