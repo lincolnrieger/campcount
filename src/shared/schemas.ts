@@ -67,3 +67,47 @@ export const createAssignmentSchema = z.strictObject({
 
 export type CreateEventInput = z.infer<typeof createEventSchema>;
 export type EventFeatures = z.infer<typeof eventFeaturesSchema>;
+
+// ---------------------------------------------------------------- roster import
+
+export const SECTIONS = ['Joeys', 'Cubs', 'Scouts', 'Venturers', 'Rovers', 'Leaders', 'Other'] as const;
+export const DIETARY_CATEGORIES = ['allergy', 'intolerance', 'medical_diet', 'religious_cultural', 'preference'] as const;
+
+export const dietaryEntrySchema = z.strictObject({
+  category: z.enum(DIETARY_CATEGORIES),
+  item: trimmed(60).min(1),
+  severity: z.enum(['standard', 'anaphylactic']).default('standard'),
+  note: trimmed(80).default(''),
+});
+export type DietaryEntryInput = z.infer<typeof dietaryEntrySchema>;
+
+/**
+ * One roster row as sent by the browser. This strict allowlist is the server's
+ * guarantee that nothing else from the source file (addresses, Medicare
+ * numbers, guardian details, free-text medical notes) can ever be stored.
+ */
+export const importRowSchema = z.strictObject({
+  memberNumber: z.string().trim().regex(/^[A-Za-z0-9-]{1,20}$/, 'Membership number is missing or invalid'),
+  firstName: trimmed(60).min(1, 'First name is missing'),
+  preferredName: trimmed(60).default(''),
+  lastName: trimmed(60).min(1, 'Last name is missing'),
+  kind: z.enum(['youth', 'adult']),
+  section: z.enum(SECTIONS),
+  groupName: trimmed(120).default(''),
+  position: trimmed(120).default(''),
+  roleLabel: trimmed(60).default(''),
+  team: trimmed(60).default(''),
+  sourceStatus: trimmed(160).default(''),
+  photoConsent: z.enum(['yes', 'no', 'unknown']),
+  /** Keyed hash of the source dietary/medical text, to detect changes. Never the text. */
+  dietaryFingerprint: z.string().regex(/^[0-9a-f]{64}$/).nullable(),
+  /** Present only when the director reviewed this row's dietary text in this import. */
+  dietary: z.array(dietaryEntrySchema).max(10).optional(),
+});
+export type ImportRow = z.infer<typeof importRowSchema>;
+
+export const importRequestSchema = z.strictObject({
+  rows: z.array(importRowSchema).min(1).max(2000),
+  withdrawMissing: z.boolean().default(false),
+  sourceLabel: trimmed(120).default(''),
+});

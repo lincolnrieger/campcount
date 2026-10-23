@@ -498,3 +498,241 @@ textarea.input {
     display: none;
   }
 }
+
+/* ---------------------------------------------------------------- import */
+
+.steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-5);
+  color: var(--ink-soft);
+  font-size: var(--t-sm);
+}
+.steps span {
+  display: inline-grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  font-weight: 700;
+  margin-right: var(--space-1);
+}
+.steps li[aria-current='step'] {
+  color: var(--ink);
+  font-weight: 700;
+}
+.steps li[aria-current='step'] span {
+  background: var(--hivis);
+  border-color: var(--ink);
+}
+
+.dropzone {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: start;
+  padding: var(--space-6) var(--space-5);
+  border: 2px dashed var(--ink-soft);
+  border-radius: var(--radius-control);
+  background: var(--leaf);
+  cursor: pointer;
+}
+.dropzone input {
+  font: inherit;
+  margin-top: var(--space-3);
+}
+.dropzone:focus-within {
+  outline: 3px solid var(--ink);
+  box-shadow: 0 0 0 6px var(--hivis);
+}
+
+.review-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-top: 2px solid var(--ink);
+}
+.review-list > li {
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--rule);
+}
+.review-list > li.is-done .review-head strong::after {
+  content: ' ✓ reviewed';
+  color: var(--ok);
+  font-size: var(--t-sm);
+}
+.review-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  align-items: baseline;
+}
+.source-note {
+  margin: var(--space-2) 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-left: 4px solid var(--hivis);
+  background: var(--leaf);
+  max-width: var(--measure);
+}
+
+.chips {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-3);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.chip {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-1) var(--space-3);
+  border: 2px solid var(--gum);
+  border-radius: var(--radius-control);
+  font-weight: 600;
+}
+.chip .btn-link {
+  font-size: var(--t-sm);
+  font-weight: 400;
+}
+.chip-alert {
+  border-color: var(--stop);
+  background: var(--stop-bg);
+}
+
+.quick-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+.btn-small {
+  min-height: 40px;
+  padding: 0 var(--space-3);
+  font-size: var(--t-sm);
+}
+
+details summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--gum);
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+}
+
+.sticky-actions {
+  position: sticky;
+  bottom: 0;
+  background: var(--paper);
+  padding: var(--space-3) 0;
+  border-top: 2px solid var(--ink);
+  align-items: center;
+}
+
+.filters {
+  margin-bottom: var(--space-2);
+}
+.is-muted td {
+  color: var(--ink-soft);
+}
+.text-stop {
+  color: var(--stop);
+}
+
+/* ---------------------------------------------------------------- lanyards */
+
+.lanyard-sheet {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6mm;
+  margin-top: var(--space-5);
+}
+.lanyard {
+  width: 90mm;
+  height: 120mm;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  border: 1px dashed #777;
+  background: #fff;
+  color: #000;
+  break-inside: avoid;
+  overflow: hidden;
+}
+.lanyard-band {
+  padding: 3mm 5mm;
+  font-weight: 800;
+  font-size: 15pt;
+  /* Hole-punch space at the top of the card. */
+  padding-top: 8mm;
+}
+.lanyard-body {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  padding: 3mm 5mm 0;
+  text-align: center;
+}
+.lanyard-name {
+  font-size: 24pt;
+  font-weight: 800;
+  line-height: 1.05;
+  margin: 0 0 1mm;
+}
+.lanyard-group {
+  font-size: 10pt;
+  margin: 0 0 2mm;
+}
+.lanyard-code {
+  font-size: 13pt;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin: 1mm 0 0;
+}
+.lanyard-foot {
+  font-size: 7pt;
+  margin: 0;
+  padding: 2mm 5mm 3mm;
+  text-align: center;
+}
+/* Scouts Australia section colours, always with the section name as text. */
+.band-joeys { background: #8b5a2b; color: #fff; }
+.band-cubs { background: #ffc72c; color: #000; }
+.band-scouts { background: #00843d; color: #fff; }
+.band-venturers { background: #7a1f3d; color: #fff; }
+.band-rovers { background: #c8102e; color: #fff; }
+.band-leaders { background: var(--gum); color: #fff; }
+.band-other { background: #ddd; color: #000; }
+
+@media print {
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+  body {
+    background: #fff;
+  }
+  .topbar,
+  .subnav,
+  .page-head,
+  .no-print {
+    display: none !important;
+  }
+  .page {
+    padding: 0;
+    max-width: none;
+  }
+  .lanyard-sheet {
+    margin: 0;
+    gap: 5mm;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

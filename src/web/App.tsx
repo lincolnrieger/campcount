@@ -8,6 +8,9 @@ import { EventOverview } from './pages/EventOverview';
 import { Events, NewEvent } from './pages/Events';
 import { SignIn, VerifyLink } from './pages/SignIn';
 import { Staff } from './pages/Staff';
+import { Import } from './pages/Import';
+import { Lanyards } from './pages/Lanyards';
+import { Roster } from './pages/Roster';
 import { useSession } from './session';
 
 function RequireSignIn({ children }: { children: ReactNode }) {
@@ -35,6 +38,9 @@ export function App() {
         <Route path="events/:eventId" element={<EventLayout />}>
           <Route index element={<EventOverview />} />
           <Route path="staff" element={<Staff />} />
+          <Route path="roster" element={<Roster />} />
+          <Route path="import" element={<Import />} />
+          <Route path="lanyards" element={<Lanyards />} />
         </Route>
         <Route path="admin/users" element={<AdminUsers />} />
         <Route path="*" element={<p>That page doesn't exist.</p>} />

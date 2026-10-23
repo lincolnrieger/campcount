@@ -68,6 +68,8 @@ CREATE TABLE events (
   feature_dietary       INTEGER NOT NULL DEFAULT 0 CHECK (feature_dietary IN (0, 1)),
   feature_photo         INTEGER NOT NULL DEFAULT 1 CHECK (feature_photo IN (0, 1)),
   feature_self_signup   INTEGER NOT NULL DEFAULT 0 CHECK (feature_self_signup IN (0, 1)),
+  -- Random key for fingerprinting source dietary text on import (change detection only).
+  fingerprint_key       TEXT NOT NULL DEFAULT (lower(hex(randomblob(32)))),
   created_by            TEXT NOT NULL REFERENCES users(id),
   created_at            TEXT NOT NULL,
   updated_at            TEXT NOT NULL,
@@ -211,12 +213,15 @@ CREATE TABLE dietary_entries (
 CREATE INDEX dietary_entries_registration ON dietary_entries (registration_id);
 CREATE INDEX dietary_entries_event ON dietary_entries (event_id);
 
--- QR credential. Only the token hash is stored.
+-- QR credential. Scans are matched on token_hash; the token itself is kept
+-- only encrypted (AES-GCM, key derived from AUTH_SECRET) so lanyards can be
+-- reprinted by authorised staff.
 CREATE TABLE credentials (
-  id               TEXT PRIMARY KEY,
-  event_id         TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-  registration_id  TEXT NOT NULL REFERENCES registrations(id) ON DELETE CASCADE,
-  token_hash       TEXT NOT NULL UNIQUE,
+  id                TEXT PRIMARY KEY,
+  event_id          TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  registration_id   TEXT NOT NULL REFERENCES registrations(id) ON DELETE CASCADE,
+  token_hash        TEXT NOT NULL UNIQUE,
+  token_ciphertext  TEXT NOT NULL,
   short_code       TEXT NOT NULL,
   status           TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'revoked')),
   issued_at        TEXT NOT NULL,

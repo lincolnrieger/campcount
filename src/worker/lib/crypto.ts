@@ -53,3 +53,44 @@ export function timingSafeEqualHex(a: string, b: string): boolean {
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
 }
+
+const keyCache = new Map<string, CryptoKey>();
+
+/** Derive a purpose-specific AES-GCM key from the application secret. */
+async function aesKey(secret: string, purpose: string): Promise<CryptoKey> {
+  const cacheKey = `${purpose}:${secret}`;
+  const cached = keyCache.get(cacheKey);
+  if (cached) return cached;
+  const base = await crypto.subtle.importKey('raw', encoder.encode(secret), 'HKDF', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey(
+    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: encoder.encode(purpose) },
+    base,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt'],
+  );
+  keyCache.set(cacheKey, key);
+  return key;
+}
+
+export async function encryptString(secret: string, purpose: string, plaintext: string): Promise<string> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(
+    await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await aesKey(secret, purpose), encoder.encode(plaintext)),
+  );
+  const out = new Uint8Array(iv.length + ct.length);
+  out.set(iv);
+  out.set(ct, iv.length);
+  return base64Url(out);
+}
+
+export async function decryptString(secret: string, purpose: string, payload: string): Promise<string> {
+  const b64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+  const bytes = Uint8Array.from(atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4)), (c) => c.charCodeAt(0));
+  const pt = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: bytes.slice(0, 12) },
+    await aesKey(secret, purpose),
+    bytes.slice(12),
+  );
+  return new TextDecoder().decode(pt);
+}

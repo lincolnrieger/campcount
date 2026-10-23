@@ -58,5 +58,15 @@ why, and what is still open.
   entries in the browser, and the original text is discarded.
 - **D-011 Self-sign-up uses the lanyard code**, not email or phone
   verification (proposed; awaiting confirmation).
+- **D-012 Reprintable credentials.** Scans match on a SHA-256 hash of the
+  token. The token is also stored AES-GCM encrypted (key derived from
+  `AUTH_SECRET`), so authorised staff can reprint a sheet after a printer jam
+  without invalidating cards. Printing is audited like an export.
+- **D-013 Excel read in the browser.** `.xlsx` files are read client-side by
+  a small built-in reader (no upload, no third-party spreadsheet library),
+  alongside CSV and tab-separated text.
+- **D-014 Dietary change detection.** The browser sends an HMAC of the
+  normalised source note (per-event key) so re-imports can flag changed notes
+  for review. The note itself is never sent or stored.
 - **D-008 Scale.** At 4 events/year of ~400 people, a single D1 database is
   far within limits.

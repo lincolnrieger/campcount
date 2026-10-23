@@ -31,6 +31,7 @@ export function EventLayout() {
   const can = (p: Permission) => event.permissions.includes(p);
   const tabs: { to: string; label: string; show: boolean }[] = [
     { to: '', label: 'Overview', show: true },
+    { to: 'roster', label: 'Roster', show: can('roster.view') },
     { to: 'staff', label: 'Staff', show: can('staff.manage') },
   ];
 
