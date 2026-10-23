@@ -38,7 +38,7 @@ npm install
 printf 'AUTH_SECRET=%s\n' "$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")" > .dev.vars
 npm run db:migrate:local
 node scripts/create-admin.mjs "Your Name" you@example.com > /tmp/admin.sql
-npx wrangler d1 execute DB --local --file=/tmp/admin.sql
+npx wrangler d1 execute DB --local --env dev --file=/tmp/admin.sql
 npm run dev
 ```
 
@@ -65,14 +65,24 @@ npm run build
   information or contact details.
 - Don't log request bodies.
 
-## Deploying (not yet configured)
+## Deploying
 
-1. Create D1 databases `campcount-staging` and `campcount-production`
-   (location hint: Oceania) and put their ids in `wrangler.jsonc`.
-2. Set the auth secret: `npx wrangler secret put AUTH_SECRET --env <env>`.
-3. Enable Cloudflare Email Service for `campcount.com` and add a
-   `send_email` binding named `EMAIL` to each environment.
-4. `npx wrangler d1 migrations apply DB --env <env> --remote`, then
-   `npm run deploy:<env>`.
-5. Create the first administrator with `scripts/create-admin.mjs` and
-   `wrangler d1 execute --env <env> --remote`.
+Production is the top-level config in `wrangler.jsonc`, so Cloudflare
+Workers Builds deploys it on every merge to `main`.
+
+In the Cloudflare dashboard, open Workers & Pages, then campcount, then
+Settings:
+
+- **Build configuration**
+  - Build command: `npm run build`
+  - Deploy command: `npm run deploy` (applies migrations, then deploys)
+- **Variables and Secrets:** add a **secret** `AUTH_SECRET` (64 random hex
+  characters). It signs sign-in codes and encrypts card tokens.
+- **Email Service:** enable sending for the domain the `EMAIL_FROM` address
+  uses, so sign-in codes can be emailed.
+- **Domains:** attach `campcount.com` once the domain is on the account.
+  Until then the app runs at the workers.dev address.
+
+To create the first administrator, run the SQL from
+`scripts/create-admin.mjs` against the production database with
+`npx wrangler d1 execute DB --remote --file=<file>`.

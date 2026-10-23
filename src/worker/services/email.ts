@@ -14,7 +14,7 @@ export async function sendEmail(env: Env, message: OutgoingEmail): Promise<void>
     await env.EMAIL.send({ from: env.EMAIL_FROM, to: message.to, subject: message.subject, text: message.text });
     return;
   }
-  if (env.ENVIRONMENT === 'staging' || env.ENVIRONMENT === 'production') {
+  if (env.ENVIRONMENT === 'production') {
     throw new Error('EMAIL binding is not configured');
   }
   devOutbox.push(message);

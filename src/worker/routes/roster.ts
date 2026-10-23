@@ -341,6 +341,7 @@ rosterRoutes.post('/credentials/print', async (c) => {
   const wanted = registrationIds ? new Set(registrationIds) : null;
   const rows = results.filter((r) => !wanted || wanted.has(r.id!));
 
+  const origin = new URL(c.req.url).origin;
   const cards = await Promise.all(
     rows.map(async (r) => ({
       registrationId: r.id,
@@ -349,7 +350,7 @@ rosterRoutes.post('/credentials/print', async (c) => {
       section: r.section,
       groupName: r.group_name,
       shortCode: formatShortCode(r.short_code!),
-      qr: credentialUrl(c.env.APP_ORIGIN, await decryptToken(c.env, r.token_ciphertext!)),
+      qr: credentialUrl(origin, await decryptToken(c.env, r.token_ciphertext!)),
     })),
   );
   await auditStatementRun(c, { action: 'credentials.print', eventId, userId: user.userId, count: cards.length });

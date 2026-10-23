@@ -65,7 +65,7 @@ authRoutes.post('/request', async (c) => {
     ]);
     // The token is in the URL fragment: it is never sent to a server, so mail
     // scanners that pre-fetch links (e.g. Microsoft Safe Links) cannot use it.
-    const link = `${c.env.APP_ORIGIN}/sign-in/verify#t=${linkToken}`;
+    const link = `${new URL(c.req.url).origin}/sign-in/verify#t=${linkToken}`;
     await sendEmail(c.env, {
       to: email,
       subject: `Your CampCount sign-in code: ${code}`,

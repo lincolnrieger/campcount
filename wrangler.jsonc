@@ -1,5 +1,8 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
+  // Top level is PRODUCTION, so Cloudflare Workers Builds (which runs a plain
+  // `wrangler deploy`) deploys production. Local development uses env.dev
+  // (CLOUDFLARE_ENV=dev, set by `npm run dev`).
   "name": "campcount",
   "main": "src/worker/index.ts",
   "compatibility_date": "2026-10-01",
@@ -8,68 +11,40 @@
     "run_worker_first": ["/api/*"]
   },
   "observability": { "enabled": true },
-  "placement": { "mode": "off" },
   "vars": {
-    "APP_ORIGIN": "http://localhost:5173",
-    "ENVIRONMENT": "development",
+    "ENVIRONMENT": "production",
     "EMAIL_FROM": "CampCount <no-reply@campcount.com>"
   },
-  // Local development database. Staging/production override below.
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "campcount-dev",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_name": "campcount-production",
+      "database_id": "482b526e-b957-4f62-ae3b-d6b67d198c5b",
       "migrations_dir": "migrations"
     }
   ],
-  "ratelimits": [
-    { "name": "AUTH_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }
-  ],
+  "ratelimits": [{ "name": "AUTH_LIMITER", "namespace_id": "3001", "simple": { "limit": 10, "period": 60 } }],
   "triggers": { "crons": ["17 3 * * *"] },
+  // Cloudflare Email Service binding for sign-in codes (enable sending for the domain first).
+  "send_email": [{ "name": "EMAIL" }],
+  // AUTH_SECRET is a secret: set it in the dashboard (Settings, Variables and Secrets)
+  // or with `npx wrangler secret put AUTH_SECRET`.
   "env": {
-    "staging": {
+    "dev": {
       "vars": {
-        "APP_ORIGIN": "https://staging.campcount.com",
-        "ENVIRONMENT": "staging",
-        "EMAIL_FROM": "CampCount Staging <no-reply@campcount.com>"
+        "ENVIRONMENT": "development",
+        "EMAIL_FROM": "CampCount Dev <no-reply@campcount.com>"
       },
-      "routes": [{ "pattern": "staging.campcount.com", "custom_domain": true }],
       "d1_databases": [
         {
           "binding": "DB",
-          "database_name": "campcount-staging",
-          "database_id": "REPLACE_WITH_STAGING_D1_ID",
+          "database_name": "campcount-dev",
+          "database_id": "00000000-0000-0000-0000-000000000000",
           "migrations_dir": "migrations"
         }
       ],
-      "ratelimits": [
-        { "name": "AUTH_LIMITER", "namespace_id": "2001", "simple": { "limit": 10, "period": 60 } }
-      ],
-      "triggers": { "crons": ["17 3 * * *"] },
-      // Cloudflare Email Service binding for sign-in codes (enable sending for campcount.com first).
-      "send_email": [{ "name": "EMAIL" }]
-    },
-    "production": {
-      "vars": {
-        "APP_ORIGIN": "https://campcount.com",
-        "ENVIRONMENT": "production",
-        "EMAIL_FROM": "CampCount <no-reply@campcount.com>"
-      },
-      "routes": [{ "pattern": "campcount.com", "custom_domain": true }],
-      "d1_databases": [
-        {
-          "binding": "DB",
-          "database_name": "campcount-production",
-          "database_id": "REPLACE_WITH_PRODUCTION_D1_ID",
-          "migrations_dir": "migrations"
-        }
-      ],
-      "ratelimits": [
-        { "name": "AUTH_LIMITER", "namespace_id": "3001", "simple": { "limit": 10, "period": 60 } }
-      ],
-      "triggers": { "crons": ["17 3 * * *"] },
-      "send_email": [{ "name": "EMAIL" }]
+      "ratelimits": [{ "name": "AUTH_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }],
+      "triggers": { "crons": [] }
     }
   }
 }
