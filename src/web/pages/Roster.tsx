@@ -72,6 +72,11 @@ export function Roster() {
               Import roster
             </Link>
           )}
+          {active.length > 0 && (
+            <Link className="btn btn-secondary" to="../roll-sheet">
+              Paper roll sheet
+            </Link>
+          )}
           {can('credentials.manage') && active.length > 0 && (
             <Link className="btn" to="../lanyards">
               Lanyards{withoutCard > 0 && ` (${withoutCard} to print)`}

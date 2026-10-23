@@ -6,6 +6,21 @@ meal scanning that keeps working with patchy signal, and close-out reports.
 - Requirements: [`docs/requirements.md`](docs/requirements.md)
 - Architecture and threat model: [`docs/architecture.md`](docs/architecture.md)
 - Decisions: [`docs/discovery/decision-log.md`](docs/discovery/decision-log.md)
+- Running an event, incidents, backup and restore: [`docs/operations.md`](docs/operations.md)
+- Known limitations: [`docs/known-limitations.md`](docs/known-limitations.md)
+
+## What works today
+
+- Passwordless sign-in, event-scoped roles, staff assignment without
+  privilege escalation, append-only audit log
+- Events with per-event features and a draft → open → completed → archived
+  lifecycle
+- MyScout import (.xlsx/CSV) filtered in the browser, with dietary review
+- QR lanyards (print four per A4) with typed backup codes; card replacement
+- Scanning for activities, meals and on-site, working offline, on personal
+  phones or paired shared stations
+- Live dashboard, reconciliation, close-out, CSV exports, paper roll sheets
+- Automatic retention purges
 
 ## Stack
 

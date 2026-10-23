@@ -57,7 +57,15 @@ why, and what is still open.
   `medical_conditions` column. A Director turns it into structured dietary
   entries in the browser, and the original text is discarded.
 - **D-011 Self-sign-up uses the lanyard code**, not email or phone
-  verification (proposed; awaiting confirmation).
+  verification. Agreed ("use your judgement"); deferred until after the
+  core scanning release.
+- **D-015 Counts come from replaying scans.** Scans are append-only. Every
+  count, on the phone and the server, comes from replaying a context's
+  scans in device-time order through `src/shared/scanRules.ts`. Offline
+  syncs arriving late, and simultaneous scans on two phones, therefore
+  resolve identically and are never double-counted.
+- **D-016 Paper fallback.** A printable roll sheet per event. Ticks are
+  entered afterwards as manual scans, which reports label as manual.
 - **D-012 Reprintable credentials.** Scans match on a SHA-256 hash of the
   token. The token is also stored AES-GCM encrypted (key derived from
   `AUTH_SECRET`), so authorised staff can reprint a sheet after a printer jam

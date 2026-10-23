@@ -18,6 +18,7 @@ import { Scan } from './pages/Scan';
 import { Stations } from './pages/Stations';
 import { Live } from './pages/Live';
 import { CloseOut } from './pages/CloseOut';
+import { RollSheet } from './pages/RollSheet';
 import { useSession } from './session';
 
 function RequireSignIn({ children }: { children: ReactNode }) {
@@ -65,6 +66,7 @@ export function App() {
           <Route path="stations" element={<Stations />} />
           <Route path="live" element={<Live />} />
           <Route path="close-out" element={<CloseOut />} />
+          <Route path="roll-sheet" element={<RollSheet />} />
         </Route>
         <Route path="admin/users" element={<AdminUsers />} />
         <Route path="*" element={<p>That page doesn't exist.</p>} />

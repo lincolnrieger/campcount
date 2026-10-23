@@ -46,7 +46,9 @@
       "ratelimits": [
         { "name": "AUTH_LIMITER", "namespace_id": "2001", "simple": { "limit": 10, "period": 60 } }
       ],
-      "triggers": { "crons": ["17 3 * * *"] }
+      "triggers": { "crons": ["17 3 * * *"] },
+      // Cloudflare Email Service binding for sign-in codes (enable sending for campcount.com first).
+      "send_email": [{ "name": "EMAIL" }]
     },
     "production": {
       "vars": {
@@ -66,7 +68,8 @@
       "ratelimits": [
         { "name": "AUTH_LIMITER", "namespace_id": "3001", "simple": { "limit": 10, "period": 60 } }
       ],
-      "triggers": { "crons": ["17 3 * * *"] }
+      "triggers": { "crons": ["17 3 * * *"] },
+      "send_email": [{ "name": "EMAIL" }]
     }
   }
 }

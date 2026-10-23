@@ -1045,3 +1045,26 @@ details summary {
 .scan-head .sync-dot {
   margin-top: 0.3em;
 }
+
+.roll-sheet {
+  margin-top: var(--space-5);
+}
+.roll-title {
+  max-width: none;
+}
+.roll td {
+  padding: var(--space-2) var(--space-3);
+}
+.roll .tick {
+  width: 4.5rem;
+  border-left: 1px solid var(--rule);
+}
+@media print {
+  .roll-sheet {
+    margin: 0;
+    font-size: 10pt;
+  }
+  .roll tr {
+    break-inside: avoid;
+  }
+}
