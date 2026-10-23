@@ -1,5 +1,6 @@
-import { createContext, useContext } from 'react';
-import { NavLink, Outlet, useParams } from 'react-router';
+import { createContext, useContext, useEffect, useRef } from 'react';
+import { NavLink, Outlet, useLocation, useParams } from 'react-router';
+import { useCollapsingTitle } from '../components/Layout';
 import type { Permission } from '../../shared/permissions';
 import { EventStatusBadge, Loading, Notice, formatDateRange } from '../components/ui';
 import type { EventSummary } from '../types';
@@ -26,8 +27,18 @@ export function EventLayout() {
   if (loading && !data) return <Loading />;
   if (error) return <Notice tone="stop">{error.status === 404 ? 'This event does not exist, or you are not assigned to it.' : error.message}</Notice>;
   if (!data) return null;
+  return <EventShell event={data.event} reload={reload} />;
+}
 
-  const event = data.event;
+function EventShell({ event, reload }: { event: EventSummary; reload: () => Promise<void> }) {
+  const titleRef = useCollapsingTitle<HTMLHeadingElement>(event.name);
+  const navRef = useRef<HTMLElement>(null);
+  const location = useLocation();
+  // Keep the current tab visible in the swipeable tab row.
+  useEffect(() => {
+    navRef.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }, [location.pathname]);
+
   const can = (p: Permission) => event.permissions.includes(p);
   const tabs: { to: string; label: string; show: boolean }[] = [
     { to: '', label: 'Overview', show: true },
@@ -42,17 +53,20 @@ export function EventLayout() {
 
   return (
     <EventContext.Provider value={{ event, can, reload }}>
-      <div className="page-head">
+      <div className="page-head event-head">
         <div>
-          <h1>{event.name}</h1>
+          <h1 ref={titleRef}>{event.name}</h1>
           <p className="lede flush">
             {formatDateRange(event.startsOn, event.endsOn)}
             {event.location && `, ${event.location}`}
           </p>
         </div>
-        <EventStatusBadge status={event.status} />
+        <div className="event-badges">
+          {event.isDemo && <span className="badge-demo">Demo</span>}
+          <EventStatusBadge status={event.status} />
+        </div>
       </div>
-      <nav className="subnav" aria-label="Event sections">
+      <nav className="subnav" aria-label="Event sections" ref={navRef} hidden={tabs.filter((t) => t.show).length < 2}>
         {tabs
           .filter((t) => t.show)
           .map((t) => (

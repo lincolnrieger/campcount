@@ -105,17 +105,39 @@ a {
 
 /* ---------------------------------------------------------------- shell */
 
-.shell {
-  min-height: 100dvh;
-  display: grid;
-  grid-template-rows: auto 1fr;
+/* Mobile first. Sizes step up at 720px for tablets and desktops. */
+html {
+  scroll-padding-top: calc(64px + env(safe-area-inset-top));
+}
+body {
+  -webkit-tap-highlight-color: transparent;
+}
+a,
+button,
+input,
+select,
+textarea,
+label {
+  touch-action: manipulation; /* no double-tap zoom delay on iOS */
 }
 
-.topbar {
+.shell {
+  min-height: 100dvh;
   display: flex;
+  flex-direction: column;
+}
+
+/* Compact header that stays put while the page scrolls under it. */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-3) var(--space-4);
+  gap: var(--space-3);
+  min-height: 52px;
+  padding: env(safe-area-inset-top) max(var(--space-4), env(safe-area-inset-right)) 0 max(var(--space-4), env(safe-area-inset-left));
   background: var(--gum);
   color: #fff;
 }
@@ -126,23 +148,79 @@ a {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  min-height: 44px;
   font-weight: 800;
   font-size: var(--t-md);
   text-decoration: none;
 }
+.brand-word,
+.topbar-title {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.brand-word.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+/* The page's large title slides into the header once it scrolls away. */
+.topbar-title {
+  margin: 0;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
+  transform: translateY(6px);
+  max-width: none;
+}
+.topbar-title.is-shown {
+  opacity: 1;
+  transform: none;
+}
 .topbar-nav {
   display: flex;
   gap: var(--space-4);
-  margin-left: auto;
   align-items: center;
   font-size: var(--t-sm);
 }
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--hivis);
+  color: var(--ink) !important;
+  font-weight: 800;
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.demo-banner {
+  padding: var(--space-2) var(--space-4);
+  background: var(--hivis);
+  color: var(--ink);
+  font-size: var(--t-sm);
+  font-weight: 600;
+}
+.badge-demo {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 0 var(--space-2);
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  vertical-align: middle;
+  background: var(--hivis);
+}
 
 .page {
+  flex: 1;
   width: 100%;
   max-width: 1040px;
   margin: 0 auto;
-  padding: var(--space-5) var(--space-4) var(--space-7);
+  padding: var(--space-4) max(var(--space-4), env(safe-area-inset-right)) calc(var(--space-7) + env(safe-area-inset-bottom))
+    max(var(--space-4), env(safe-area-inset-left));
 }
 
 .page-head {
@@ -150,25 +228,41 @@ a {
   flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
-  gap: var(--space-3);
-  margin-bottom: var(--space-5);
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-4);
 }
 .page-head h1 {
   margin: 0;
+}
+.event-badges {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 .lede {
   color: var(--ink-soft);
 }
 
-/* Event sub-navigation: a ruled tab strip, the current one marked in hi-vis. */
+/* Event tabs: a swipeable row that sticks under the header. */
 .subnav {
+  position: sticky;
+  top: calc(52px + env(safe-area-inset-top));
+  z-index: 10;
   display: flex;
   gap: var(--space-1);
   overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  margin: 0 calc(-1 * var(--space-4)) var(--space-4);
+  padding: 0 var(--space-4);
+  background: var(--paper);
   border-bottom: 2px solid var(--rule);
-  margin-bottom: var(--space-5);
+}
+.subnav::-webkit-scrollbar {
+  display: none;
 }
 .subnav a {
+  scroll-snap-align: start;
   padding: var(--space-3) var(--space-3);
   color: var(--ink-soft);
   text-decoration: none;
@@ -180,6 +274,36 @@ a {
 .subnav a[aria-current='page'] {
   color: var(--ink);
   border-bottom-color: var(--hivis);
+}
+
+@media (max-width: 719px) {
+  h1 {
+    font-size: 1.6rem;
+  }
+  h2 {
+    font-size: 1.3rem;
+  }
+  .lede {
+    font-size: var(--t-sm);
+  }
+  /* Primary actions are easy thumb targets on phones. */
+  .actions > .btn,
+  .actions > a.btn {
+    flex: 1 1 auto;
+  }
+  .facts {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .facts dd {
+    margin-bottom: var(--space-3);
+  }
+  .notice {
+    padding: var(--space-3);
+  }
+  .empty {
+    padding: var(--space-4) 0;
+  }
 }
 
 /* ---------------------------------------------------------------- controls */
@@ -367,13 +491,19 @@ textarea.input {
   }
   .sheet-stack tr {
     display: block;
-    padding: var(--space-3) 0;
+    padding: var(--space-2) 0;
     border-bottom: 1px solid var(--rule);
+  }
+  .sheet-stack tr:last-child {
+    border-bottom: 2px solid var(--ink);
   }
   .sheet-stack td {
     display: block;
-    border: none;
-    padding: var(--space-1) 0;
+    border: none !important;
+    padding: 2px 0;
+  }
+  .sheet-stack td.num {
+    text-align: left;
   }
   .sheet-stack td[data-label]::before {
     content: attr(data-label) ': ';
@@ -435,10 +565,10 @@ textarea.input {
 .signin-band {
   background: var(--gum);
   color: #fff;
-  padding: var(--space-6) var(--space-4) var(--space-5);
+  padding: calc(var(--space-5) + env(safe-area-inset-top)) var(--space-4) var(--space-4);
 }
 .signin-band .wordmark {
-  font-size: var(--t-xxl);
+  font-size: var(--t-xl);
   font-weight: 800;
   letter-spacing: -0.02em;
   margin: 0;
@@ -630,7 +760,7 @@ details summary {
   position: sticky;
   bottom: 0;
   background: var(--paper);
-  padding: var(--space-3) 0;
+  padding: var(--space-3) 0 calc(var(--space-3) + env(safe-area-inset-bottom));
   border-top: 2px solid var(--ink);
   align-items: center;
 }
@@ -718,6 +848,7 @@ details summary {
     background: #fff;
   }
   .topbar,
+  .demo-banner,
   .subnav,
   .page-head,
   .no-print {
@@ -1067,4 +1198,101 @@ details summary {
   .roll tr {
     break-inside: avoid;
   }
+}
+
+.signin-alt {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--rule);
+}
+.signin-alt p {
+  color: var(--ink-soft);
+  font-size: var(--t-sm);
+  margin-bottom: var(--space-2);
+}
+@media (min-width: 768px) {
+  .signin-band .wordmark {
+    font-size: var(--t-xxl);
+  }
+}
+
+.launch-button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  min-height: 60px;
+  padding: var(--space-2) var(--space-4);
+  border: 2px solid var(--gum);
+  border-radius: var(--radius-control);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.launch-button span {
+  color: var(--ink-soft);
+  font-weight: 400;
+  font-size: var(--t-sm);
+}
+.demo-event {
+  padding-top: var(--space-4);
+  border-top: 2px solid var(--ink);
+}
+
+/* Compact figure rows (live dashboard): name left, number right. */
+.stat-rows {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-top: 2px solid var(--ink);
+}
+.stat-rows li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 0 var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--rule);
+}
+.stat-value {
+  font-size: var(--t-lg);
+  font-weight: 800;
+  text-align: right;
+  white-space: nowrap;
+}
+.stat-value span {
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.stat-note {
+  grid-column: 1 / -1;
+  font-size: var(--t-sm);
+  color: var(--ink-soft);
+}
+.stat-note:empty {
+  display: none;
+}
+.cell-action {
+  margin-left: var(--space-2);
+}
+@media (max-width: 640px) {
+  .sheet-stack td:empty,
+  .sheet-stack td.hide-narrow {
+    display: none;
+  }
+  .sheet-stack td.cell-inline {
+    display: inline-block;
+  }
+}
+.subnav[hidden] { display: none; }
+.filters {
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: var(--space-3);
+}
+.filters .field {
+  margin-bottom: var(--space-2);
 }

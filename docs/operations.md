@@ -28,9 +28,12 @@ to recover the system. Keep a printed copy at camp HQ.
 
 ## Setting up volunteers' phones
 
-- Volunteers sign in once with their email (a 6-digit code is sent). They
-  should do this **with signal**, then open their scanner once so the list
-  downloads to the phone.
+- Volunteers sign in the first time with their email (a 6-digit code is
+  sent) and then choose a password, which they use from then on. "Email me a
+  sign-in code" also covers forgotten passwords. They should sign in **with
+  signal**, then open their scanner once so the list downloads to the phone.
+- On iPhone, Safari's Share → **Add to Home Screen** makes CampCount open
+  full-screen like an app.
 - For shared devices (meal-hall tablet, gate phone), use **Stations**: the
   director creates a pairing code and the device opens `/pair`. A station
   can only scan one thing and stops automatically.
@@ -64,6 +67,21 @@ Scan records show who was scanned, where, by whom and when. They are **not**
 proof of where someone is now and **not** a substitute for an emergency
 headcount or roll call. In an emergency, follow the Scouts SA emergency
 procedure and do a physical headcount.
+
+## Practising with demo mode
+
+Platform admins can open Admin, then Demo mode, to create a practice camp
+of made-up people (membership numbers start with `DEMO`). It comes with
+activities, meals, lanyard cards and demo accounts for each role.
+
+- "Try it as" switches you into one of those accounts so you can see
+  exactly what a leader or volunteer sees. This is recorded in the audit
+  log.
+- Sign out and sign back in with your password to return to your own
+  account.
+- Delete the demo camp when you're done.
+- Demo accounts use the reserved `.invalid` email domain and can't receive
+  email.
 
 ## Close-out
 

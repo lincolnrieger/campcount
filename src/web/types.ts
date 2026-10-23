@@ -13,13 +13,14 @@ export interface EventSummary {
   status: EventStatus;
   features: EventFeatures;
   closedAt: string | null;
+  isDemo: boolean;
   permissions: Permission[];
 }
 
 export type Me =
   | {
       kind: 'user';
-      user: { id: string; email: string; displayName: string };
+      user: { id: string; email: string; displayName: string; hasPassword: boolean; isDemo: boolean };
       platformPermissions: Permission[];
     }
   | {
