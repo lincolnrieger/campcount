@@ -48,5 +48,33 @@ why, and what is still open.
   revocable and the device can only scan.
 - **D-007 Opaque, event-scoped QR credentials.** Random 128-bit tokens
   (stored hashed) plus a short manual-entry code. No personal data is encoded.
+- **D-009 Browser-side, allowlisted import.** The MyScout export contains
+  Medicare numbers, addresses, guardian details and similar data. It is
+  parsed in the browser, and only the allowlisted fields
+  (`docs/requirements.md` §3) are sent to the server. The raw file is never
+  uploaded.
+- **D-010 Dietary review step.** Dietary text lives in MyScout's
+  `medical_conditions` column. A Director turns it into structured dietary
+  entries in the browser, and the original text is discarded.
+- **D-011 Self-sign-up uses the lanyard code**, not email or phone
+  verification. Agreed ("use your judgement"); deferred until after the
+  core scanning release.
+- **D-015 Counts come from replaying scans.** Scans are append-only. Every
+  count, on the phone and the server, comes from replaying a context's
+  scans in device-time order through `src/shared/scanRules.ts`. Offline
+  syncs arriving late, and simultaneous scans on two phones, therefore
+  resolve identically and are never double-counted.
+- **D-016 Paper fallback.** A printable roll sheet per event. Ticks are
+  entered afterwards as manual scans, which reports label as manual.
+- **D-012 Reprintable credentials.** Scans match on a SHA-256 hash of the
+  token. The token is also stored AES-GCM encrypted (key derived from
+  `AUTH_SECRET`), so authorised staff can reprint a sheet after a printer jam
+  without invalidating cards. Printing is audited like an export.
+- **D-013 Excel read in the browser.** `.xlsx` files are read client-side by
+  a small built-in reader (no upload, no third-party spreadsheet library),
+  alongside CSV and tab-separated text.
+- **D-014 Dietary change detection.** The browser sends an HMAC of the
+  normalised source note (per-event key) so re-imports can flag changed notes
+  for review. The note itself is never sent or stored.
 - **D-008 Scale.** At 4 events/year of ~400 people, a single D1 database is
   far within limits.

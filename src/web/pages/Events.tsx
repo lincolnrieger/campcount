@@ -1,0 +1,173 @@
+import { useState } from 'react';
+import type { FormEvent } from 'react';
+import { Link, useNavigate } from 'react-router';
+import { ApiFailure, api } from '../api';
+import { EventStatusBadge, Field, Loading, Notice, formatDateRange } from '../components/ui';
+import { useSession } from '../session';
+import type { EventSummary } from '../types';
+import { useApi } from '../useApi';
+import { FEATURE_COPY } from './featureCopy';
+import type { EventFeatures } from '../../shared/schemas';
+
+export function Events() {
+  const { me } = useSession();
+  const { data, error, loading } = useApi<{ events: EventSummary[] }>('/events');
+  const canCreate = me?.kind === 'user' && me.platformPermissions.includes('platform.events.create');
+
+  return (
+    <>
+      <div className="page-head">
+        <h1>Events</h1>
+        {canCreate && (
+          <Link className="btn" to="/events/new">
+            Create event
+          </Link>
+        )}
+      </div>
+      {loading && <Loading />}
+      {error && <Notice tone="stop">{error.message}</Notice>}
+      {data && data.events.length === 0 && (
+        <div className="empty">
+          <p>
+            <strong>You're not assigned to any events yet.</strong>
+          </p>
+          <p className="lede">
+            {canCreate
+              ? 'Create an event to get started.'
+              : 'Ask your camp director to add you to their event. It will appear here as soon as they do.'}
+          </p>
+        </div>
+      )}
+      {data && data.events.length > 0 && (
+        <div className="sheet-wrap">
+          <table className="sheet sheet-stack">
+            <thead>
+              <tr>
+                <th scope="col">Event</th>
+                <th scope="col">Dates</th>
+                <th scope="col">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.events.map((e) => (
+                <tr key={e.id}>
+                  <td>
+                    <Link to={`/events/${e.id}`}>
+                      <strong>{e.name}</strong>
+                    </Link>
+                    {e.location && <div className="field-hint">{e.location}</div>}
+                  </td>
+                  <td data-label="Dates">{formatDateRange(e.startsOn, e.endsOn)}</td>
+                  <td data-label="Status">
+                    <EventStatusBadge status={e.status} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
+}
+
+const DEFAULT_FEATURES: EventFeatures = {
+  activities: true,
+  meals: false,
+  site: false,
+  dietary: false,
+  photo: true,
+  selfSignup: false,
+};
+
+export function FeatureChecklist({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: EventFeatures;
+  onChange: (next: EventFeatures) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <fieldset className="field fieldset-plain">
+      <legend>What will this event use?</legend>
+      <span className="field-hint">Switch on only what you need. You can change this until the event closes.</span>
+      {(Object.keys(FEATURE_COPY) as (keyof EventFeatures)[]).map((key) => (
+        <label className="check" key={key}>
+          <input
+            type="checkbox"
+            checked={value[key]}
+            disabled={disabled}
+            onChange={(e) => onChange({ ...value, [key]: e.target.checked })}
+          />
+          <div>
+            <strong>{FEATURE_COPY[key].label}</strong>
+            <span>{FEATURE_COPY[key].hint}</span>
+          </div>
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
+export function NewEvent() {
+  const navigate = useNavigate();
+  const [form, setForm] = useState({ name: '', location: '', startsOn: '', endsOn: '', description: '' });
+  const [features, setFeatures] = useState<EventFeatures>(DEFAULT_FEATURES);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [failure, setFailure] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const set = (key: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [key]: e.target.value });
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setFailure(null);
+    try {
+      const { event } = await api<{ event: EventSummary }>('/events', { body: { ...form, features } });
+      navigate(`/events/${event.id}/staff`, { state: { created: true } });
+    } catch (err) {
+      if (err instanceof ApiFailure) {
+        setErrors(err.fieldErrors());
+        setFailure(err.message);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} noValidate className="narrow">
+      <h1>Create event</h1>
+      <p className="lede">The event starts as a draft. Nobody can scan until you open it.</p>
+      {failure && <Notice tone="stop">{failure}</Notice>}
+      <Field id="name" label="Event name" error={errors.name}>
+        <input id="name" className="input" value={form.name} onChange={set('name')} required aria-invalid={!!errors.name} />
+      </Field>
+      <Field id="location" label="Location" hint="For example, Woodhouse Activity Centre">
+        <input id="location" className="input" value={form.location} onChange={set('location')} />
+      </Field>
+      <div className="row">
+        <Field id="startsOn" label="First day" error={errors.startsOn}>
+          <input id="startsOn" className="input" type="date" value={form.startsOn} onChange={set('startsOn')} required />
+        </Field>
+        <Field id="endsOn" label="Last day" error={errors.endsOn}>
+          <input id="endsOn" className="input" type="date" value={form.endsOn} onChange={set('endsOn')} required />
+        </Field>
+      </div>
+      <Field id="description" label="Notes for staff" hint="Optional. Shown on the event page to everyone assigned.">
+        <textarea id="description" className="input" rows={3} value={form.description} onChange={set('description')} />
+      </Field>
+      <FeatureChecklist value={features} onChange={setFeatures} />
+      <div className="actions">
+        <button className="btn" disabled={busy}>
+          {busy ? 'Creating…' : 'Create event'}
+        </button>
+        <Link className="btn btn-secondary" to="/">
+          Cancel
+        </Link>
+      </div>
+    </form>
+  );
+}

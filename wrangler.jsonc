@@ -1,0 +1,75 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "campcount",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "observability": { "enabled": true },
+  "placement": { "mode": "off" },
+  "vars": {
+    "APP_ORIGIN": "http://localhost:5173",
+    "ENVIRONMENT": "development",
+    "EMAIL_FROM": "CampCount <no-reply@campcount.com>"
+  },
+  // Local development database. Staging/production override below.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "campcount-dev",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "ratelimits": [
+    { "name": "AUTH_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }
+  ],
+  "triggers": { "crons": ["17 3 * * *"] },
+  "env": {
+    "staging": {
+      "vars": {
+        "APP_ORIGIN": "https://staging.campcount.com",
+        "ENVIRONMENT": "staging",
+        "EMAIL_FROM": "CampCount Staging <no-reply@campcount.com>"
+      },
+      "routes": [{ "pattern": "staging.campcount.com", "custom_domain": true }],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "campcount-staging",
+          "database_id": "REPLACE_WITH_STAGING_D1_ID",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "ratelimits": [
+        { "name": "AUTH_LIMITER", "namespace_id": "2001", "simple": { "limit": 10, "period": 60 } }
+      ],
+      "triggers": { "crons": ["17 3 * * *"] },
+      // Cloudflare Email Service binding for sign-in codes (enable sending for campcount.com first).
+      "send_email": [{ "name": "EMAIL" }]
+    },
+    "production": {
+      "vars": {
+        "APP_ORIGIN": "https://campcount.com",
+        "ENVIRONMENT": "production",
+        "EMAIL_FROM": "CampCount <no-reply@campcount.com>"
+      },
+      "routes": [{ "pattern": "campcount.com", "custom_domain": true }],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "campcount-production",
+          "database_id": "REPLACE_WITH_PRODUCTION_D1_ID",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "ratelimits": [
+        { "name": "AUTH_LIMITER", "namespace_id": "3001", "simple": { "limit": 10, "period": 60 } }
+      ],
+      "triggers": { "crons": ["17 3 * * *"] },
+      "send_email": [{ "name": "EMAIL" }]
+    }
+  }
+}
