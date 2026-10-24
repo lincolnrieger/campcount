@@ -285,3 +285,46 @@ export function localTime(iso: string | null, timezone: string): string {
     hour12: false,
   }).format(new Date(iso));
 }
+
+export interface Whereabouts {
+  /** 'on' = on site now, 'off' = arrived then left, 'never' = not arrived yet; null when the event doesn't track the gate. */
+  site: 'on' | 'off' | 'never' | null;
+  siteSince: string | null;
+  /** Activities they are signed in to right now (only activities that track sign-out). */
+  activities: { key: string; name: string; since: string | null }[];
+  lastSeen: { contextName: string; type: 'activity' | 'meal' | 'site'; direction: 'in' | 'out'; at: string } | null;
+}
+
+/** Where each person is, according to the scan records. */
+export function whereabouts(model: EventModel): Map<string, Whereabouts> {
+  const site = model.contexts.find((c) => c.type === 'site');
+  const out = new Map<string, Whereabouts>();
+  for (const id of model.people.keys()) {
+    let siteState: Whereabouts['site'] = null;
+    let siteSince: string | null = null;
+    if (site) {
+      const s = model.replays.get(site.key)!.states.get(id);
+      siteState = !s || s.visits === 0 ? 'never' : s.present ? 'on' : 'off';
+      siteSince = s?.lastAcceptedAt ?? null;
+    }
+    out.set(id, { site: siteState, siteSince, activities: [], lastSeen: null });
+  }
+  for (const ctx of model.contexts) {
+    if (ctx.rules.type !== 'activity' || !ctx.rules.trackSignOut) continue;
+    for (const [id, s] of model.replays.get(ctx.key)!.states) {
+      if (s.present) out.get(id)?.activities.push({ key: ctx.key, name: ctx.name, since: s.lastAcceptedAt });
+    }
+  }
+  const byKey = new Map(model.contexts.map((c) => [c.key, c]));
+  for (const scan of model.scans) {
+    if (!scan.registrationId || scan.voided) continue;
+    if (model.replays.get(scan.contextKey)?.outcomes.get(scan.id)?.outcome !== 'accepted') continue;
+    const w = out.get(scan.registrationId);
+    const ctx = byKey.get(scan.contextKey);
+    if (!w || !ctx) continue;
+    if (!w.lastSeen || scan.deviceTime > w.lastSeen.at) {
+      w.lastSeen = { contextName: ctx.name, type: ctx.type, direction: scan.direction, at: scan.deviceTime };
+    }
+  }
+  return out;
+}

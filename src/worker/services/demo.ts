@@ -105,11 +105,12 @@ export async function createDemoEvent(env: Env, adminUserId: string, participant
     [2, 'breakfast', '07:30'],
     [2, 'lunch', '12:30'],
   ];
-  for (const [d, meal, time] of meals) {
+  const mealRows = meals.map(([d, meal, time]) => ({ id: crypto.randomUUID(), name: `${weekdayName(days[d]!)} ${meal}`, startsAt: zonedIso(days[d]!, time, DEMO_TZ) }));
+  for (const m of mealRows) {
     statements.push(
       db
         .prepare(`INSERT INTO meal_services (id, event_id, name, starts_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`)
-        .bind(crypto.randomUUID(), eventId, `${weekdayName(days[d]!)} ${meal}`, zonedIso(days[d]!, time, DEMO_TZ), now, now),
+        .bind(m.id, eventId, m.name, m.startsAt, now, now),
     );
   }
 
@@ -185,10 +186,70 @@ export async function createDemoEvent(env: Env, adminUserId: string, participant
     }),
   );
 
+  statements.push(...demoScans(db, eventId, adminUserId, registrationIds, activities, mealRows));
+
   for (let i = 0; i < statements.length; i += 80) await db.batch(statements.slice(i, i + 80));
   const cards = await issueStatements(env, eventId, registrationIds);
   for (let i = 0; i < cards.length; i += 80) await db.batch(cards.slice(i, i + 80));
   return { eventId };
+}
+
+/**
+ * A morning's worth of made-up scans, so the live board and people pages
+ * have something to show: most people arrived at the gate a few hours ago,
+ * a few have left, some are at activities now, and any meal that has
+ * already started has been served.
+ */
+function demoScans(
+  db: D1Database,
+  eventId: string,
+  actorId: string,
+  registrationIds: string[],
+  activities: { id: string; trackSignOut: number; capacity: number | null }[],
+  meals: { id: string; startsAt: string }[],
+): D1PreparedStatement[] {
+  const nowMs = Date.now();
+  const ago = (minMinutes: number, maxMinutes: number) => new Date(nowMs - (minMinutes + randomInt(maxMinutes - minMinutes + 1)) * 60_000).toISOString();
+  const statements: D1PreparedStatement[] = [];
+  const scan = (contextType: string, contextId: string | null, registrationId: string, direction: 'in' | 'out', at: string) =>
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO scans (id, event_id, context_type, context_id, registration_id, direction, method, device_time, server_time, device_id, actor_user_id, outcome)
+           VALUES (?, ?, ?, ?, ?, ?, 'manual', ?, ?, 'demo-seed', ?, 'accepted')`,
+        )
+        .bind(crypto.randomUUID(), eventId, contextType, contextId, registrationId, direction, at, at, actorId),
+    );
+  const arrived = registrationIds.filter(() => randomInt(100) < 88);
+  const here: string[] = [];
+  for (const id of arrived) {
+    scan('site', null, id, 'in', ago(150, 300));
+    if (randomInt(100) < 7) scan('site', null, id, 'out', ago(10, 120));
+    else here.push(id);
+  }
+  // Earlier sessions that have finished, then who is at each activity now.
+  const tracked = activities.filter((a) => a.trackSignOut === 1);
+  const pool = [...here];
+  for (const a of tracked) {
+    for (let i = 0; i < 4 && pool.length; i++) {
+      const id = pool[randomInt(pool.length)]!;
+      scan('activity', a.id, id, 'in', ago(100, 140));
+      scan('activity', a.id, id, 'out', ago(65, 95));
+    }
+    const now = Math.min(pool.length, Math.max(2, Math.round((a.capacity ?? 8) * (0.5 + randomInt(50) / 100))));
+    for (let i = 0; i < now; i++) {
+      const id = pool.splice(randomInt(pool.length), 1)[0]!;
+      scan('activity', a.id, id, 'in', ago(5, 55));
+    }
+  }
+  for (const a of activities.filter((x) => x.trackSignOut === 0)) {
+    for (let i = 0; i < 10 && here.length; i++) scan('activity', a.id, here[randomInt(here.length)]!, 'in', ago(30, 200));
+  }
+  for (const m of meals.filter((x) => Date.parse(x.startsAt) <= nowMs)) {
+    const startedMinutes = Math.floor((nowMs - Date.parse(m.startsAt)) / 60_000);
+    for (const id of here) if (randomInt(100) < 85) scan('meal', m.id, id, 'in', ago(Math.max(0, startedMinutes - 40), Math.max(1, startedMinutes)));
+  }
+  return statements;
 }
 
 /** Delete a demo event and everything in it, including its demo accounts and invented people. */

@@ -224,6 +224,118 @@ adminRoutes.get('/audit', async (c) => {
   return c.json({ entries: results });
 });
 
+const logQuery = z.object({
+  kind: z.enum(['all', 'scans', 'changes']).default('all'),
+  eventId: z.uuid().optional(),
+  q: z.string().trim().max(80).optional(),
+  before: z.iso.datetime().optional(),
+});
+
+const LOG_PAGE = 100;
+
+/**
+ * Everything CampCount has recorded, newest first: every scan (who, where,
+ * by whom, and the result) and every change in the audit log (sign-ins,
+ * edits, deletions, exports). Filter by event, kind and free text.
+ */
+adminRoutes.get('/log', async (c) => {
+  requirePermission(c, 'platform.audit.read');
+  const q = logQuery.parse(c.req.query());
+  const like = q.q ? `%${q.q.replace(/[%_]/g, '')}%` : null;
+  const before = q.before ?? '9999';
+  const [scans, changes] = await Promise.all([
+    q.kind === 'changes'
+      ? null
+      : c.env.DB.prepare(
+          `SELECT s.id, s.device_time AS at, s.event_id, e.name AS event_name, s.context_type, s.direction, s.method, s.outcome,
+                  s.outcome_reason, s.correction_reason,
+                  COALESCE(p.first_name || ' ' || p.last_name, 'Unknown card') AS person, s.registration_id,
+                  COALESCE(a.name, m.name, CASE WHEN s.context_type = 'site' THEN 'Gate' END, 'Deleted') AS place,
+                  COALESCE(u.display_name, st.name, '') AS actor
+             FROM scans s
+             JOIN events e ON e.id = s.event_id
+             LEFT JOIN registrations r ON r.id = s.registration_id
+             LEFT JOIN people p ON p.id = r.person_id
+             LEFT JOIN activities a ON s.context_type = 'activity' AND a.id = s.context_id
+             LEFT JOIN meal_services m ON s.context_type = 'meal' AND m.id = s.context_id
+             LEFT JOIN users u ON u.id = s.actor_user_id
+             LEFT JOIN stations st ON st.id = s.actor_station_id
+            WHERE s.device_time < ?1 AND (?2 IS NULL OR s.event_id = ?2)
+              AND (?3 IS NULL OR p.first_name || ' ' || p.last_name LIKE ?3 OR p.preferred_name LIKE ?3 OR p.member_number LIKE ?3
+                   OR a.name LIKE ?3 OR m.name LIKE ?3 OR u.display_name LIKE ?3 OR st.name LIKE ?3)
+            ORDER BY s.device_time DESC LIMIT ${LOG_PAGE}`,
+        )
+          .bind(before, q.eventId ?? null, like)
+          .all<Record<string, string>>(),
+    q.kind === 'scans'
+      ? null
+      : c.env.DB.prepare(
+          `SELECT l.id, l.at, l.actor_type, l.action, l.event_id, e.name AS event_name, l.target_type, l.target_id, l.detail,
+                  COALESCE(au.display_name, ast.name, CASE l.actor_type WHEN 'system' THEN 'CampCount' WHEN 'public' THEN 'Someone signing up' END, '') AS actor,
+                  COALESCE(tu.display_name, tp.first_name || ' ' || tp.last_name, ta.name, tm.name, te.name, '') AS target
+             FROM audit_log l
+             LEFT JOIN events e ON e.id = l.event_id
+             LEFT JOIN users au ON l.actor_type = 'user' AND au.id = l.actor_id
+             LEFT JOIN stations ast ON l.actor_type = 'station' AND ast.id = l.actor_id
+             LEFT JOIN users tu ON l.target_type = 'user' AND tu.id = l.target_id
+             LEFT JOIN registrations tr ON l.target_type = 'registration' AND tr.id = l.target_id
+             LEFT JOIN people tp ON tp.id = tr.person_id
+             LEFT JOIN activities ta ON l.target_type = 'activity' AND ta.id = l.target_id
+             LEFT JOIN meal_services tm ON l.target_type = 'meal' AND tm.id = l.target_id
+             LEFT JOIN events te ON l.target_type = 'event' AND te.id = l.target_id
+            WHERE l.at < ?1 AND (?2 IS NULL OR l.event_id = ?2)
+              AND (?3 IS NULL OR l.action LIKE ?3 OR au.display_name LIKE ?3 OR tu.display_name LIKE ?3
+                   OR tp.first_name || ' ' || tp.last_name LIKE ?3 OR ta.name LIKE ?3 OR tm.name LIKE ?3 OR e.name LIKE ?3)
+            ORDER BY l.at DESC, l.id DESC LIMIT ${LOG_PAGE}`,
+        )
+          .bind(before, q.eventId ?? null, like)
+          .all<Record<string, string | number>>(),
+  ]);
+  const entries = [
+    ...(scans?.results ?? []).map((s) => ({
+      kind: 'scan' as const,
+      id: `scan:${s.id}`,
+      at: s.at!,
+      eventId: s.event_id,
+      eventName: s.event_name,
+      person: s.person,
+      registrationId: s.registration_id,
+      place: s.place,
+      contextType: s.context_type,
+      direction: s.direction,
+      method: s.method,
+      outcome: s.outcome,
+      note: s.correction_reason || s.outcome_reason,
+      actor: s.actor,
+    })),
+    ...(changes?.results ?? []).map((l) => {
+      let detail: Record<string, unknown> = {};
+      try {
+        detail = JSON.parse(String(l.detail));
+      } catch {
+        // Older rows may not be JSON.
+      }
+      return {
+        kind: 'change' as const,
+        id: `audit:${l.id}`,
+        at: String(l.at),
+        eventId: l.event_id as string | null,
+        eventName: l.event_name as string | null,
+        action: String(l.action),
+        actorType: String(l.actor_type),
+        actor: String(l.actor),
+        targetType: l.target_type as string | null,
+        target: String(l.target || (typeof detail.name === 'string' ? detail.name : '')),
+        detail,
+      };
+    }),
+  ]
+    .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
+    .slice(0, LOG_PAGE);
+  const full = (scans?.results.length ?? 0) === LOG_PAGE || (changes?.results.length ?? 0) === LOG_PAGE;
+  return c.json({ entries, nextBefore: full && entries.length ? entries[entries.length - 1]!.at : null });
+});
+
 // ---------------------------------------------------------------- demo mode
 
 const demoCreateSchema = z.strictObject({ participants: z.number().int().min(10).max(400).default(80) });

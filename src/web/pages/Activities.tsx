@@ -4,6 +4,7 @@ import { ApiFailure, api } from '../api';
 import { Field, Loading, Notice } from '../components/ui';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
+import { deleteContext } from '../confirmDelete';
 
 export interface Activity {
   id: string;
@@ -204,6 +205,18 @@ export function Activities() {
                           >
                             {a.status === 'active' ? 'Cancel' : 'Restore'}
                             <span className="visually-hidden"> {a.name}</span>
+                          </button>{' '}
+                          <button
+                            className="btn-link text-stop"
+                            onClick={async () => {
+                              try {
+                                if (await deleteContext(event.id, 'activities', a.id, a.name)) await reload();
+                              } catch (err) {
+                                window.alert(err instanceof ApiFailure ? err.message : 'Something went wrong.');
+                              }
+                            }}
+                          >
+                            Delete<span className="visually-hidden"> {a.name}</span>
                           </button>
                         </>
                       )}

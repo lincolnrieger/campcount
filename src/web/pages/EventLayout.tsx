@@ -43,7 +43,7 @@ function EventShell({ event, reload }: { event: EventSummary; reload: () => Prom
   const tabs: { to: string; label: string; show: boolean }[] = [
     { to: '', label: 'Overview', show: true },
     { to: 'live', label: 'Live', show: can('reports.view') && event.status !== 'draft' },
-    { to: 'roster', label: 'Roster', show: can('roster.view') },
+    { to: 'roster', label: 'People', show: can('roster.view') },
     { to: 'activities', label: 'Activities', show: event.features.activities && can('activities.manage') },
     { to: 'meals', label: 'Meals', show: event.features.meals && can('meals.manage') },
     { to: 'stations', label: 'Stations', show: can('stations.manage') },
@@ -70,7 +70,7 @@ function EventShell({ event, reload }: { event: EventSummary; reload: () => Prom
         {tabs
           .filter((t) => t.show)
           .map((t) => (
-            <NavLink key={t.to} to={t.to} end>
+            <NavLink key={t.to} to={t.to} end={t.to === ''}>
               {t.label}
             </NavLink>
           ))}

@@ -50,6 +50,15 @@ to recover the system. Keep a printed copy at camp HQ.
 
 ## During camp
 
+- **Live tab (where is everyone):** totals for on site, left camp and not
+  arrived, who is at each activity right now, and a searchable list of
+  everyone with where they are and where they were last scanned. Tap a
+  total or an activity to filter the list. It updates every 30 seconds.
+- **People tab:** search anyone (one letter is enough) and tap them to see
+  where they are now, every scan in order, their lanyard (Show lanyard,
+  then download or replace it) and their details. Event managers can edit
+  details and dietary needs there.
+
 - **Scan tab:** the Scan button in the bottom bar lists the gate, today's
   meals and the activities. Day buttons show other days. "Carry on scanning"
   reopens the last thing you scanned.
@@ -62,8 +71,9 @@ to recover the system. Keep a printed copy at camp HQ.
   lost.
 - **Card won't scan:** use "Type a code" (the code printed under the QR),
   or "Find by name". Manual entries are marked as such in reports.
-- **Lost card:** Roster tab, then Replace next to the person. The old card
-  stops working. Reprint from Lanyards.
+- **Lost card:** People tab, open the person, Show lanyard, then Replace
+  card. The old card stops working. Download the new one as a PDF or
+  reprint from Lanyards.
 - **Lost or stolen phone:**
   1. For a station, stop it on the Stations tab.
   2. For a volunteer's own phone, a platform admin disables or re-enables
@@ -125,6 +135,25 @@ activities, meals, lanyard cards and demo accounts for each role.
 - Deleting someone with scan or audit history wipes their name and email
   instead of removing the record, so past reports stay consistent. The last
   admin can't be deleted.
+
+## Withdrawing and deleting
+
+- **Withdraw** (on a person's page) keeps their records and stops their card.
+  **Cancel** on an activity or meal keeps its scans and hides it from
+  scanners. Use these during a real camp.
+- **Delete** removes the person, activity or meal *and every scan recorded
+  for it*. It is for mistakes and test data. The app says how many scans
+  will go before you confirm, and the audit log records the deletion and
+  the count. Stations set up for a deleted activity or meal are stopped.
+- On the People tab, **Delete people** shows a Delete button on every row.
+
+## Activity log (admins)
+
+Admin, then **Activity log**, lists every scan (who, where, by whom, the
+result) and every change (sign-ins, edits, role changes, deletions,
+downloads), newest first. Filter by event or to scans or changes only, and
+search by person, place, staff member or action. Tap a scanned person to
+open their page.
 
 ## Close-out
 
