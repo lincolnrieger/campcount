@@ -16,6 +16,8 @@ import { Import } from './pages/Import';
 import { Lanyards } from './pages/Lanyards';
 import { Roster } from './pages/Roster';
 import { Person } from './pages/Person';
+import { Register } from './pages/Register';
+import { AddPerson, Registration } from './pages/Registration';
 import { Activities } from './pages/Activities';
 import { Meals } from './pages/Meals';
 import { Pair } from './pages/Pair';
@@ -59,6 +61,7 @@ export function App() {
       <Route path="/sign-in/verify" element={<VerifyLink />} />
       <Route path="/set-password" element={<PasswordLink />} />
       <Route path="/pair" element={<Pair />} />
+      <Route path="/register/:code" element={<Register />} />
       <Route
         element={
           <RequireSignIn>
@@ -74,6 +77,8 @@ export function App() {
           <Route index element={<EventOverview />} />
           <Route path="staff" element={<Staff />} />
           <Route path="roster" element={<Roster />} />
+          <Route path="roster/registration" element={<Registration />} />
+          <Route path="roster/add" element={<AddPerson />} />
           <Route path="roster/:registrationId" element={<Person />} />
           <Route path="import" element={<Import />} />
           <Route path="lanyards" element={<Lanyards />} />

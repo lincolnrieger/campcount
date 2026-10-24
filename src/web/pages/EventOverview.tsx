@@ -3,6 +3,8 @@ import { ApiFailure, api } from '../api';
 import { Link } from 'react-router';
 import { Icon } from '../components/Icon';
 import { canScan } from '../scan/targets';
+import { useApi } from '../useApi';
+import type { RegistrationData } from './Registration';
 import { Exports } from './CloseOut';
 import { Notice } from '../components/ui';
 import type { EventFeatures, EventStatus } from '../../shared/schemas';
@@ -25,6 +27,7 @@ export function EventOverview() {
   const [busy, setBusy] = useState(false);
   const editable = can('event.configure') && (event.status === 'draft' || event.status === 'open');
   const dirty = JSON.stringify(features) !== JSON.stringify(event.features);
+  const registration = useApi<RegistrationData>(can('roster.edit') ? `/events/${event.id}/registration` : null);
 
   async function run(action: () => Promise<unknown>, success: string) {
     setBusy(true);
@@ -70,6 +73,25 @@ export function EventOverview() {
             <span>Gate, meals and activities</span>
           </span>
           <Icon name="chevron" />
+        </Link>
+      )}
+      {registration.data && (
+        <Link to="roster/registration" className="expected">
+          <span className="expected-main">
+            <strong>{registration.data.counts.registered}</strong>
+            <span>
+              expected attendees
+              {registration.data.settings.limit ? ` of ${registration.data.settings.limit}` : ''}
+            </span>
+          </span>
+          <span className="expected-side">
+            {registration.data.counts.waiting > 0 ? (
+              <span className="tag tag-warn">{registration.data.counts.waiting} waiting for approval</span>
+            ) : (
+              <span className="field-hint">{registration.data.settings.open ? 'Registration open' : 'Registration closed'}</span>
+            )}
+            <Icon name="chevron" />
+          </span>
         </Link>
       )}
       {!can('reports.view') && <Exports />}

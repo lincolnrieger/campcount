@@ -271,7 +271,7 @@ adminRoutes.get('/log', async (c) => {
       ? null
       : c.env.DB.prepare(
           `SELECT l.id, l.at, l.actor_type, l.action, l.event_id, e.name AS event_name, l.target_type, l.target_id, l.detail,
-                  COALESCE(au.display_name, ast.name, CASE l.actor_type WHEN 'system' THEN 'CampCount' WHEN 'public' THEN 'Someone signing up' END, '') AS actor,
+                  COALESCE(au.display_name, ast.name, CASE l.actor_type WHEN 'system' THEN 'CampCount' WHEN 'public' THEN 'Someone (not signed in)' END, '') AS actor,
                   COALESCE(tu.display_name, tp.first_name || ' ' || tp.last_name, ta.name, tm.name, te.name, '') AS target
              FROM audit_log l
              LEFT JOIN events e ON e.id = l.event_id
