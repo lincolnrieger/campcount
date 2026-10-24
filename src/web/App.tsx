@@ -18,6 +18,7 @@ import { Activities } from './pages/Activities';
 import { Meals } from './pages/Meals';
 import { Pair } from './pages/Pair';
 import { Scan } from './pages/Scan';
+import { ScanHub } from './pages/ScanHub';
 import { Stations } from './pages/Stations';
 import { Live } from './pages/Live';
 import { CloseOut } from './pages/CloseOut';
@@ -42,6 +43,12 @@ function Home() {
   return <Events />;
 }
 
+/** A fresh scanner per context, so switching never carries one meal's result into the next. */
+function ScanRoute() {
+  const location = useLocation();
+  return <Scan key={location.pathname} />;
+}
+
 export function App() {
   return (
     <Routes>
@@ -57,7 +64,8 @@ export function App() {
         }
       >
         <Route index element={<Home />} />
-        <Route path="events/:eventId/scan/:type/:contextId?" element={<Scan />} />
+        <Route path="scan" element={<ScanHub />} />
+        <Route path="events/:eventId/scan/:type/:contextId?" element={<ScanRoute />} />
         <Route path="events/new" element={<NewEvent />} />
         <Route path="events/:eventId" element={<EventLayout />}>
           <Route index element={<EventOverview />} />

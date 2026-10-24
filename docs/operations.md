@@ -17,7 +17,8 @@ to recover the system. Keep a printed copy at camp HQ.
      needs only; leave other medical information in MyScout.
    - Re-import whenever MyScout changes. Use "mark people not in this file as
      withdrawn" only with the complete, current export.
-4. **Add activities and meals.** Scanners can scan the gate and every
+4. **Add activities and meals.** Give each meal a day and time (Meals tab)
+   so scanners can pick it by day. Scanners can scan the gate and every
    activity; Meal team can scan every meal.
 5. **Print lanyards** (Roster tab, then Lanyards):
    - Choose lanyard size (90 × 120 mm, 4 per A4) or wallet size
@@ -48,6 +49,12 @@ to recover the system. Keep a printed copy at camp HQ.
   Settings, Safari, Camera, Allow.
 
 ## During camp
+
+- **Scan tab:** the Scan button in the bottom bar lists the gate, today's
+  meals and the activities. Day buttons show other days. "Carry on scanning"
+  reopens the last thing you scanned.
+- **Switching:** in the scanner, tap the title (or Switch) to change meal,
+  activity or day without leaving the scanner. The camera stays on.
 
 - **No signal:** keep scanning. Scans are saved on the phone and upload
   automatically when signal returns. The top of the scanner shows how many

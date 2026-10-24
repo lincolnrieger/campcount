@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useLocation, useParams } from 'react-router';
 import type { ContextType, Direction } from '../../shared/scanRules';
+import { Icon } from '../components/Icon';
 import { Notice } from '../components/ui';
+import { useSession } from '../session';
+import { rememberLastScan, useEventSummary } from '../scan/targets';
+import { ScanSwitcher } from './ScanHub';
 import { api } from '../api';
 import { matchesSearch, searchRank } from '../../shared/search';
 import { useSyncStatus } from '../offline/sync';
@@ -11,6 +15,9 @@ import type { Feedback, ScanInput, SnapshotPerson } from '../scan/useScanSession
 import { useScanSession } from '../scan/useScanSession';
 
 const SAME_CODE_COOLDOWN_MS = 3000;
+
+/** Set when switching what to scan, so the next scanner starts its camera straight away. */
+let resumeCamera = false;
 
 let audio: AudioContext | null = null;
 function signal(tone: Feedback['tone'], sound: boolean) {
@@ -96,6 +103,11 @@ function ResultPanel({ feedback, contextType }: { feedback: Feedback | null; con
 export function Scan() {
   const { eventId, type, contextId } = useParams() as { eventId: string; type: ContextType; contextId?: string };
   const session = useScanSession(eventId, type, contextId ?? null);
+  const { me } = useSession();
+  const location = useLocation();
+  const event = useEventSummary(me?.kind === 'user' ? eventId : null);
+  const [switching, setSwitching] = useState(false);
+  const currentKey = type === 'site' ? 'site' : `${type}:${contextId}`;
   const rules = session.snapshot?.context.rules;
   const twoWay = rules?.type === 'site' || (rules?.type === 'activity' && rules.trackSignOut);
   const [direction, setDirection] = useState<Direction>('in');
@@ -180,6 +192,19 @@ export function Scan() {
   }, [camera]);
 
   useEffect(() => stopCamera, [stopCamera]);
+  // Coming from the switcher with the camera on: keep scanning without another tap.
+  // startCamera only touches refs and state setters, so the first render's copy is fine.
+  const startRef = useRef(startCamera);
+  useEffect(() => {
+    if (resumeCamera) {
+      resumeCamera = false;
+      void startRef.current();
+    }
+  }, []);
+  const contextName = session.snapshot?.context.name;
+  useEffect(() => {
+    if (contextName && me?.kind === 'user') rememberLastScan({ eventId, to: location.pathname, label: contextName });
+  }, [contextName, eventId, location.pathname, me?.kind]);
   // Warm the fallback decoder while online so the service worker caches it for offline use.
   useEffect(() => {
     void import('jsqr');
@@ -208,12 +233,35 @@ export function Scan() {
   return (
     <div className="scan">
       <header className="scan-head">
-        <div>
-          <h1 className="scan-title">{ctx.name}</h1>
-          <p className="field-hint flush">{session.snapshot.event.name}</p>
-        </div>
+        {event ? (
+          <button type="button" className="scan-switch" onClick={() => setSwitching(true)} aria-haspopup="dialog">
+            <span className="scan-kicker">{session.snapshot.event.name}</span>
+            <span className="scan-title">
+              {ctx.name}
+              <span className="scan-switch-hint">
+                <Icon name="swap" size={16} /> Switch
+              </span>
+            </span>
+          </button>
+        ) : (
+          <div>
+            <p className="scan-kicker">{session.snapshot.event.name}</p>
+            <h1 className="scan-title">{ctx.name}</h1>
+          </div>
+        )}
         <SyncChip />
       </header>
+      {event && (
+        <ScanSwitcher
+          event={event}
+          currentKey={currentKey}
+          open={switching}
+          onClose={() => setSwitching(false)}
+          onSwitch={() => {
+            resumeCamera = camera === 'on';
+          }}
+        />
+      )}
       {session.fromCache && (
         <Notice tone="warn">
           <p>Using the list saved on this phone. Scans made on other phones will show up once you have signal.</p>
@@ -248,7 +296,8 @@ export function Scan() {
             ) : camera === 'unavailable' ? (
               <p>This browser can't use the camera. Type the code from the lanyard below.</p>
             ) : (
-              <button className="btn" onClick={() => void startCamera()} disabled={camera === 'starting'}>
+              <button className="btn btn-light" onClick={() => void startCamera()} disabled={camera === 'starting'}>
+                <Icon name="camera" />
                 {camera === 'starting' ? 'Starting camera…' : 'Start camera'}
               </button>
             )}
@@ -279,19 +328,23 @@ export function Scan() {
       </div>
 
       <div className="scan-tools">
-        <button type="button" className="btn btn-secondary" aria-expanded={panel === 'code'} onClick={() => setPanel(panel === 'code' ? 'none' : 'code')}>
-          Type a code
+        <button type="button" className="tool" aria-expanded={panel === 'code'} onClick={() => setPanel(panel === 'code' ? 'none' : 'code')}>
+          <Icon name="keyboard" size={22} />
+          Type code
         </button>
-        <button type="button" className="btn btn-secondary" aria-expanded={panel === 'name'} onClick={() => setPanel(panel === 'name' ? 'none' : 'name')}>
-          Find by name
+        <button type="button" className="tool" aria-expanded={panel === 'name'} onClick={() => setPanel(panel === 'name' ? 'none' : 'name')}>
+          <Icon name="search" size={22} />
+          Find name
         </button>
         {ctx.type === 'meal' && (
-          <button type="button" className="btn btn-secondary" aria-expanded={panel === 'eaten'} onClick={() => setPanel(panel === 'eaten' ? 'none' : 'eaten')}>
+          <button type="button" className="tool" aria-expanded={panel === 'eaten'} onClick={() => setPanel(panel === 'eaten' ? 'none' : 'eaten')}>
+            <Icon name="list" size={22} />
             Who's eaten
           </button>
         )}
         {camera === 'on' && (
-          <button type="button" className="btn btn-secondary" onClick={stopCamera}>
+          <button type="button" className="tool" onClick={stopCamera}>
+            <Icon name="camera" size={22} />
             Stop camera
           </button>
         )}
