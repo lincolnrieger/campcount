@@ -173,3 +173,66 @@ staffRoutes.delete('/:assignmentId', async (c) => {
   ]);
   return c.json({ ok: true });
 });
+
+const changeRoleSchema = z.strictObject({
+  roleKey: z.string().regex(/^[a-z_]{2,40}$/),
+  activityId: z.uuid().nullable().optional(),
+});
+
+/** Change someone's role in one step: the old assignment is ended and a new one starts, both audited. */
+staffRoutes.patch('/:assignmentId', async (c) => {
+  const eventId = c.req.param('eventId')!;
+  const assignmentId = z.uuid().safeParse(c.req.param('assignmentId'));
+  requirePermission(c, 'staff.manage', { eventId });
+  const principal = requireUser(c);
+  if (!assignmentId.success) throw notFound();
+  const input = await parseBody(c, changeRoleSchema);
+
+  const current = await c.env.DB.prepare(
+    `SELECT a.user_id, r.key AS role_key FROM assignments a JOIN roles r ON r.id = a.role_id
+      WHERE a.id = ? AND a.event_id = ? AND a.revoked_at IS NULL`,
+  )
+    .bind(assignmentId.data, eventId)
+    .first<{ user_id: string; role_key: string }>();
+  if (!current) throw notFound();
+  if (current.user_id === principal.userId) throw conflict('You cannot change your own role. Ask another director or an administrator.');
+
+  const [oldRole, newRole] = await Promise.all([loadRole(c.env.DB, current.role_key), loadRole(c.env.DB, input.roleKey)]);
+  if (!newRole || newRole.scope === 'platform') throw badRequest('Choose an event role.');
+  assertCanDelegate(principal, eventId, oldRole!.perms);
+  assertCanDelegate(principal, eventId, newRole.perms);
+  let activityId: string | null = null;
+  if (input.activityId) {
+    if (newRole.scope !== 'activity') throw badRequest('Only activity roles can be limited to one activity.');
+    const activity = await c.env.DB.prepare(`SELECT 1 FROM activities WHERE id = ? AND event_id = ?`).bind(input.activityId, eventId).first();
+    if (!activity) throw badRequest('That activity is not part of this event.');
+    activityId = input.activityId;
+  }
+
+  const now = nowIso();
+  const newId = crypto.randomUUID();
+  try {
+    await c.env.DB.batch([
+      c.env.DB.prepare(`UPDATE assignments SET revoked_at = ?, revoked_by = ? WHERE id = ? AND revoked_at IS NULL`).bind(
+        now,
+        principal.userId,
+        assignmentId.data,
+      ),
+      c.env.DB.prepare(
+        `INSERT INTO assignments (id, user_id, role_id, event_id, activity_id, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(newId, current.user_id, newRole.id, eventId, activityId, principal.userId, now),
+      auditStatement(c.env.DB, {
+        actor: { type: 'user', id: principal.userId },
+        action: 'assignment.change',
+        eventId,
+        targetType: 'assignment',
+        targetId: newId,
+        detail: { userId: current.user_id, from: current.role_key, to: newRole.key, activityId },
+      }),
+    ]);
+  } catch (err) {
+    if (String(err).includes('UNIQUE')) throw conflict('That person already has this role.');
+    throw err;
+  }
+  return c.json({ assignmentId: newId });
+});

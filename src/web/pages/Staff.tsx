@@ -57,6 +57,29 @@ export function Staff() {
     }
   }
 
+  const roleOptions = (roles.data?.roles ?? []).flatMap((r) =>
+    r.scope === 'activity'
+      ? [
+          { value: `${r.key}|`, label: `${r.name}: all activities` },
+          ...(activities.data?.activities ?? []).map((a) => ({ value: `${r.key}|${a.id}`, label: `${r.name}: ${a.name}` })),
+        ]
+      : [{ value: `${r.key}|`, label: r.name }],
+  );
+
+  async function changeRole(row: StaffRow, value: string) {
+    const [roleKey, activityId] = value.split('|');
+    try {
+      await api(`/events/${event.id}/staff/${row.assignmentId}`, {
+        method: 'PATCH',
+        body: { roleKey, activityId: activityId || null },
+      });
+      setMessage({ tone: 'ok', text: `${row.user.displayName} is now ${roleOptions.find((o) => o.value === value)?.label ?? roleKey}.` });
+    } catch (err) {
+      setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
+    }
+    await staff.reload();
+  }
+
   async function remove(row: StaffRow) {
     if (!window.confirm(`Remove ${row.user.displayName} as ${row.role.name}? They lose access straight away.`)) return;
     try {
@@ -102,8 +125,21 @@ export function Staff() {
                     <div className="field-hint">{row.user.email}</div>
                   </td>
                   <td data-label="Role">
-                    {row.role.name}
-                    {row.activity && <div className="field-hint">{row.activity.name}</div>}
+                    <label className="visually-hidden" htmlFor={`role-${row.assignmentId}`}>
+                      Role for {row.user.displayName}
+                    </label>
+                    <select
+                      id={`role-${row.assignmentId}`}
+                      className="input input-compact"
+                      value={`${row.role.key}|${row.activity?.id ?? ''}`}
+                      onChange={(e) => void changeRole(row, e.target.value)}
+                    >
+                      {roleOptions.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
                   </td>
                   <td className="num">
                     <button className="btn-link" onClick={() => void remove(row)}>

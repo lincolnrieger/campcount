@@ -16,8 +16,12 @@ to recover the system. Keep a printed copy at camp HQ.
      withdrawn" only with the complete, current export.
 4. **Add activities and meals.** Assign activity leaders to their activity
    so they only see that one.
-5. **Print lanyards** (Roster tab, then Lanyards). Print on A4 at 100%
-   scale, four per sheet. Keep spare and unused cards secure: a card is
+5. **Print lanyards** (Roster tab, then Lanyards):
+   - Choose lanyard size (90 × 120 mm, 4 per A4) or wallet size
+     (86 × 54 mm, 10 per A4).
+   - Filter by group, or untick cards you don't need.
+   - Download the PDF. It opens on phones and computers.
+   - Print at 100% (actual size). Keep spare and unused cards secure: a card is
    enough to be scanned as that person.
 6. **Print paper roll sheets** (Roster tab, then Paper roll sheet) for each
    meal and the gate. They are the fallback if phones fail. Store them
@@ -74,11 +78,14 @@ Platform admins can open Admin, then Demo mode, to create a practice camp
 of made-up people (membership numbers start with `DEMO`). It comes with
 activities, meals, lanyard cards and demo accounts for each role.
 
-- "Try it as" switches you into one of those accounts so you can see
-  exactly what a leader or volunteer sees. This is recorded in the audit
-  log.
-- Sign out and sign back in with your password to return to your own
-  account.
+- **View as** (the eye button at the top of every page) shows any event,
+  demo or real, exactly as a chosen role sees it: Director, Manager, Activity
+  leader for a particular activity, Meal leader, or Gate volunteer.
+- A yellow bar shows what you're viewing as. **Switch** changes role and
+  **Back to me** returns to your own access, with no need to sign in
+  again.
+- Your admin powers are switched off while viewing as a role. Every start
+  and stop is recorded in the audit log.
 - Delete the demo camp when you're done.
 - Demo accounts use the reserved `.invalid` email domain and can't receive
   email.

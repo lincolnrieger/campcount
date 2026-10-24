@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
-import { Link, Outlet, useLocation } from 'react-router';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router';
+import { Icon } from './Icon';
+import { ViewAsSheet, stopPreview } from './ViewAs';
 import { useSession } from '../session';
 
 /**
@@ -37,10 +39,16 @@ function initials(name: string): string {
 }
 
 export function Layout() {
-  const { me, signOut } = useSession();
+  const { me, signOut, refresh } = useSession();
   const location = useLocation();
+  const navigate = useNavigate();
   const [title, setTitle] = useState<string | null>(null);
+  const [viewAs, setViewAs] = useState(false);
+  const preview = me?.kind === 'user' ? me.preview : null;
+  const canViewAs = me?.kind === 'user' && (me.platformPermissions.includes('platform.users.manage') || preview !== null);
   const isAdmin = me?.kind === 'user' && me.platformPermissions.includes('platform.users.manage');
+  const atHome = location.pathname === '/';
+  const eventMatch = /^\/events\/([0-9a-f-]{36})/.exec(location.pathname);
 
   // New page: start at the top, like a native navigation push.
   useEffect(() => {
@@ -50,19 +58,25 @@ export function Layout() {
   return (
     <TitleContext.Provider value={setTitle}>
       <div className="shell">
-        <header className="topbar">
-          <Link to="/" className="brand" aria-label="CampCount home">
-            <img src="/favicon.svg" alt="" width="26" height="26" />
-            <span className={title ? 'brand-word is-hidden' : 'brand-word'}>CampCount</span>
+        <header className={title ? 'topbar has-title' : 'topbar'}>
+          <Link to="/" className={atHome ? 'home-button is-current' : 'home-button'} aria-current={atHome ? 'page' : undefined}>
+            <Icon name="home" size={22} />
+            <span className="home-label">Home</span>
           </Link>
           <p className={title ? 'topbar-title is-shown' : 'topbar-title'} aria-hidden={!title}>
             {title}
           </p>
           <nav className="topbar-nav" aria-label="Account">
             {isAdmin && (
-              <Link to="/admin" className="hide-narrow">
+              <Link to="/admin" className="topbar-link hide-narrow">
                 Admin
               </Link>
+            )}
+            {canViewAs && (
+              <button type="button" className="viewas-button" onClick={() => setViewAs(true)}>
+                <Icon name="eye" size={18} />
+                <span>View as</span>
+              </button>
             )}
             {me?.kind === 'user' && (
               <Link to="/account" className="avatar" aria-label={`Your account: ${me.user.displayName}`}>
@@ -76,6 +90,29 @@ export function Layout() {
             )}
           </nav>
         </header>
+        {preview && (
+          <div className="preview-banner" role="note">
+            <p>
+              Viewing <strong>{preview.eventName}</strong> as <strong>{preview.roleName}</strong>
+              {preview.activityName && ` (${preview.activityName})`}
+            </p>
+            <div className="preview-actions">
+              <button type="button" onClick={() => setViewAs(true)}>
+                <Icon name="swap" size={16} /> Switch
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  await stopPreview();
+                  await refresh();
+                  navigate('/');
+                }}
+              >
+                Back to me
+              </button>
+            </div>
+          </div>
+        )}
         {me?.kind === 'user' && me.user.isDemo && (
           <div className="demo-banner" role="note">
             Demo account: {me.user.displayName}.{' '}
@@ -88,6 +125,7 @@ export function Layout() {
         <main className="page" id="main">
           <Outlet />
         </main>
+        {canViewAs && <ViewAsSheet open={viewAs} onClose={() => setViewAs(false)} initialEventId={eventMatch?.[1]} />}
       </div>
     </TitleContext.Provider>
   );

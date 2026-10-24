@@ -21,32 +21,8 @@ describe('demo mode', () => {
     expect(emails.results.every((u) => u.email.endsWith('@demo.invalid'))).toBe(true);
   });
 
-  it('lets an admin switch into a demo account, and the switch is audited', async () => {
+  it('is not available to non-admins', async () => {
     const admin = await createUser({ platformAdmin: true });
-    const { eventId } = await json(await api('/admin/demo', { cookie: admin.cookie, body: { participants: 10 } }));
-    const demo = await json(await api('/admin/demo', { cookie: admin.cookie }));
-    const leader = demo.events.find((e: any) => e.id === eventId).accounts.find((a: any) => a.role === 'Activity Leader');
-
-    const res = await api(`/admin/demo/users/${leader.id}/switch`, { cookie: admin.cookie, method: 'POST' });
-    expect(res.status).toBe(200);
-    const cookie = res.headers.get('Set-Cookie')!.split(';')[0]!;
-    const me = await json(await api('/me', { cookie }));
-    expect(me.user).toMatchObject({ displayName: 'Demo Activity leader', isDemo: true });
-    // The admin's own session was ended.
-    expect((await api('/me', { cookie: admin.cookie })).status).toBe(401);
-    // The demo leader sees only their activity and no roster.
-    expect((await api(`/events/${eventId}/registrations`, { cookie })).status).toBe(403);
-
-    const audit = await testEnv.DB.prepare(`SELECT actor_id FROM audit_log WHERE action = 'demo.switch_user' AND target_id = ?`)
-      .bind(leader.id)
-      .first<{ actor_id: string }>();
-    expect(audit!.actor_id).toBe(admin.id);
-  });
-
-  it('never switches into real accounts, and non-admins cannot use demo mode', async () => {
-    const admin = await createUser({ platformAdmin: true });
-    const real = await createUser();
-    expect((await api(`/admin/demo/users/${real.id}/switch`, { cookie: admin.cookie, method: 'POST' })).status).toBe(404);
     const director = await createUser();
     await grant(director.id, 'camp_director', await createEvent(admin.id));
     expect((await api('/admin/demo', { cookie: director.cookie, body: { participants: 10 } })).status).toBe(403);

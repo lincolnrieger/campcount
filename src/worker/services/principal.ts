@@ -17,6 +17,21 @@ export interface UserPrincipal {
   hasPassword: boolean;
   isDemo: boolean;
   grants: AssignmentGrant[];
+  /**
+   * Set while a platform admin is viewing an event as another role. The
+   * grants then hold only that role: the admin sees exactly what that role
+   * sees, no more.
+   */
+  preview?: RolePreview;
+}
+
+export interface RolePreview {
+  eventId: string;
+  eventName: string;
+  roleKey: string;
+  roleName: string;
+  activityId: string | null;
+  activityName: string | null;
 }
 
 export interface StationPrincipal {
