@@ -27,6 +27,7 @@ meRoutes.get('/', (c) => {
       hasPassword: principal.hasPassword,
       isDemo: principal.isDemo,
     },
+    preview: principal.preview ?? null,
     platformPermissions: platformPermissions(principal),
   });
 });

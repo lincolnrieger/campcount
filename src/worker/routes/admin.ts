@@ -1,15 +1,17 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createUserSchema } from '../../shared/schemas';
-import type { AppEnv } from '../context';
+import type { AppContext, AppEnv } from '../context';
 import { parseBody, requirePermission, requireUser } from '../context';
-import { conflict, notFound } from '../lib/errors';
+import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { nowIso } from '../lib/time';
 import { getCookie } from 'hono/cookie';
-import { audit, auditStatement } from '../services/audit';
+import { auditStatement } from '../services/audit';
 import { createDemoEvent, deleteDemoEvent } from '../services/demo';
-import { SESSION_COOKIE, revokeSession } from '../services/sessions';
-import { startSession } from './auth';
+import { SESSION_COOKIE } from '../services/sessions';
+import { sha256Hex } from '../lib/crypto';
+import { can } from '../services/principal';
+import type { UserPrincipal } from '../services/principal';
 
 export const adminRoutes = new Hono<AppEnv>();
 
@@ -158,21 +160,94 @@ adminRoutes.delete('/demo/:eventId', async (c) => {
   return c.json({ ok: true });
 });
 
+// ---------------------------------------------------------------- view as (role preview)
+
+/** A platform admin, or an admin currently previewing a role (who must be able to switch or stop). */
+function requireRealAdmin(c: AppContext): UserPrincipal {
+  const user = requireUser(c);
+  if (!user.preview && !can(user, 'platform.users.manage')) throw forbidden();
+  return user;
+}
+
+adminRoutes.get('/preview/options', async (c) => {
+  requireRealAdmin(c);
+  const { results: events } = await c.env.DB.prepare(
+    `SELECT id, name, is_demo, status FROM events WHERE status <> 'archived' ORDER BY is_demo DESC, starts_on DESC`,
+  ).all<{ id: string; name: string; is_demo: number; status: string }>();
+  const { results: activities } = await c.env.DB.prepare(
+    `SELECT a.id, a.name, a.event_id FROM activities a JOIN events e ON e.id = a.event_id
+      WHERE e.status <> 'archived' AND a.status = 'active' ORDER BY a.name COLLATE NOCASE`,
+  ).all<{ id: string; name: string; event_id: string }>();
+  const { results: roles } = await c.env.DB.prepare(
+    `SELECT key, name, description, scope FROM roles WHERE scope <> 'platform' ORDER BY CASE key
+       WHEN 'camp_director' THEN 1 WHEN 'event_manager' THEN 2 WHEN 'activity_leader' THEN 3
+       WHEN 'meal_leader' THEN 4 WHEN 'gate_volunteer' THEN 5 ELSE 9 END, name`,
+  ).all();
+  return c.json({
+    events: events.map((e) => ({
+      id: e.id,
+      name: e.name,
+      isDemo: e.is_demo === 1,
+      status: e.status,
+      activities: activities.filter((a) => a.event_id === e.id).map((a) => ({ id: a.id, name: a.name })),
+    })),
+    roles,
+  });
+});
+
+const previewSchema = z.strictObject({
+  eventId: z.uuid(),
+  roleKey: z.string().regex(/^[a-z_]{2,40}$/),
+  activityId: z.uuid().nullable().optional(),
+});
+
 /**
- * Sign in as a demo account to see CampCount as that role. Only accounts
- * marked as demo can be used this way; it is recorded in the audit log.
- * To get back, sign out and sign in as yourself.
+ * See an event exactly as a role sees it. Applies to this session only, is
+ * recorded in the audit log, and ends with "Back to me" or sign-out.
  */
-adminRoutes.post('/demo/users/:userId/switch', async (c) => {
-  requirePermission(c, 'platform.users.manage');
-  const actor = requireUser(c);
-  const target = await c.env.DB.prepare(`SELECT id FROM users WHERE id = ? AND is_demo = 1 AND status = 'active'`)
-    .bind(c.req.param('userId'))
-    .first<{ id: string }>();
-  if (!target) throw notFound();
-  const token = getCookie(c, SESSION_COOKIE);
-  if (token) await revokeSession(c.env, token);
-  await audit(c.env.DB, { actor: { type: 'user', id: actor.userId }, action: 'demo.switch_user', targetType: 'user', targetId: target.id });
-  await startSession(c, target.id, 'demo_switch');
+adminRoutes.post('/preview', async (c) => {
+  const user = requireRealAdmin(c);
+  const input = await parseBody(c, previewSchema);
+  const role = await c.env.DB.prepare(`SELECT id, scope FROM roles WHERE key = ?`)
+    .bind(input.roleKey)
+    .first<{ id: string; scope: string }>();
+  if (!role || role.scope === 'platform') throw badRequest('Choose an event role.');
+  const event = await c.env.DB.prepare(`SELECT id FROM events WHERE id = ? AND status <> 'archived'`).bind(input.eventId).first();
+  if (!event) throw notFound();
+  let activityId: string | null = null;
+  if (role.scope === 'activity' && input.activityId) {
+    const activity = await c.env.DB.prepare(`SELECT id FROM activities WHERE id = ? AND event_id = ?`)
+      .bind(input.activityId, input.eventId)
+      .first<{ id: string }>();
+    if (!activity) throw badRequest('That activity is not part of this event.');
+    activityId = activity.id;
+  }
+  const token = getCookie(c, SESSION_COOKIE)!;
+  await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE sessions SET preview_event_id = ?, preview_role_id = ?, preview_activity_id = ? WHERE id_hash = ?`).bind(
+      input.eventId,
+      role.id,
+      activityId,
+      await sha256Hex(token),
+    ),
+    auditStatement(c.env.DB, {
+      actor: { type: 'user', id: user.userId },
+      action: 'preview.start',
+      eventId: input.eventId,
+      detail: { role: input.roleKey, activityId },
+    }),
+  ]);
+  return c.json({ ok: true });
+});
+
+adminRoutes.delete('/preview', async (c) => {
+  const user = requireRealAdmin(c);
+  const token = getCookie(c, SESSION_COOKIE)!;
+  await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE sessions SET preview_event_id = NULL, preview_role_id = NULL, preview_activity_id = NULL WHERE id_hash = ?`).bind(
+      await sha256Hex(token),
+    ),
+    auditStatement(c.env.DB, { actor: { type: 'user', id: user.userId }, action: 'preview.stop', eventId: user.preview?.eventId ?? null }),
+  ]);
   return c.json({ ok: true });
 });
