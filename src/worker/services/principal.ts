@@ -52,7 +52,7 @@ export interface Scope {
 const PLATFORM = new Set<string>(PLATFORM_PERMISSIONS);
 /** Permissions a platform overseer holds on every event (no participant data). */
 const OVERSIGHT = new Set<Permission>(['event.view', 'staff.manage']);
-const ACTIVITY_LEVEL = new Set<Permission>(['activity.scan', 'activity.view_roster']);
+const ACTIVITY_LEVEL = new Set<Permission>(['activity.scan', 'activity.view_roster', 'activity.bookings']);
 
 function stationPermissions(p: StationPrincipal): Set<Permission> {
   switch (p.contextType) {
@@ -107,7 +107,7 @@ export function can(principal: Principal, permission: Permission, scope: Scope =
  */
 export function activityAccess(
   principal: Principal,
-  permission: 'activity.scan' | 'activity.view_roster',
+  permission: 'activity.scan' | 'activity.view_roster' | 'activity.bookings',
   eventId: string,
 ): 'all' | Set<string> {
   if (principal.kind === 'station') {

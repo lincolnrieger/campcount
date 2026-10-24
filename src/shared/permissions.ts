@@ -36,7 +36,7 @@ export const EVENT_PERMISSIONS = [
 ] as const;
 
 /** Activity permissions can be granted for a whole event or for one activity. */
-export const ACTIVITY_PERMISSIONS = ['activity.scan', 'activity.view_roster'] as const;
+export const ACTIVITY_PERMISSIONS = ['activity.scan', 'activity.view_roster', 'activity.bookings'] as const;
 
 export type PlatformPermission = (typeof PLATFORM_PERMISSIONS)[number];
 export type EventPermission = (typeof EVENT_PERMISSIONS)[number];

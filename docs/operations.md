@@ -7,8 +7,9 @@ to recover the system. Keep a printed copy at camp HQ.
 
 1. **Create the event** (platform admin) and add an Event manager on the
    Staff tab. Event managers add everyone else as **Scanner** (site and
-   activity scanning), **Meal team** (meal scanning and "Who's eaten") or
-   another **Event manager**. People can sign themselves up at `/sign-up`
+   activity scanning), **Activity leader** (runs one activity, or all of
+   them: its roster, bookings, and checking people in and out), **Meal
+   team** (meal scanning and "Who's eaten") or another **Event manager**. People can sign themselves up at `/sign-up`
    first, or are created automatically when added by email.
 2. **Turn on only the features you need** (Overview tab).
 3. **Fill the People list** (expected attendees): import the MyScout
@@ -81,6 +82,12 @@ Event Overview, then **QR codes and posters**:
    page.
 
 ## During camp
+
+- **Activity leaders:** Activities tab, then their activity. They see who's
+  booked, who's here (and since when) and who's left; tap **Check in** or
+  **Check out**, or **Open scanner** to scan lanyards (works offline).
+  **Add someone** finds anyone on camp to check in as a walk-in or book.
+  Event managers get the same page from **Roster** on each activity.
 
 - **Live tab (where is everyone):** totals for on site, left camp and not
   arrived, then everyone grouped **by where they are** (each activity with

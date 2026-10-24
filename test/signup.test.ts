@@ -142,3 +142,41 @@ describe('stations', () => {
     expect(paired.status).toBe(200);
   });
 });
+
+describe('activity leaders', () => {
+  it('see and run only their own activity: roster, check-in and bookings', async () => {
+    const c = await camp();
+    await api(`/events/${c.eventId}/transition`, { cookie: c.manager.cookie, body: { to: 'open' } });
+    const leader = await createUser({ name: 'Kim Kayak' });
+    await grant(leader.id, 'activity_leader', c.eventId, c.kayak9);
+
+    const mine = (await json(await api(`/events/${c.eventId}/activities`, { cookie: leader.cookie }))).activities;
+    expect(mine.map((a: { id: string }) => a.id)).toEqual([c.kayak9]);
+
+    // Book one person, check another in as a walk-in.
+    expect((await api(`/events/${c.eventId}/activities/${c.kayak9}/bookings`, { cookie: leader.cookie, body: { registrationId: c.card('100').registrationId } })).status).toBe(200);
+    const scan = await json(
+      await api(`/events/${c.eventId}/scans`, {
+        cookie: leader.cookie,
+        body: {
+          deviceId: 'web-roster-test1',
+          scans: [{ id: crypto.randomUUID(), contextType: 'activity', contextId: c.kayak9, direction: 'in', deviceTime: new Date().toISOString(), method: 'manual', registrationId: c.card('200').registrationId }],
+        },
+      }),
+    );
+    expect(scan.results[0].outcome).toBe('accepted');
+
+    const roster = await json(await api(`/events/${c.eventId}/activities/${c.kayak9}/attendance`, { cookie: leader.cookie }));
+    expect(roster).toMatchObject({ canBook: true, canCheckIn: true });
+    const by = (m: string) => roster.people.find((p: { id: string }) => p.id === c.card(m).registrationId);
+    expect(by('100')).toMatchObject({ name: 'First100 Person', booked: true, visits: 0 });
+    expect(by('200')).toMatchObject({ booked: false, visits: 1 });
+    expect(roster.everyone).toHaveLength(3);
+
+    // Nothing for other activities, people pages or reports.
+    expect((await api(`/events/${c.eventId}/activities/${c.archery10}/attendance`, { cookie: leader.cookie })).status).toBe(403);
+    expect((await api(`/events/${c.eventId}/activities/${c.archery10}/bookings`, { cookie: leader.cookie, body: { registrationId: c.card('100').registrationId } })).status).toBe(403);
+    expect((await api(`/events/${c.eventId}/registrations`, { cookie: leader.cookie })).status).toBe(403);
+    expect((await api(`/events/${c.eventId}/whereabouts`, { cookie: leader.cookie })).status).toBe(403);
+  });
+});

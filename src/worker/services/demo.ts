@@ -47,6 +47,7 @@ const pick = <T>(list: readonly T[]): T => list[randomInt(list.length)]!;
 export const DEMO_ROLES = [
   { key: 'event_manager', label: 'Event manager' },
   { key: 'scanner', label: 'Scanner' },
+  { key: 'activity_leader', label: 'Activity leader' },
   { key: 'meal_leader', label: 'Meal team' },
 ] as const;
 
@@ -188,7 +189,8 @@ export async function createDemoEvent(env: Env, adminUserId: string, participant
         .bind(userId, `demo-${role.key.replace(/_/g, '-')}-${tag.toLowerCase()}@demo.invalid`, `Demo ${role.label}`, now, now),
       db
         .prepare(`INSERT INTO assignments (id, user_id, role_id, event_id, activity_id, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-        .bind(crypto.randomUUID(), userId, `role_${role.key}`, eventId, null, adminUserId, now),
+        // The demo activity leader runs Kayaking.
+        .bind(crypto.randomUUID(), userId, `role_${role.key}`, eventId, role.key === 'activity_leader' ? activities.find((a) => a.name === 'Kayaking')!.id : null, adminUserId, now),
     );
   }
   // The admin manages their own demo camp, so they can try every screen.

@@ -4,20 +4,21 @@ import type { RoleScope } from '../src/shared/permissions';
 import { testEnv } from './helpers';
 
 /**
- * The approved permission matrix (docs/permission-matrix.md). Changing a
+ * The approved permission matrix (the roles table in docs/requirements.md). Changing a
  * system role's permissions must change this table too, so every change to
  * who-can-do-what is deliberate and reviewed.
  */
 const MATRIX: Record<string, string[]> = {
   platform_admin: ['platform.audit.read', 'platform.events.create', 'platform.events.oversee', 'platform.users.manage'],
   event_manager: [
-    'activities.manage', 'activity.scan', 'activity.view_roster', 'attendance.correct', 'credentials.manage',
+    'activities.manage', 'activity.bookings', 'activity.scan', 'activity.view_roster', 'attendance.correct', 'credentials.manage',
     'dietary.edit', 'dietary.view_alert', 'dietary.view_detail', 'event.close', 'event.configure', 'event.view',
     'meal.scan', 'meals.manage', 'photo.view_status', 'reports.export', 'reports.export_sensitive', 'reports.view',
     'roster.edit', 'roster.import', 'roster.view', 'site.scan', 'staff.manage', 'stations.manage',
   ],
   scanner: ['activity.scan', 'activity.view_roster', 'event.view', 'photo.view_status', 'site.scan'],
   meal_leader: ['dietary.view_alert', 'event.view', 'meal.scan'],
+  activity_leader: ['activity.bookings', 'activity.scan', 'activity.view_roster', 'event.view', 'photo.view_status'],
 };
 
 describe('system roles', () => {
