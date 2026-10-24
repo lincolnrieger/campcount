@@ -13,18 +13,19 @@ import { SESSION_COOKIE } from '../services/sessions';
 import { sha256Hex } from '../lib/crypto';
 import { can } from '../services/principal';
 import type { UserPrincipal } from '../services/principal';
+import { createPasswordLink, emailPasswordLink } from '../services/passwordLinks';
 
 export const adminRoutes = new Hono<AppEnv>();
 
 adminRoutes.get('/users', async (c) => {
   requirePermission(c, 'platform.users.manage');
   const { results } = await c.env.DB.prepare(
-    `SELECT u.id, u.email, u.display_name, u.status, u.created_at, u.email_verified_at, u.is_demo,
+    `SELECT u.id, u.email, u.display_name, u.status, u.created_at, u.email_verified_at, u.is_demo, u.password_hash IS NOT NULL AS has_password,
             EXISTS (SELECT 1 FROM assignments a WHERE a.user_id = u.id AND a.role_id = 'role_platform_admin' AND a.revoked_at IS NULL) AS is_admin,
             (SELECT count(DISTINCT a.event_id) FROM assignments a WHERE a.user_id = u.id AND a.revoked_at IS NULL AND a.event_id IS NOT NULL) AS events,
             (SELECT max(s.last_seen_at) FROM sessions s WHERE s.user_id = u.id) AS last_seen
        FROM users u WHERE u.email NOT LIKE '%@deleted.invalid' ORDER BY u.display_name COLLATE NOCASE`,
-  ).all<{ id: string; email: string; display_name: string; status: string; created_at: string; email_verified_at: string | null; is_demo: number; is_admin: number; events: number; last_seen: string | null }>();
+  ).all<{ id: string; email: string; display_name: string; status: string; created_at: string; email_verified_at: string | null; is_demo: number; has_password: number; is_admin: number; events: number; last_seen: string | null }>();
   return c.json({
     users: results.map((u) => ({
       id: u.id,
@@ -35,6 +36,7 @@ adminRoutes.get('/users', async (c) => {
       createdAt: u.created_at,
       verified: u.email_verified_at !== null,
       isDemo: u.is_demo === 1,
+      hasPassword: u.has_password === 1,
       events: u.events,
       lastSeen: u.last_seen,
     })),
@@ -71,7 +73,37 @@ adminRoutes.post('/users', async (c) => {
     );
   }
   await c.env.DB.batch(statements);
-  return c.json({ id }, 201);
+  // New accounts start without a password: they set one from this link.
+  const actorRow = await c.env.DB.prepare(`SELECT display_name FROM users WHERE id = ?`).bind(actor.userId).first<{ display_name: string }>();
+  const link = await createPasswordLink(c.env, new URL(c.req.url).origin, id, 'setup', { type: 'user', id: actor.userId });
+  const emailed = input.sendEmail
+    ? await emailPasswordLink(c.env, { email: input.email, name: input.displayName }, link, 'setup', { inviter: actorRow?.display_name ?? 'An administrator' })
+    : false;
+  return c.json({ id, link: link.url, expiresAt: link.expiresAt, emailed }, 201);
+});
+
+const passwordLinkRequestSchema = z.strictObject({ sendEmail: z.boolean().default(false) });
+
+/**
+ * A one-time link for someone to set a new password: for people who have
+ * forgotten theirs, or never set one. The admin can copy it to pass on, or
+ * have it emailed. Making a new link retires any earlier one.
+ */
+adminRoutes.post('/users/:userId/password-link', async (c) => {
+  requirePermission(c, 'platform.users.manage');
+  const actor = requireUser(c);
+  const userId = z.uuid().safeParse(c.req.param('userId'));
+  if (!userId.success) throw notFound();
+  const { sendEmail } = await parseBody(c, passwordLinkRequestSchema);
+  const user = await c.env.DB.prepare(`SELECT email, display_name, status, password_hash IS NOT NULL AS has_password FROM users WHERE id = ?`)
+    .bind(userId.data)
+    .first<{ email: string; display_name: string; status: string; has_password: number }>();
+  if (!user || user.email.endsWith('@deleted.invalid')) throw notFound();
+  if (user.status !== 'active') throw conflict('Enable this account first.');
+  const purpose = user.has_password ? 'reset' : 'setup';
+  const link = await createPasswordLink(c.env, new URL(c.req.url).origin, userId.data, purpose, { type: 'user', id: actor.userId });
+  const emailed = sendEmail ? await emailPasswordLink(c.env, { email: user.email, name: user.display_name }, link, purpose) : false;
+  return c.json({ link: link.url, expiresAt: link.expiresAt, purpose, emailed });
 });
 
 const statusSchema = z.strictObject({ status: z.enum(['active', 'disabled']) });

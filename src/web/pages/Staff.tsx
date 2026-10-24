@@ -4,13 +4,19 @@ import { ApiFailure, api } from '../api';
 import { Field, Loading, Notice } from '../components/ui';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
+import { matchesSearch, searchRank } from '../../shared/search';
 import type { Activity } from './Activities';
 
 interface StaffRow {
   assignmentId: string;
-  user: { id: string; email: string; displayName: string; status: string };
+  user: { id: string; email: string; displayName: string; status: string; hasPassword: boolean };
   role: { key: string; name: string };
   activity: { id: string; name: string } | null;
+}
+interface Person {
+  id: string;
+  displayName: string;
+  email: string;
 }
 interface Role {
   key: string;
@@ -24,6 +30,10 @@ export function Staff() {
   const staff = useApi<{ staff: StaffRow[] }>(`/events/${event.id}/staff`);
   const roles = useApi<{ roles: Role[] }>('/me/roles');
   const activities = useApi<{ activities: Activity[] }>(`/events/${event.id}/activities`);
+  const people = useApi<{ people: Person[] }>(`/events/${event.id}/staff/people`);
+  const [mode, setMode] = useState<'existing' | 'new'>('existing');
+  const [query, setQuery] = useState('');
+  const [picked, setPicked] = useState<Person | null>(null);
   const [form, setForm] = useState({ email: '', displayName: '', roleKey: 'scanner', activityId: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<{ tone: 'ok' | 'stop'; text: string } | null>(null);
@@ -35,18 +45,28 @@ export function Staff() {
     setBusy(true);
     setMessage(null);
     setErrors({});
+    const who = mode === 'existing' ? picked?.displayName : form.displayName || form.email;
     try {
-      await api(`/events/${event.id}/staff`, {
+      const res = await api<{ created: boolean; emailed: boolean }>(`/events/${event.id}/staff`, {
         body: {
-          email: form.email,
+          ...(mode === 'existing' && picked ? { userId: picked.id } : { email: form.email }),
           roleKey: form.roleKey,
-          ...(form.displayName ? { displayName: form.displayName } : {}),
+          ...(mode === 'new' && form.displayName ? { displayName: form.displayName } : {}),
           ...(selectedRole?.scope === 'activity' && form.activityId ? { activityId: form.activityId } : {}),
         },
       });
-      setMessage({ tone: 'ok', text: `Added ${form.email} as ${selectedRole?.name ?? form.roleKey}.` });
+      const role = selectedRole?.name ?? form.roleKey;
+      setMessage(
+        !res.created
+          ? { tone: 'ok', text: `Added ${who} as ${role}.` }
+          : res.emailed
+            ? { tone: 'ok', text: `Added ${who} as ${role}. We've emailed them a link to set their password.` }
+            : { tone: 'stop', text: `Added ${who} as ${role}, but the invite email couldn't be sent. Try "Resend invite" later, or ask an admin for a set-up link.` },
+      );
       setForm({ ...form, email: '', displayName: '' });
-      await staff.reload();
+      setPicked(null);
+      setQuery('');
+      await Promise.all([staff.reload(), people.reload()]);
     } catch (err) {
       if (err instanceof ApiFailure) {
         setErrors(err.fieldErrors());
@@ -78,6 +98,15 @@ export function Staff() {
       setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
     }
     await staff.reload();
+  }
+
+  async function resend(row: StaffRow) {
+    try {
+      await api(`/events/${event.id}/staff/${row.assignmentId}/invite`, { body: {} });
+      setMessage({ tone: 'ok', text: `Sent ${row.user.displayName} a new link to set their password.` });
+    } catch (err) {
+      setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
+    }
   }
 
   async function remove(row: StaffRow) {
@@ -123,6 +152,14 @@ export function Staff() {
                   <td>
                     <strong>{row.user.displayName}</strong>
                     <div className="field-hint">{row.user.email}</div>
+                    {!row.user.hasPassword && (
+                      <div className="field-hint">
+                        Hasn't set a password yet.{' '}
+                        <button className="btn-link" onClick={() => void resend(row)}>
+                          Resend invite
+                        </button>
+                      </div>
+                    )}
                   </td>
                   <td data-label="Role">
                     <label className="visually-hidden" htmlFor={`role-${row.assignmentId}`}>
@@ -155,24 +192,64 @@ export function Staff() {
 
       <form onSubmit={add} noValidate className="narrow section-gap">
         <h2>Add someone</h2>
-        <p className="lede">They sign in with this email address. If they're new to CampCount, an account is created for them.</p>
-        <Field id="staff-email" label="Email address" hint="Their Scouts SA email is best." error={errors.email}>
-          <input
-            id="staff-email"
-            className="input"
-            type="email"
-            value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-          />
-        </Field>
-        <Field id="staff-name" label="Name" hint="Only needed if they don't have an account yet.">
-          <input
-            id="staff-name"
-            className="input"
-            value={form.displayName}
-            onChange={(e) => setForm({ ...form, displayName: e.target.value })}
-          />
-        </Field>
+        <div className="segmented section-gap-sm" role="tablist" aria-label="Who are you adding?">
+          <button type="button" role="tab" aria-selected={mode === 'existing'} onClick={() => setMode('existing')}>
+            Has an account
+          </button>
+          <button type="button" role="tab" aria-selected={mode === 'new'} onClick={() => setMode('new')}>
+            Someone new
+          </button>
+        </div>
+        {mode === 'existing' ? (
+          <div className="field section-gap-sm">
+            {picked ? (
+              <div className="picked">
+                <span className="list-main">
+                  <strong>{picked.displayName}</strong>
+                  <span>{picked.email}</span>
+                </span>
+                <button type="button" className="btn-link" onClick={() => setPicked(null)}>
+                  Change
+                </button>
+              </div>
+            ) : (
+              <>
+                <label htmlFor="staff-search">Find a person</label>
+                <input
+                  id="staff-search"
+                  className="input"
+                  type="search"
+                  autoComplete="off"
+                  placeholder="Name or email, even one letter"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+                <PersonResults people={people.data?.people ?? []} query={query} onPick={setPicked} />
+                <span className="field-hint">
+                  Not listed?{' '}
+                  <button type="button" className="btn-link" onClick={() => setMode('new')}>
+                    Add someone new
+                  </button>
+                  .
+                </span>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="section-gap-sm">
+            <Field id="staff-name" label="Name" error={errors.displayName}>
+              <input id="staff-name" className="input" autoComplete="off" value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} />
+            </Field>
+            <Field
+              id="staff-email"
+              label="Email address"
+              hint="We'll email them a link to set their password. If they already have an account, they're just added."
+              error={errors.email}
+            >
+              <input id="staff-email" className="input" type="email" autoComplete="off" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            </Field>
+          </div>
+        )}
         <fieldset className="fieldset-plain">
           <legend className="field-legend">What will they do?</legend>
           <div className="role-pick">
@@ -202,10 +279,34 @@ export function Staff() {
             </select>
           </Field>
         )}
-        <button className="btn" disabled={busy || !form.email}>
+        <button className="btn" disabled={busy || (mode === 'existing' ? !picked : !form.email || !form.displayName)}>
           {busy ? 'Adding…' : 'Add to event'}
         </button>
       </form>
     </>
+  );
+}
+
+function PersonResults({ people, query, onPick }: { people: Person[]; query: string; onPick: (p: Person) => void }) {
+  const q = query.trim();
+  const matches = (q ? people.filter((p) => matchesSearch(q, p.displayName, p.email)) : [...people])
+    .sort((a, b) => (q ? searchRank(q, a.displayName) - searchRank(q, b.displayName) : 0) || a.displayName.localeCompare(b.displayName))
+    .slice(0, 8);
+  if (people.length === 0) return <p className="field-hint">Everyone with an account is already on this event.</p>;
+  if (matches.length === 0) return <p className="field-hint">No one matches "{q}".</p>;
+  return (
+    <ul className="list section-gap-sm">
+      {matches.map((p) => (
+        <li key={p.id}>
+          <button type="button" className="list-row list-button" onClick={() => onPick(p)}>
+            <span className="list-main">
+              <strong>{p.displayName}</strong>
+              <span>{p.email}</span>
+            </span>
+            <span className="list-add">Choose</span>
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }

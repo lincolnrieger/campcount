@@ -9,7 +9,7 @@ import { Account, SetPassword } from './pages/Account';
 import { EventLayout } from './pages/EventLayout';
 import { EventOverview } from './pages/EventOverview';
 import { Events, NewEvent } from './pages/Events';
-import { SignIn, VerifyLink } from './pages/SignIn';
+import { PasswordLink, SignIn, VerifyLink } from './pages/SignIn';
 import { Staff } from './pages/Staff';
 import { Import } from './pages/Import';
 import { Lanyards } from './pages/Lanyards';
@@ -55,6 +55,7 @@ export function App() {
       <Route path="/sign-in" element={<SignIn />} />
       <Route path="/sign-up" element={<SignIn />} />
       <Route path="/sign-in/verify" element={<VerifyLink />} />
+      <Route path="/set-password" element={<PasswordLink />} />
       <Route path="/pair" element={<Pair />} />
       <Route
         element={

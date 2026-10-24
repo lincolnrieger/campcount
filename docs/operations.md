@@ -102,9 +102,23 @@ activities, meals, lanyard cards and demo accounts for each role.
 
 ## Accounts
 
-- Anyone can create an account at `/sign-up` with their name and email;
-  a 6-digit code confirms the email. Unconfirmed sign-ups with no events
-  are removed after 7 days.
+- Anyone can create an account at `/sign-up` with their name, email and a
+  password; a 6-digit code (or the link in the email) confirms the address.
+  If they leave before confirming, signing in with their password sends a
+  fresh code. Unconfirmed sign-ups with no events are removed after 7 days.
+- Event managers add staff from **Staff**: pick someone who already has an
+  account (search by name or email, one letter is enough), or choose
+  **Someone new** and type their name and email. New people are emailed a
+  link to set their password (valid 7 days). "Resend invite" sends a fresh
+  one. Managers never see the link itself.
+- Accounts an admin creates (People, "Add someone yourself") also set their
+  own password from a set-up link, which is emailed and shown to the admin
+  to copy or share.
+- **Forgotten password:** people can use "Email me a sign-in code", or an
+  admin opens People, taps the person and chooses **Reset password**. The
+  one-time link lasts 24 hours and can be copied, shared or emailed. Making
+  a new link cancels the previous one; using it signs the person out
+  everywhere else.
 - Admins manage everyone on **People**: rename, make or remove admin,
   disable (signs them out) or delete.
 - Anyone can rename or delete their own account from **Your account**.

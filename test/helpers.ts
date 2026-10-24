@@ -19,9 +19,10 @@ export async function createUser(opts: { platformAdmin?: boolean; name?: string 
   const email = `user-${unique()}@example.test`;
   const now = new Date().toISOString();
   await testEnv.DB.prepare(
-    `INSERT INTO users (id, email, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+    // Signed-in users have confirmed their email (by code or link).
+    `INSERT INTO users (id, email, display_name, email_verified_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
   )
-    .bind(id, email, opts.name ?? 'Test User', now, now)
+    .bind(id, email, opts.name ?? 'Test User', now, now, now)
     .run();
   if (opts.platformAdmin) {
     await grant(id, 'platform_admin', null);

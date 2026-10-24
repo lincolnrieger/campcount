@@ -16,6 +16,7 @@ export async function deleteAccount(env: Env, userId: string, actor: AuditActor)
     await db.batch([
       db.prepare(`DELETE FROM sessions WHERE user_id = ?`).bind(userId),
       db.prepare(`DELETE FROM login_challenges WHERE user_id = ?`).bind(userId),
+      db.prepare(`DELETE FROM password_links WHERE user_id = ?`).bind(userId),
       db.prepare(`DELETE FROM assignments WHERE user_id = ?`).bind(userId),
       db.prepare(`DELETE FROM users WHERE id = ?`).bind(userId),
       auditStatement(db, { actor, action: 'user.delete', targetType: 'user', targetId: userId }),
@@ -27,6 +28,7 @@ export async function deleteAccount(env: Env, userId: string, actor: AuditActor)
   await db.batch([
     db.prepare(`DELETE FROM sessions WHERE user_id = ?`).bind(userId),
     db.prepare(`DELETE FROM login_challenges WHERE user_id = ?`).bind(userId),
+    db.prepare(`DELETE FROM password_links WHERE user_id = ?`).bind(userId),
     db.prepare(`UPDATE assignments SET revoked_at = COALESCE(revoked_at, ?) WHERE user_id = ?`).bind(now, userId),
     db.prepare(
       `UPDATE users SET email = ?, display_name = 'Deleted account', status = 'disabled', password_hash = NULL,
