@@ -251,7 +251,7 @@ export function Import() {
             <Notice tone="warn">
               <p>
                 {context.data?.dietaryEnabled
-                  ? 'You can import the roster, but only a Camp Director can review dietary requirements. They will be flagged for review.'
+                  ? 'You can import the roster. Dietary notes will be flagged for an event manager to review.'
                   : 'Dietary requirements are switched off for this event, so this column will be ignored.'}
               </p>
             </Notice>

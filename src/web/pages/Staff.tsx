@@ -24,7 +24,7 @@ export function Staff() {
   const staff = useApi<{ staff: StaffRow[] }>(`/events/${event.id}/staff`);
   const roles = useApi<{ roles: Role[] }>('/me/roles');
   const activities = useApi<{ activities: Activity[] }>(`/events/${event.id}/activities`);
-  const [form, setForm] = useState({ email: '', displayName: '', roleKey: 'activity_leader', activityId: '' });
+  const [form, setForm] = useState({ email: '', displayName: '', roleKey: 'scanner', activityId: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<{ tone: 'ok' | 'stop'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -102,7 +102,7 @@ export function Staff() {
           <p>
             <strong>No one is assigned yet.</strong>
           </p>
-          <p className="lede">Start with a Camp Director. They can add the rest of the team.</p>
+          <p className="lede">Add an event manager first. They can bring in the rest of the crew.</p>
         </div>
       )}
       {staff.data && staff.data.staff.length > 0 && (
@@ -173,20 +173,18 @@ export function Staff() {
             onChange={(e) => setForm({ ...form, displayName: e.target.value })}
           />
         </Field>
-        <Field id="staff-role" label="Role" hint={selectedRole?.description}>
-          <select
-            id="staff-role"
-            className="input"
-            value={form.roleKey}
-            onChange={(e) => setForm({ ...form, roleKey: e.target.value })}
-          >
+        <fieldset className="fieldset-plain">
+          <legend className="field-legend">What will they do?</legend>
+          <div className="role-pick">
             {roles.data?.roles.map((r) => (
-              <option key={r.key} value={r.key}>
-                {r.name}
-              </option>
+              <label key={r.key} className={form.roleKey === r.key ? 'role-option is-on' : 'role-option'}>
+                <input type="radio" name="staff-role" value={r.key} checked={form.roleKey === r.key} onChange={() => setForm({ ...form, roleKey: r.key })} />
+                <strong>{r.name}</strong>
+                <span>{r.description}</span>
+              </label>
             ))}
-          </select>
-        </Field>
+          </div>
+        </fieldset>
         {selectedRole?.scope === 'activity' && (
           <Field id="staff-activity" label="Activity" hint="Leaders only see and scan the activity you choose.">
             <select

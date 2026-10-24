@@ -26,7 +26,7 @@ async function camp() {
   const eventId = await createEvent(admin.id);
   await testEnv.DB.prepare(`UPDATE events SET feature_dietary = 1, feature_meals = 1, feature_site = 1 WHERE id = ?`).bind(eventId).run();
   const director = await createUser();
-  await grant(director.id, 'camp_director', eventId);
+  await grant(director.id, 'event_manager', eventId);
   await api(`/events/${eventId}/import/commit`, {
     cookie: director.cookie,
     body: {
@@ -91,7 +91,7 @@ describe('live dashboard', () => {
   it('is not available to volunteers', async () => {
     const c = await camp();
     const leader = await createUser();
-    await grant(leader.id, 'activity_leader', c.eventId, c.kayak);
+    await grant(leader.id, 'scanner', c.eventId, c.kayak);
     expect((await api(`/events/${c.eventId}/live`, { cookie: leader.cookie })).status).toBe(403);
   });
 });
@@ -142,14 +142,15 @@ describe('exports', () => {
     const meal = await createUser();
     await grant(meal.id, 'meal_leader', c.eventId);
     const leader = await createUser();
-    await grant(leader.id, 'activity_leader', c.eventId, c.kayak);
+    await grant(leader.id, 'scanner', c.eventId);
 
     expect((await api(`/events/${c.eventId}/exports/attendance.csv`, { cookie: manager.cookie })).status).toBe(200);
-    expect((await api(`/events/${c.eventId}/exports/dietary-list.csv`, { cookie: manager.cookie })).status).toBe(403);
+    expect((await api(`/events/${c.eventId}/exports/dietary-list.csv`, { cookie: leader.cookie })).status).toBe(403);
+    expect((await api(`/events/${c.eventId}/exports/dietary-list.csv`, { cookie: meal.cookie })).status).toBe(403);
     expect((await api(`/events/${c.eventId}/exports/catering.csv`, { cookie: meal.cookie })).status).toBe(200);
     expect((await api(`/events/${c.eventId}/exports/attendance.csv`, { cookie: meal.cookie })).status).toBe(403);
     expect((await api(`/events/${c.eventId}/exports/attendance.csv`, { cookie: leader.cookie })).status).toBe(403);
-    expect((await api(`/events/${c.eventId}/exports/dietary-list.csv`, { cookie: c.director.cookie })).status).toBe(200);
+    expect((await api(`/events/${c.eventId}/exports/dietary-list.csv`, { cookie: manager.cookie })).status).toBe(200);
 
     const listed = await json(await api(`/events/${c.eventId}/exports`, { cookie: meal.cookie }));
     expect(listed.exports.map((e: any) => e.key)).toEqual(['catering']);
@@ -157,6 +158,13 @@ describe('exports', () => {
       .bind(c.eventId)
       .first<{ n: number }>();
     expect(audit!.n).toBe(3);
+  });
+
+  it('scanners are kept out of the live dashboard and close-out', async () => {
+    const c = await camp();
+    const scanner = await createUser();
+    await grant(scanner.id, 'scanner', c.eventId);
+    expect((await api(`/events/${c.eventId}/reconciliation`, { cookie: scanner.cookie })).status).toBe(403);
   });
 
   it('catering totals carry no names; CSVs state the time zone and neutralise formulas', async () => {

@@ -10,20 +10,14 @@ import { testEnv } from './helpers';
  */
 const MATRIX: Record<string, string[]> = {
   platform_admin: ['platform.audit.read', 'platform.events.create', 'platform.events.oversee', 'platform.users.manage'],
-  camp_director: [
+  event_manager: [
     'activities.manage', 'activity.scan', 'activity.view_roster', 'attendance.correct', 'credentials.manage',
     'dietary.edit', 'dietary.view_alert', 'dietary.view_detail', 'event.close', 'event.configure', 'event.view',
     'meal.scan', 'meals.manage', 'photo.view_status', 'reports.export', 'reports.export_sensitive', 'reports.view',
     'roster.edit', 'roster.import', 'roster.view', 'site.scan', 'staff.manage', 'stations.manage',
   ],
-  event_manager: [
-    'activities.manage', 'activity.scan', 'activity.view_roster', 'attendance.correct', 'credentials.manage',
-    'event.configure', 'event.view', 'meal.scan', 'meals.manage', 'photo.view_status', 'reports.export',
-    'reports.view', 'roster.edit', 'roster.import', 'roster.view', 'site.scan', 'stations.manage',
-  ],
-  activity_leader: ['activity.scan', 'activity.view_roster', 'event.view', 'photo.view_status'],
+  scanner: ['activity.scan', 'activity.view_roster', 'event.view', 'photo.view_status', 'site.scan'],
   meal_leader: ['dietary.view_alert', 'dietary.view_detail', 'event.view', 'meal.scan'],
-  gate_volunteer: ['event.view', 'site.scan'],
 };
 
 describe('system roles', () => {
@@ -48,7 +42,7 @@ describe('system roles', () => {
   });
 
   it('never give dietary detail or sensitive export to volunteer roles', () => {
-    for (const role of ['activity_leader', 'gate_volunteer', 'event_manager']) {
+    for (const role of ['scanner']) {
       expect(MATRIX[role]).not.toContain('dietary.view_detail');
       expect(MATRIX[role]).not.toContain('reports.export_sensitive');
     }

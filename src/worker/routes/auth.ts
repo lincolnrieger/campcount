@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
-import { passwordSignInSchema, setPasswordSchema, signInRequestSchema, signInVerifySchema } from '../../shared/schemas';
+import { passwordSignInSchema, setPasswordSchema, signInRequestSchema, signInVerifySchema, signUpSchema } from '../../shared/schemas';
 import type { AppContext, AppEnv } from '../context';
 import { parseBody, requireUser } from '../context';
 import { ApiError } from '../lib/errors';
@@ -41,60 +41,90 @@ authRoutes.post('/request', async (c) => {
   const user = await c.env.DB.prepare(`SELECT id FROM users WHERE email = ? AND status = 'active'`)
     .bind(email)
     .first<{ id: string }>();
-
-  if (user) {
-    const now = nowIso();
-    const id = crypto.randomUUID();
-    const code = randomDigits(6);
-    const linkToken = randomToken(24);
-    await c.env.DB.batch([
-      // Only the newest code is ever valid.
-      c.env.DB.prepare(
-        `UPDATE login_challenges SET consumed_at = ? WHERE user_id = ? AND consumed_at IS NULL`,
-      ).bind(now, user.id),
-      c.env.DB.prepare(
-        `INSERT INTO login_challenges (id, user_id, code_hash, link_token_hash, created_at, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      ).bind(
-        id,
-        user.id,
-        await hmacHex(c.env.AUTH_SECRET, `code:${id}:${code}`),
-        await hmacHex(c.env.AUTH_SECRET, `link:${linkToken}`),
-        now,
-        addMinutes(now, CODE_TTL_MINUTES),
-      ),
-    ]);
-    // The token is in the URL fragment: it is never sent to a server, so mail
-    // scanners that pre-fetch links (e.g. Microsoft Safe Links) cannot use it.
-    const link = `${new URL(c.req.url).origin}/sign-in/verify#t=${linkToken}`;
-    const minutes = CODE_TTL_MINUTES;
-    try {
-      await sendEmail(c.env, {
-        to: email,
-        subject: `Your CampCount sign-in code: ${code}`,
-        text:
-          `Your CampCount sign-in code is ${code}\n\n` +
-          `Or open this link and press "Sign in":\n${link}\n\n` +
-          `The code expires in ${minutes} minutes. If you did not ask for it, ignore this email.`,
-        html:
-          `<p>Your CampCount sign-in code is</p>` +
-          `<p style="font-size:28px;font-weight:bold;letter-spacing:4px">${code}</p>` +
-          `<p>Or <a href="${link}">open this link</a> and press <strong>Sign in</strong>.</p>` +
-          `<p>The code expires in ${minutes} minutes. If you did not ask for it, ignore this email.</p>`,
-      });
-    } catch (err) {
-      const reason = err instanceof EmailSendError ? err.code : 'UNKNOWN';
-      // Operator-facing detail goes to the logs (no address or sign-in code is logged).
-      console.error(`Sign-in email could not be sent: ${reason}: ${err instanceof Error ? err.message : String(err)}`);
-      throw new ApiError(
-        503,
-        'email_unavailable',
-        `The sign-in email could not be sent (${reason}). Please tell your CampCount administrator.`,
-      );
-    }
-  }
+  if (user) await emailCode(c, user.id, email, 'sign-in');
   return c.json({ ok: true });
 });
+
+/**
+ * Create an account. A new account has no access to anything until someone
+ * adds it to an event. The answer is the same whether or not the email is
+ * already registered (an existing account just gets a normal sign-in code),
+ * so this can't be used to find out who has an account.
+ */
+authRoutes.post('/signup', async (c) => {
+  const { email, displayName } = await parseBody(c, signUpSchema);
+  await limitByIp(c, 'signup');
+  await rateLimit(c, `email:${await sha256Hex(email)}`);
+
+  const existing = await c.env.DB.prepare(`SELECT id, status FROM users WHERE email = ?`)
+    .bind(email)
+    .first<{ id: string; status: string }>();
+  if (existing) {
+    if (existing.status === 'active') await emailCode(c, existing.id, email, 'sign-in');
+    return c.json({ ok: true });
+  }
+  const id = crypto.randomUUID();
+  const now = nowIso();
+  await c.env.DB.batch([
+    c.env.DB.prepare(`INSERT INTO users (id, email, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`).bind(
+      id,
+      email,
+      displayName,
+      now,
+      now,
+    ),
+    auditStatement(c.env.DB, { actor: { type: 'public' }, action: 'user.signup', targetType: 'user', targetId: id }),
+  ]);
+  await emailCode(c, id, email, 'welcome');
+  return c.json({ ok: true });
+});
+
+async function emailCode(c: AppContext, userId: string, email: string, kind: 'sign-in' | 'welcome'): Promise<void> {
+  const now = nowIso();
+  const id = crypto.randomUUID();
+  const code = randomDigits(6);
+  const linkToken = randomToken(24);
+  await c.env.DB.batch([
+    // Only the newest code is ever valid.
+    c.env.DB.prepare(`UPDATE login_challenges SET consumed_at = ? WHERE user_id = ? AND consumed_at IS NULL`).bind(now, userId),
+    c.env.DB.prepare(
+      `INSERT INTO login_challenges (id, user_id, code_hash, link_token_hash, created_at, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      id,
+      userId,
+      await hmacHex(c.env.AUTH_SECRET, `code:${id}:${code}`),
+      await hmacHex(c.env.AUTH_SECRET, `link:${linkToken}`),
+      now,
+      addMinutes(now, CODE_TTL_MINUTES),
+    ),
+  ]);
+  // The token is in the URL fragment: it is never sent to a server, so mail
+  // scanners that pre-fetch links (e.g. Microsoft Safe Links) cannot use it.
+  const link = `${new URL(c.req.url).origin}/sign-in/verify#t=${linkToken}`;
+  const minutes = CODE_TTL_MINUTES;
+  const intro = kind === 'welcome' ? 'Welcome to CampCount! Your code to finish signing up is' : 'Your CampCount sign-in code is';
+  try {
+    await sendEmail(c.env, {
+      to: email,
+      subject: kind === 'welcome' ? `Welcome to CampCount: your code is ${code}` : `Your CampCount sign-in code: ${code}`,
+      text:
+        `${intro} ${code}\n\n` +
+        `Or open this link and press "Sign in":\n${link}\n\n` +
+        `The code expires in ${minutes} minutes. If you did not ask for it, ignore this email.`,
+      html:
+        `<p>${intro}</p>` +
+        `<p style="font-size:28px;font-weight:bold;letter-spacing:4px">${code}</p>` +
+        `<p>Or <a href="${link}">open this link</a> and press <strong>Sign in</strong>.</p>` +
+        `<p>The code expires in ${minutes} minutes. If you did not ask for it, ignore this email.</p>`,
+    });
+  } catch (err) {
+    const reason = err instanceof EmailSendError ? err.code : 'UNKNOWN';
+    // Operator-facing detail goes to the logs (no address or sign-in code is logged).
+    console.error(`Sign-in email could not be sent: ${reason}: ${err instanceof Error ? err.message : String(err)}`);
+    throw new ApiError(503, 'email_unavailable', `The sign-in email could not be sent (${reason}). Please tell your CampCount administrator.`);
+  }
+}
 
 authRoutes.post('/verify', async (c) => {
   const input = await parseBody(c, signInVerifySchema);
@@ -141,6 +171,10 @@ authRoutes.post('/verify', async (c) => {
     .first();
   if (!active) throw INVALID();
 
+  // Using a code proves the person controls the address.
+  await c.env.DB.prepare(`UPDATE users SET email_verified_at = ? WHERE id = ? AND email_verified_at IS NULL`)
+    .bind(now, challenge.user_id)
+    .run();
   await startSession(c, challenge.user_id, 'token' in input ? 'link' : 'code');
   return c.json({ ok: true });
 });

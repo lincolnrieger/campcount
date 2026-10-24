@@ -30,7 +30,8 @@ async function afterSignIn(refresh: () => Promise<void>, navigate: ReturnType<ty
 export function SignIn() {
   const { refresh } = useSession();
   const navigate = useNavigate();
-  const [step, setStep] = useState<'password' | 'code'>('password');
+  const [step, setStep] = useState<'password' | 'signup' | 'code'>(() => (window.location.pathname === '/sign-up' ? 'signup' : 'password'));
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
@@ -73,6 +74,14 @@ export function SignIn() {
     });
   };
 
+  const signUp = (e: FormEvent) => {
+    e.preventDefault();
+    void run(async () => {
+      await api('/auth/signup', { body: { email, displayName: name } });
+      setStep('code');
+    });
+  };
+
   const verifyCode = (e: FormEvent) => {
     e.preventDefault();
     void run(async () => {
@@ -83,10 +92,44 @@ export function SignIn() {
 
   return (
     <SignInFrame>
-      {step === 'password' ? (
+      {step !== 'code' && (
+        <div className="auth-tabs" role="tablist" aria-label="Sign in or create an account">
+          <button type="button" role="tab" aria-selected={step === 'password'} onClick={() => { setStep('password'); setError(null); }}>
+            Sign in
+          </button>
+          <button type="button" role="tab" aria-selected={step === 'signup'} onClick={() => { setStep('signup'); setError(null); }}>
+            Create account
+          </button>
+        </div>
+      )}
+      {step === 'signup' ? (
+        <form onSubmit={signUp} noValidate>
+          <h1>Create your account</h1>
+          <p className="lede">We'll email you a code to confirm it's you. Once you're in, an event manager can add you to their camp.</p>
+          {error && <Notice tone="stop">{error}</Notice>}
+          <Field id="name" label="Your name">
+            <input id="name" className="input" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <Field id="signup-email" label="Email address" hint="Your Scouts SA email is best.">
+            <input
+              id="signup-email"
+              className="input"
+              type="email"
+              autoComplete="email"
+              inputMode="email"
+              autoCapitalize="none"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </Field>
+          <button className="btn btn-block" disabled={busy || name.trim().length < 2 || !email.includes('@')}>
+            {busy ? 'Sending…' : 'Email me a code'}
+          </button>
+        </form>
+      ) : step === 'password' ? (
         <>
           <form onSubmit={signInWithPassword} noValidate>
-            <h1>Sign in</h1>
+            <h1>Welcome back</h1>
             {error && <Notice tone="stop">{error}</Notice>}
             <Field id="email" label="Email address">
               <input
@@ -115,7 +158,7 @@ export function SignIn() {
             </button>
           </form>
           <div className="signin-alt">
-            <p>First time here, or forgot your password?</p>
+            <p>Forgot your password, or never set one?</p>
             <button type="button" className="btn btn-secondary btn-block" disabled={busy} onClick={emailCode}>
               Email me a sign-in code
             </button>

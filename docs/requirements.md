@@ -38,12 +38,10 @@ Deferred to Release 2:
 
 | Role | Scope | Can |
 |---|---|---|
-| Platform Admin | Platform | Manage users, create events, assign directors, read the audit log. Every action is audited. |
-| Camp Director | Event | Configure the event, import, manage the roster, assign staff, pair stations, correct records, export, close out. |
-| Event Manager | Event | Same as Director except: no exports containing dietary data, no role assignment, no close-out. |
-| Activity Leader | Activity (one or more) | Scan in/out for assigned activities, see the activity roster (display fields only), see counts. |
-| Meal Leader | Event (meals) | Scan meals and see the dietary alert for the scanned person. Reads the catering dietary summary. |
-| Gate Volunteer | Event (site) | Scan leaders and participants on and off site. |
+| Platform Admin | Platform | Manage users (rename, make admin, disable, delete), create events, use View as, read the audit log. Every action is audited. |
+| Event Manager | Event | Configure the event, import, manage the roster, assign staff, pair stations, correct records, export, close out. (Replaces the earlier Camp Director and Event Manager split.) |
+| Scanner | Event | Scan people on and off site and in and out of every activity. Sees activity rosters (display fields only) and counts. (Replaces Activity Leader and Gate Volunteer.) |
+| Meal Team | Event (meals) | Scan meals, see the dietary alert for the scanned person, see who has and hasn't eaten, read the catering dietary summary. |
 | Station (device) | One workflow | Scan for that workflow only. Sees display fields only. It is not a person. |
 
 Permissions are fixed in code; roles are data. A user can hold several
@@ -97,7 +95,7 @@ Proposed flow:
    The browser compares a hash; the text is never stored.
 
 The meal scanner shows a **coloured and labelled alert**, for example
-"ALLERGY — peanut (anaphylactic)". Only Meal Leaders and meal stations see
+"ALLERGY — peanut (anaphylactic)". Only Meal Team and meal stations see
 it. The screen states that scanning does not confirm a meal is safe.
 
 [OPEN] Should the meal-device offline cache include these dietary alerts?
@@ -136,7 +134,7 @@ when consent is No or unknown.
   - Eligibility: **[DEFAULT]** everyone on the roster.
 - **Site**: scans toggle between on site and off site. The direction is
   shown and can be changed before saving.
-  - **[DEFAULT]** A gate volunteer or station scans the leader's lanyard.
+  - **[DEFAULT]** A scanner or station scans the leader's lanyard.
     There is no self-scan.
 - Corrections are new records that supersede old ones. Records are never
   edited or deleted. Each correction records who made it and why.
@@ -170,7 +168,7 @@ when consent is No or unknown.
   still on site, plus unsynced device warnings.
 - **CSV exports**: activity attendance, meal counts, catering dietary
   summary (counts per item, no names), and a named dietary list for
-  Director and Meal Leader only. Every export is audited.
+  Event Manager and Meal Team only. Every export is audited.
 
 ## 10. Activity self-sign-up [OPEN]
 

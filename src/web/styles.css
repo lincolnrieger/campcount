@@ -1746,3 +1746,215 @@ details summary {
     padding: 0 var(--space-2);
   }
 }
+
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-bottom: var(--space-5);
+  border-bottom: 2px solid var(--rule);
+}
+.auth-tabs button {
+  min-height: 48px;
+  border: 0;
+  border-bottom: 4px solid transparent;
+  margin-bottom: -2px;
+  background: none;
+  color: var(--ink-soft);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.auth-tabs button[aria-selected='true'] {
+  color: var(--ink);
+  border-bottom-color: var(--hivis);
+}
+
+.name-result {
+  display: grid;
+  width: 100%;
+  min-height: 52px;
+  padding: var(--space-2) var(--space-3);
+  border: 2px solid var(--rule);
+  border-radius: var(--radius-control);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.name-result span {
+  color: var(--ink-soft);
+  font-size: var(--t-sm);
+}
+.name-results {
+  max-height: 50dvh;
+  overflow-y: auto;
+}
+.segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-control);
+  overflow: hidden;
+}
+.segmented button {
+  min-height: 44px;
+  border: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.segmented button span {
+  font-weight: 400;
+  color: var(--ink-soft);
+}
+.segmented button[aria-selected='true'] {
+  background: var(--ink);
+  color: #fff;
+}
+.segmented button[aria-selected='true'] span {
+  color: var(--hivis);
+}
+.eaten-list {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-2) 0 0;
+  max-height: 55dvh;
+  overflow-y: auto;
+}
+.eaten-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--rule);
+}
+.field-legend {
+  font-weight: 700;
+  margin-bottom: var(--space-2);
+}
+.role-pick {
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+}
+.role-option {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  padding: var(--space-3) var(--space-4) var(--space-3) calc(var(--space-4) + 1.6rem);
+  border: 2px solid var(--rule);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+.role-option input {
+  position: absolute;
+  left: var(--space-3);
+  top: calc(var(--space-3) + 2px);
+  width: 1.2rem;
+  height: 1.2rem;
+  accent-color: var(--gum);
+}
+.role-option span {
+  color: var(--ink-soft);
+  font-size: var(--t-sm);
+}
+.role-option.is-on {
+  border-color: var(--ink);
+  background: var(--leaf);
+}
+
+/* ---------------------------------------------------------------- people */
+
+.people-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-top: 2px solid var(--ink);
+}
+.people-list > li {
+  border-bottom: 1px solid var(--rule);
+}
+.people-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 64px;
+  padding: var(--space-2) var(--space-1);
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.people-row:hover {
+  background: var(--leaf);
+}
+.people-main {
+  display: grid;
+  min-width: 0;
+}
+.people-main span {
+  color: var(--ink-soft);
+  font-size: var(--t-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.people-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-1);
+}
+.tag {
+  padding: 0 var(--space-2);
+  border: 2px solid var(--ink-soft);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.tag-admin {
+  border-color: var(--ink);
+  background: var(--hivis);
+}
+.tag-stop {
+  border-color: var(--stop);
+  color: var(--stop);
+}
+.people-detail {
+  padding: 0 var(--space-1) var(--space-3);
+}
+.settings-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-4);
+  border-top: 2px solid var(--ink);
+}
+.settings-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 64px;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--rule);
+}
+.settings-list li > span {
+  display: grid;
+  min-width: 0;
+}
+.settings-list li > span span {
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+.settings-list .btn-link {
+  font-weight: 700;
+  color: var(--gum);
+}

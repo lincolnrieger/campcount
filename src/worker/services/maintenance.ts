@@ -22,6 +22,16 @@ export async function runMaintenance(env: Env, now = nowIso()): Promise<{ sensit
     env.DB.prepare(`DELETE FROM sessions WHERE expires_at < ? OR revoked_at < ?`).bind(addDays(now, -1), addDays(now, -30)),
   ]);
 
+  // Sign-ups whose email was never confirmed, after 7 days (accounts added to an event are kept).
+  await env.DB.prepare(
+    `DELETE FROM users WHERE email_verified_at IS NULL AND is_demo = 0 AND created_at < ?
+        AND NOT EXISTS (SELECT 1 FROM assignments a WHERE a.user_id = users.id)
+        AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.user_id = users.id)`,
+  )
+    .bind(addDays(now, -7))
+    .run()
+    .catch(() => undefined);
+
   // Stage 1: sensitive data, 90 days after close.
   const sensitive = await env.DB.prepare(
     `SELECT id FROM events WHERE status IN ('completed', 'archived', 'cancelled') AND sensitive_purged_at IS NULL AND ${CLOSED_AT} <= ?`,

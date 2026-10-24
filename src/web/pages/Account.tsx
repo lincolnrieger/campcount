@@ -81,39 +81,102 @@ export function SetPassword() {
 }
 
 export function Account() {
-  const { me, signOut } = useSession();
+  const { me, signOut, refresh } = useSession();
   const navigate = useNavigate();
+  const [message, setMessage] = useState<{ tone: 'ok' | 'stop'; text: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [password, setPassword] = useState('');
   if (me?.kind !== 'user') return null;
+  const isAdmin = me.platformPermissions.includes('platform.users.manage');
+
+  async function rename() {
+    const name = window.prompt('Your name', me?.kind === 'user' ? me.user.displayName : '');
+    if (!name || !name.trim()) return;
+    try {
+      await api('/me', { method: 'PATCH', body: { displayName: name.trim() } });
+      await refresh();
+      setMessage({ tone: 'ok', text: 'Name updated.' });
+    } catch (err) {
+      setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
+    }
+  }
+
+  async function deleteAccount(e: FormEvent) {
+    e.preventDefault();
+    try {
+      await api('/me', { method: 'DELETE', body: password ? { password } : {} });
+      await refresh();
+      navigate('/sign-in', { replace: true });
+    } catch (err) {
+      setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
+    }
+  }
+
   return (
     <div className="narrow">
       <h1>Your account</h1>
-      <dl className="facts">
-        <dt>Name</dt>
-        <dd>{me.user.displayName}</dd>
-        <dt>Email</dt>
-        <dd>{me.user.email}</dd>
-        <dt>Password</dt>
-        <dd>{me.user.hasPassword ? 'Set' : 'Not set'}</dd>
-      </dl>
-      <div className="actions">
-        {!me.user.isDemo && (
-          <button className="btn btn-secondary" onClick={() => navigate('/account/password')}>
-            {me.user.hasPassword ? 'Change password' : 'Set a password'}
+      {message && <Notice tone={message.tone}>{message.text}</Notice>}
+      <ul className="settings-list">
+        <li>
+          <span>
+            <strong>Name</strong>
+            <span>{me.user.displayName}</span>
+          </span>
+          <button className="btn-link" onClick={() => void rename()}>
+            Change
           </button>
+        </li>
+        <li>
+          <span>
+            <strong>Email</strong>
+            <span>{me.user.email}</span>
+          </span>
+        </li>
+        {!me.user.isDemo && (
+          <li>
+            <span>
+              <strong>Password</strong>
+              <span>{me.user.hasPassword ? 'Set' : 'Not set yet'}</span>
+            </span>
+            <button className="btn-link" onClick={() => navigate('/account/password')}>
+              {me.user.hasPassword ? 'Change' : 'Set one'}
+            </button>
+          </li>
         )}
-        <button className="btn btn-secondary" onClick={() => void signOut()}>
+        {isAdmin && (
+          <li>
+            <span>
+              <strong>Admin</strong>
+              <span>People, demo mode and View as</span>
+            </span>
+            <button className="btn-link" onClick={() => navigate('/admin')}>
+              Open
+            </button>
+          </li>
+        )}
+      </ul>
+      <div className="actions">
+        <button className="btn btn-secondary btn-block" onClick={() => void signOut()}>
           Sign out
         </button>
       </div>
-      {me.platformPermissions.includes('platform.users.manage') && (
-        <ul className="launch section-gap">
-          <li>
-            <a href="/admin">
-              Admin <span>People and demo mode</span>
-            </a>
-          </li>
-        </ul>
-      )}
+
+      <details className="section-gap" open={deleting} onToggle={(e) => setDeleting((e.target as HTMLDetailsElement).open)}>
+        <summary>Delete my account</summary>
+        <form onSubmit={deleteAccount} noValidate>
+          <p className="field-hint">
+            Your account and access are removed. Records of scans you made stay, but no longer show your name. This can't be undone.
+          </p>
+          {me.user.hasPassword && (
+            <Field id="delete-pw" label="Your password">
+              <input id="delete-pw" className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            </Field>
+          )}
+          <button className="btn btn-danger" disabled={me.user.hasPassword && !password}>
+            Delete my account
+          </button>
+        </form>
+      </details>
     </div>
   );
 }

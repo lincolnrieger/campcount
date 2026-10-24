@@ -97,6 +97,8 @@ async function snapshot(c: AppContext) {
       return {
         id: p.id,
         name: displayName(p.first_name!, p.preferred_name!, p.last_name!),
+        // Full name for staff search on the scanner (lanyards only show the initial).
+        fullName: `${p.preferred_name || p.first_name} ${p.last_name}`,
         memberNumber: p.member_number,
         group: p.group_name,
         section: p.section,
@@ -325,4 +327,34 @@ pairingRoutes.post('/pair', async (c) => {
   setCookie(c, SESSION_COOKIE, session.token, { httpOnly: true, secure: true, sameSite: 'Strict', path: '/', expires: new Date(session.expiresAt) });
   await auditStatement(c.env.DB, { actor: { type: 'station', id: station.id }, action: 'station.pair', eventId: station.event_id, targetType: 'station', targetId: station.id }).run();
   return c.json({ ok: true });
+});
+
+/** Who has (and hasn't) been served at a meal, for the meal team. */
+scanRoutes.get('/meals/:mealId/served', async (c) => {
+  const eventId = c.req.param('eventId')!;
+  const mealId = z.uuid().safeParse(c.req.param('mealId'));
+  if (!mealId.success) throw notFound();
+  const { ctx } = await authorisedContext(c, eventId, 'meal', mealId.data);
+  const { states } = replay(ctx.rules, await loadTimeline(c.env.DB, eventId, ctx));
+  const { results } = await c.env.DB.prepare(
+    `SELECT r.id, p.first_name, p.preferred_name, p.last_name, r.group_name, r.kind
+       FROM registrations r JOIN people p ON p.id = r.person_id
+      WHERE r.event_id = ? AND r.status = 'active'
+      ORDER BY p.last_name COLLATE NOCASE, p.first_name COLLATE NOCASE`,
+  )
+    .bind(eventId)
+    .all<Record<string, string>>();
+  return c.json({
+    meal: { id: ctx.id, name: ctx.name },
+    people: results.map((r) => {
+      const state = states.get(r.id!);
+      return {
+        id: r.id,
+        name: `${r.preferred_name || r.first_name} ${r.last_name}`,
+        group: r.group_name,
+        kind: r.kind,
+        servedAt: state?.present ? state.lastAcceptedAt : null,
+      };
+    }),
+  });
 });

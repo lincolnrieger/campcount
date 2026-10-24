@@ -30,7 +30,7 @@ export function Pair() {
   return (
     <main className="page narrow">
       <h1>Set up this device as a station</h1>
-      <p className="lede">Enter the pairing code shown on the director's screen. This device will then only scan for one activity or meal.</p>
+      <p className="lede">Enter the pairing code shown on the event manager's screen. This device will then only scan for one activity or meal.</p>
       {error && <Notice tone="stop">{error}</Notice>}
       <form onSubmit={submit} noValidate>
         <Field id="pair-code" label="Pairing code">
