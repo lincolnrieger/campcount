@@ -53,7 +53,7 @@ interface WhereData {
   activities: { key: string; name: string; capacity: number | null; trackSignOut: boolean; presentNow: number }[];
 }
 
-type Filter = { kind: 'all' } | { kind: 'site'; value: 'on' | 'off' | 'never' } | { kind: 'activity'; key: string; name: string };
+type Filter = { kind: 'all' } | { kind: 'site'; value: 'on' | 'off' | 'never' };
 
 /** Short answer to "where are they?" for the list. */
 function placeOf(p: WherePerson, tz: string): { label: string; tone: string } {
@@ -64,6 +64,48 @@ function placeOf(p: WherePerson, tz: string): { label: string; tone: string } {
   return { label: p.lastSeen ? p.lastSeen.contextName : 'Not scanned', tone: 'place place-never' };
 }
 
+type GroupBy = 'where' | 'group' | 'section';
+
+interface PeopleGroup {
+  key: string;
+  title: string;
+  note: string;
+  count: number;
+  tone: string;
+  people: WherePerson[];
+}
+
+/** Sections for the board: by where people are, by Scout group, or by section. */
+function groupPeople(people: WherePerson[], by: GroupBy, data: WhereData): PeopleGroup[] {
+  const make = (key: string, title: string, list: WherePerson[], tone: string, note = ''): PeopleGroup => ({ key, title, note, count: list.length, tone, people: list });
+  if (by === 'where') {
+    const groups: PeopleGroup[] = [];
+    for (const a of data.activities.filter((x) => x.trackSignOut)) {
+      const here = people.filter((p) => p.activities.some((x) => x.key === a.key));
+      if (here.length) groups.push(make(a.key, a.name, here, 'dot-activity', a.capacity ? `${a.presentNow} of ${a.capacity} places` : ''));
+    }
+    const free = people.filter((p) => p.activities.length === 0);
+    if (data.siteTracked) {
+      groups.push(make('on', 'On site, not at an activity', free.filter((p) => p.site === 'on'), 'dot-on'));
+      groups.push(make('off', 'Left camp', free.filter((p) => p.site === 'off'), 'dot-off'));
+      groups.push(make('never', 'Not arrived', free.filter((p) => p.site === 'never'), 'dot-never'));
+    } else {
+      groups.push(make('free', 'Not at an activity', free, 'dot-never'));
+    }
+    return groups.filter((g) => g.count > 0);
+  }
+  const keyOf = (p: WherePerson) => (by === 'group' ? p.groupName || 'No group' : p.kind === 'adult' ? 'Leaders' : p.section || 'Other');
+  const order = ['Joeys', 'Cubs', 'Scouts', 'Venturers', 'Rovers', 'Leaders', 'Other'];
+  const names = [...new Set(people.map(keyOf))].sort((a, b) => (by === 'section' ? order.indexOf(a) - order.indexOf(b) : a.localeCompare(b)));
+  return names.map((name) => {
+    const list = people.filter((p) => keyOf(p) === name);
+    const on = list.filter((p) => p.site === 'on').length;
+    const busy = list.filter((p) => p.activities.length > 0).length;
+    const note = [data.siteTracked ? `${on} on site` : null, busy ? `${busy} at activities` : null].filter(Boolean).join(', ');
+    return make(`${by}:${name}`, name, list, 'dot-group', note);
+  });
+}
+
 export function Live() {
   const { event } = useEvent();
   const { data, error, loading, reload } = useApi<LiveData>(`/events/${event.id}/live`);
@@ -71,6 +113,8 @@ export function Live() {
   const reloadWhere = where.reload;
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>({ kind: 'all' });
+  const [groupBy, setGroupBy] = useState<GroupBy>('where');
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   useEffect(() => {
     const timer = setInterval(() => {
       void reload();
@@ -87,13 +131,11 @@ export function Live() {
   const meals = data.contexts.filter((c) => c.type === 'meal' && c.status === 'active');
   const people = where.data.people;
   const count = (v: 'on' | 'off' | 'never') => people.filter((p) => p.site === v).length;
-  const busy = where.data.activities.filter((a) => a.trackSignOut);
   const shown = people
-    .filter((p) =>
-      filter.kind === 'site' ? p.site === filter.value : filter.kind === 'activity' ? p.activities.some((a) => a.key === filter.key) : true,
-    )
+    .filter((p) => (filter.kind === 'site' ? p.site === filter.value : true))
     .filter((p) => matchesSearch(query, p.fullName, p.groupName))
     .sort((a, b) => (query ? searchRank(query, a.fullName) - searchRank(query, b.fullName) : 0) || a.fullName.localeCompare(b.fullName));
+  const groups = groupPeople(shown, groupBy, where.data);
   const pick = (f: Filter) => setFilter(JSON.stringify(f) === JSON.stringify(filter) ? { kind: 'all' } : f);
   const isOn = (f: Filter) => JSON.stringify(f) === JSON.stringify(filter);
 
@@ -127,62 +169,82 @@ export function Live() {
         </div>
       )}
 
-      {busy.length > 0 && (
-        <section className="list-section">
-          <h2 className="list-heading">At activities now</h2>
-          <div className="activity-board">
-            {busy.map((a) => (
-              <button
-                key={a.key}
-                type="button"
-                className="activity-tile"
-                aria-pressed={isOn({ kind: 'activity', key: a.key, name: a.name })}
-                onClick={() => pick({ kind: 'activity', key: a.key, name: a.name })}
-              >
-                <span>{a.name}</span>
-                <strong>
-                  {a.presentNow}
-                  {a.capacity ? <small> / {a.capacity}</small> : null}
-                </strong>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-
       <section className="list-section">
-        <div className="section-row">
-          <h2 className="list-heading">Everyone</h2>
+        <div className="segmented segmented-3" role="tablist" aria-label="Group people by">
+          {(
+            [
+              ['where', 'Where'],
+              ['group', 'Scout group'],
+              ['section', 'Section'],
+            ] as const
+          ).map(([k, label]) => (
+            <button key={k} type="button" role="tab" aria-selected={groupBy === k} onClick={() => setGroupBy(k)}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="board-search">
+          <input className="input" type="search" aria-label="Search people" placeholder="Search names or groups, even one letter" value={query} onChange={(e) => setQuery(e.target.value)} />
           {filter.kind !== 'all' && (
             <button className="filter-chip" onClick={() => setFilter({ kind: 'all' })}>
-              {filter.kind === 'activity' ? filter.name : filter.value === 'on' ? 'On site' : filter.value === 'off' ? 'Left camp' : 'Not arrived'}
+              {filter.value === 'on' ? 'On site' : filter.value === 'off' ? 'Left camp' : 'Not arrived'}
               <Icon name="close" size={14} />
             </button>
           )}
         </div>
-        <input className="input" type="search" aria-label="Search people" placeholder="Search names or groups, even one letter" value={query} onChange={(e) => setQuery(e.target.value)} />
-        <ul className="list section-gap-sm">
-          {shown.slice(0, 200).map((p) => {
-            const place = placeOf(p, tz);
-            return (
-              <li key={p.id}>
-                <Link to={`../roster/${p.id}`} relative="path" className="list-row board-row">
-                  <span className="list-main">
-                    <strong>{p.fullName}</strong>
-                    <span>
-                      {p.groupName}
-                      {p.lastSeen && ` · last scanned ${p.lastSeen.contextName} ${timeInZone(p.lastSeen.at, tz)}`}
-                    </span>
-                  </span>
-                  <span className={place.tone}>{place.label}</span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-        {shown.length === 0 && <p className="field-hint">No one matches.</p>}
-        {shown.length > 200 && <p className="field-hint">Showing the first 200. Search to narrow it down.</p>}
       </section>
+
+      {groups.length === 0 && <p className="field-hint">No one matches.</p>}
+      {groups.map((g) => {
+        const closed = collapsed.has(g.key) && !query;
+        return (
+          <section key={g.key} className="board-group">
+            <button
+              type="button"
+              className="board-group-head"
+              aria-expanded={!closed}
+              onClick={() => {
+                const next = new Set(collapsed);
+                if (next.has(g.key)) next.delete(g.key);
+                else next.add(g.key);
+                setCollapsed(next);
+              }}
+            >
+              <span className={`board-group-dot ${g.tone}`} aria-hidden="true" />
+              <span className="board-group-title">
+                <strong>{g.title}</strong>
+                {g.note && <span>{g.note}</span>}
+              </span>
+              <span className="board-group-count">{g.count}</span>
+              <span className={closed ? 'board-chevron' : 'board-chevron is-open'} aria-hidden="true">
+                <Icon name="chevron" size={18} />
+              </span>
+            </button>
+            {!closed && (
+              <ul className="list">
+                {g.people.slice(0, 150).map((p) => {
+                  const place = placeOf(p, tz);
+                  return (
+                    <li key={p.id}>
+                      <Link to={`../roster/${p.id}`} relative="path" className="list-row board-row">
+                        <span className="list-main">
+                          <strong>{p.fullName}</strong>
+                          <span>
+                            {groupBy === 'group' ? (p.kind === 'adult' ? 'Leader' : p.section) : p.groupName}
+                            {p.lastSeen && ` · ${p.lastSeen.contextName} ${timeInZone(p.lastSeen.at, tz)}`}
+                          </span>
+                        </span>
+                        {groupBy !== 'where' && <span className={place.tone}>{place.label}</span>}
+                      </Link>
+                    </li>
+                  );
+                })}
+                {g.people.length > 150 && <li className="list-row field-hint">And {g.people.length - 150} more. Search to find someone.</li>}
+              </ul>
+            )}
+          </section>
+        );
+      })}
 
       {meals.length > 0 && (
         <section className="list-section">
