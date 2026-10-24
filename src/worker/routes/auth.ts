@@ -1,6 +1,14 @@
 import { Hono } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
-import { passwordSignInSchema, setPasswordSchema, signInRequestSchema, signInVerifySchema, signUpSchema } from '../../shared/schemas';
+import {
+  passwordLinkCheckSchema,
+  passwordLinkUseSchema,
+  passwordSignInSchema,
+  setPasswordSchema,
+  signInRequestSchema,
+  signInVerifySchema,
+  signUpSchema,
+} from '../../shared/schemas';
 import type { AppContext, AppEnv } from '../context';
 import { parseBody, requireUser } from '../context';
 import { ApiError } from '../lib/errors';
@@ -10,6 +18,7 @@ import { audit, auditStatement } from '../services/audit';
 import { dummyVerify, hashPassword, passwordProblem, verifyPassword } from '../lib/passwords';
 import { EmailSendError, sendEmail } from '../services/email';
 import { SESSION_COOKIE, createSession, revokeSession } from '../services/sessions';
+import { consumePasswordLink, findPasswordLink } from '../services/passwordLinks';
 
 const CODE_TTL_MINUTES = 10;
 const MAX_ATTEMPTS = 5;
@@ -46,13 +55,17 @@ authRoutes.post('/request', async (c) => {
 });
 
 /**
- * Create an account. A new account has no access to anything until someone
- * adds it to an event. The answer is the same whether or not the email is
- * already registered (an existing account just gets a normal sign-in code),
- * so this can't be used to find out who has an account.
+ * Create an account with a password; a code is emailed to confirm the
+ * address before the first sign-in. A new account has no access to anything
+ * until someone adds it to an event. The answer is the same whether or not
+ * the email is already registered (an existing account just gets a normal
+ * sign-in code and its password is left alone), so this can't be used to
+ * find out who has an account.
  */
 authRoutes.post('/signup', async (c) => {
-  const { email, displayName } = await parseBody(c, signUpSchema);
+  const { email, displayName, password } = await parseBody(c, signUpSchema);
+  const problem = passwordProblem(password, email);
+  if (problem) throw new ApiError(400, 'weak_password', problem, [{ path: 'password', message: problem }]);
   await limitByIp(c, 'signup');
   await rateLimit(c, `email:${await sha256Hex(email)}`);
 
@@ -66,13 +79,9 @@ authRoutes.post('/signup', async (c) => {
   const id = crypto.randomUUID();
   const now = nowIso();
   await c.env.DB.batch([
-    c.env.DB.prepare(`INSERT INTO users (id, email, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`).bind(
-      id,
-      email,
-      displayName,
-      now,
-      now,
-    ),
+    c.env.DB.prepare(
+      `INSERT INTO users (id, email, display_name, password_hash, password_set_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(id, email, displayName, await hashPassword(c.env.AUTH_SECRET, password), now, now, now),
     auditStatement(c.env.DB, { actor: { type: 'public' }, action: 'user.signup', targetType: 'user', targetId: id }),
   ]);
   await emailCode(c, id, email, 'welcome');
@@ -202,9 +211,9 @@ authRoutes.post('/password/sign-in', async (c) => {
   await limitByIp(c, 'password');
   await rateLimit(c, `password:${await sha256Hex(email)}`);
 
-  const user = await c.env.DB.prepare(`SELECT id, password_hash FROM users WHERE email = ? AND status = 'active'`)
+  const user = await c.env.DB.prepare(`SELECT id, password_hash, email_verified_at FROM users WHERE email = ? AND status = 'active'`)
     .bind(email)
-    .first<{ id: string; password_hash: string | null }>();
+    .first<{ id: string; password_hash: string | null; email_verified_at: string | null }>();
   if (!user?.password_hash) {
     await dummyVerify(c.env.AUTH_SECRET, password);
     throw WRONG_PASSWORD();
@@ -213,7 +222,46 @@ authRoutes.post('/password/sign-in', async (c) => {
     await audit(c.env.DB, { actor: { type: 'public' }, action: 'auth.password_failed', targetType: 'user', targetId: user.id });
     throw WRONG_PASSWORD();
   }
+  // Right password, but the email was never confirmed (e.g. they left the
+  // sign-up page before entering the code): send a fresh code instead.
+  if (!user.email_verified_at) {
+    await emailCode(c, user.id, email, 'welcome');
+    return c.json({ ok: true, verify: true });
+  }
   await startSession(c, user.id, 'password');
+  return c.json({ ok: true });
+});
+
+/** Who a password link is for, so the page can greet them. Does not use the link up. */
+authRoutes.post('/link/check', async (c) => {
+  const { token } = await parseBody(c, passwordLinkCheckSchema);
+  await limitByIp(c, 'link');
+  const link = await findPasswordLink(c.env, token);
+  return c.json({ email: link.email, displayName: link.displayName, purpose: link.purpose });
+});
+
+/** Set a password from a setup or reset link, then sign in. Signs out every other device. */
+authRoutes.post('/link/use', async (c) => {
+  const { token, password } = await parseBody(c, passwordLinkUseSchema);
+  await limitByIp(c, 'link');
+  const link = await findPasswordLink(c.env, token);
+  const problem = passwordProblem(password, link.email);
+  if (problem) throw new ApiError(400, 'weak_password', problem, [{ path: 'password', message: problem }]);
+  await consumePasswordLink(c.env, link.linkId);
+  const now = nowIso();
+  await c.env.DB.batch([
+    // The link was sent to (or passed on by an admin for) this person.
+    c.env.DB.prepare(
+      `UPDATE users SET password_hash = ?, password_set_at = ?, email_verified_at = COALESCE(email_verified_at, ?), updated_at = ? WHERE id = ?`,
+    ).bind(await hashPassword(c.env.AUTH_SECRET, password), now, now, now, link.userId),
+    c.env.DB.prepare(`UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`).bind(now, link.userId),
+    auditStatement(c.env.DB, {
+      actor: { type: 'user', id: link.userId },
+      action: link.purpose === 'reset' ? 'auth.password_reset' : 'auth.password_set',
+      detail: { via: 'link' },
+    }),
+  ]);
+  await startSession(c, link.userId, `${link.purpose}-link`);
   return c.json({ ok: true });
 });
 

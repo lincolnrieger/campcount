@@ -18,10 +18,40 @@ function SignInFrame({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * Phones often reload the page while you fetch the code from your mail app.
+ * Remember (for this tab only, for 15 minutes) that a code is on its way, so
+ * you come back to the code box instead of the start.
+ */
+const PENDING_KEY = 'cc-code-pending';
+function savePending(email: string, reason: 'sign-in' | 'confirm') {
+  try {
+    sessionStorage.setItem(PENDING_KEY, JSON.stringify({ email, reason, at: Date.now() }));
+  } catch {
+    // Not remembered; the emailed link still works.
+  }
+}
+function loadPending(): { email: string; reason: 'sign-in' | 'confirm' } | null {
+  try {
+    const p = JSON.parse(sessionStorage.getItem(PENDING_KEY) ?? 'null') as { email: string; reason: 'sign-in' | 'confirm'; at: number } | null;
+    return p && Date.now() - p.at < 15 * 60_000 ? p : null;
+  } catch {
+    return null;
+  }
+}
+function clearPending() {
+  try {
+    sessionStorage.removeItem(PENDING_KEY);
+  } catch {
+    // Nothing to clear.
+  }
+}
+
 const message = (err: unknown) => (err instanceof ApiFailure ? err.message : 'Something went wrong. Please try again.');
 
 /** After any sign-in: people without a password are asked to set one. */
 async function afterSignIn(refresh: () => Promise<void>, navigate: ReturnType<typeof useNavigate>) {
+  clearPending();
   await refresh();
   const me = await api<Me>('/me').catch(() => null);
   navigate(me?.kind === 'user' && !me.user.hasPassword ? '/account/password?first=1' : '/', { replace: true });
@@ -30,10 +60,16 @@ async function afterSignIn(refresh: () => Promise<void>, navigate: ReturnType<ty
 export function SignIn() {
   const { refresh } = useSession();
   const navigate = useNavigate();
-  const [step, setStep] = useState<'password' | 'signup' | 'code'>(() => (window.location.pathname === '/sign-up' ? 'signup' : 'password'));
+  const [pending] = useState(loadPending);
+  const [step, setStep] = useState<'password' | 'signup' | 'code'>(() =>
+    pending ? 'code' : window.location.pathname === '/sign-up' ? 'signup' : 'password',
+  );
+  const [reason, setReason] = useState<'sign-in' | 'confirm'>(pending?.reason ?? 'sign-in');
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(pending?.email ?? '');
   const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -58,7 +94,14 @@ export function SignIn() {
   const signInWithPassword = (e: FormEvent) => {
     e.preventDefault();
     void run(async () => {
-      await api('/auth/password/sign-in', { body: { email, password } });
+      const res = await api<{ ok: true; verify?: boolean }>('/auth/password/sign-in', { body: { email, password } });
+      if (res.verify) {
+        // Right password, email not confirmed yet: a code is on its way.
+        setReason('confirm');
+        savePending(email, 'confirm');
+        setStep('code');
+        return;
+      }
       await afterSignIn(refresh, navigate);
     });
   };
@@ -70,6 +113,8 @@ export function SignIn() {
     }
     void run(async () => {
       await api('/auth/request', { body: { email } });
+      setReason('sign-in');
+      savePending(email, 'sign-in');
       setStep('code');
     });
   };
@@ -77,7 +122,9 @@ export function SignIn() {
   const signUp = (e: FormEvent) => {
     e.preventDefault();
     void run(async () => {
-      await api('/auth/signup', { body: { email, displayName: name } });
+      await api('/auth/signup', { body: { email, displayName: name, password: newPassword } });
+      setReason('confirm');
+      savePending(email, 'confirm');
       setStep('code');
     });
   };
@@ -105,7 +152,7 @@ export function SignIn() {
       {step === 'signup' ? (
         <form onSubmit={signUp} noValidate>
           <h1>Create your account</h1>
-          <p className="lede">We'll email you a code to confirm it's you. Once you're in, an event manager can add you to their camp.</p>
+          <p className="lede">Then we'll email you a code to confirm your address. Once you're in, an event manager can add you to their camp.</p>
           {error && <Notice tone="stop">{error}</Notice>}
           <Field id="name" label="Your name">
             <input id="name" className="input" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
@@ -122,8 +169,24 @@ export function SignIn() {
               onChange={(e) => setEmail(e.target.value)}
             />
           </Field>
-          <button className="btn btn-block" disabled={busy || name.trim().length < 2 || !email.includes('@')}>
-            {busy ? 'Sending…' : 'Email me a code'}
+          <Field id="signup-password" label="Choose a password" hint="At least 10 characters. A short phrase is easy to remember.">
+            <input
+              id="signup-password"
+              className="input"
+              type={showPassword ? 'text' : 'password'}
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+            />
+          </Field>
+          <label className="check check-compact">
+            <input type="checkbox" checked={showPassword} onChange={(e) => setShowPassword(e.target.checked)} />
+            <div>
+              <strong>Show password</strong>
+            </div>
+          </label>
+          <button className="btn btn-block section-gap-sm" disabled={busy || name.trim().length < 2 || !email.includes('@') || newPassword.length < 10}>
+            {busy ? 'Creating…' : 'Create account'}
           </button>
         </form>
       ) : step === 'password' ? (
@@ -166,13 +229,21 @@ export function SignIn() {
         </>
       ) : (
         <form onSubmit={verifyCode} noValidate>
-          <h1>Check your email</h1>
+          <h1>{reason === 'confirm' ? 'Confirm your email' : 'Check your email'}</h1>
           <p className="lede">
-            If <strong>{email}</strong> has a CampCount account, a 6-digit code is on its way. It expires in 10 minutes. Check your junk
-            folder too.
+            {reason === 'confirm' ? (
+              <>
+                We've sent a 6-digit code to <strong>{email}</strong>. Enter it here, or tap the link in the email. It expires in 10 minutes.
+              </>
+            ) : (
+              <>
+                If <strong>{email}</strong> has a CampCount account, a 6-digit code is on its way. It expires in 10 minutes.
+              </>
+            )}{' '}
+            Check your junk folder too.
           </p>
           {error && <Notice tone="stop">{error}</Notice>}
-          <Field id="code" label="Sign-in code">
+          <Field id="code" label={reason === 'confirm' ? 'Code' : 'Sign-in code'}>
             <input
               ref={codeInput}
               id="code"
@@ -186,13 +257,14 @@ export function SignIn() {
             />
           </Field>
           <button className="btn btn-block" disabled={busy || code.length !== 6}>
-            {busy ? 'Checking…' : 'Sign in'}
+            {busy ? 'Checking…' : reason === 'confirm' ? 'Confirm and sign in' : 'Sign in'}
           </button>
           <div className="actions">
             <button
               type="button"
               className="btn-link"
               onClick={() => {
+                clearPending();
                 setStep('password');
                 setCode('');
                 setError(null);
@@ -246,6 +318,103 @@ export function VerifyLink() {
       <div className="actions">
         <a href="/sign-in">Enter a code instead</a>
       </div>
+    </SignInFrame>
+  );
+}
+
+/**
+ * Landing page for set-up and reset links (from an admin, or an invite to an
+ * event). The token stays in the URL fragment, so it never reaches a server
+ * until the person chooses their password.
+ */
+export function PasswordLink() {
+  const { refresh } = useSession();
+  const navigate = useNavigate();
+  const [token] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get('t'));
+  const [target, setTarget] = useState<{ email: string; displayName: string; purpose: 'setup' | 'reset' } | null>(null);
+  const [password, setPassword] = useState('');
+  const [show, setShow] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fatal, setFatal] = useState<string | null>(token ? null : 'This link is incomplete. Copy the whole link from the email or message.');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!token) return;
+    api<{ email: string; displayName: string; purpose: 'setup' | 'reset' }>('/auth/link/check', { body: { token } })
+      .then(setTarget)
+      .catch((err) => setFatal(message(err)));
+  }, [token]);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api('/auth/link/use', { body: { token, password } });
+      history.replaceState(null, '', window.location.pathname);
+      clearPending();
+      await refresh();
+      navigate('/', { replace: true });
+    } catch (err) {
+      setError(message(err));
+      setBusy(false);
+    }
+  }
+
+  if (fatal) {
+    return (
+      <SignInFrame>
+        <h1>Link not working</h1>
+        <Notice tone="warn">{fatal}</Notice>
+        <div className="actions">
+          <a className="btn" href="/sign-in">
+            Go to sign in
+          </a>
+        </div>
+      </SignInFrame>
+    );
+  }
+  if (!target) {
+    return (
+      <SignInFrame>
+        <p className="lede">Checking your link…</p>
+      </SignInFrame>
+    );
+  }
+  const first = target.displayName.split(/\s+/)[0];
+  return (
+    <SignInFrame>
+      <form onSubmit={submit} noValidate>
+        <h1>{target.purpose === 'reset' ? 'Choose a new password' : `Welcome, ${first}`}</h1>
+        <p className="lede">
+          {target.purpose === 'reset'
+            ? 'This signs you out on your other devices.'
+            : 'Choose a password for your CampCount account. You will use it with your email to sign in.'}
+        </p>
+        {error && <Notice tone="stop">{error}</Notice>}
+        <Field id="link-email" label="Email address">
+          <input id="link-email" className="input" type="email" autoComplete="username" value={target.email} readOnly />
+        </Field>
+        <Field id="link-password" label="Password" hint="At least 10 characters. A short phrase is easy to remember.">
+          <input
+            id="link-password"
+            className="input"
+            type={show ? 'text' : 'password'}
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </Field>
+        <label className="check check-compact">
+          <input type="checkbox" checked={show} onChange={(e) => setShow(e.target.checked)} />
+          <div>
+            <strong>Show password</strong>
+          </div>
+        </label>
+        <button className="btn btn-block section-gap-sm" disabled={busy || password.length < 10}>
+          {busy ? 'Saving…' : 'Save password and sign in'}
+        </button>
+      </form>
     </SignInFrame>
   );
 }

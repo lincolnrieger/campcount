@@ -10,7 +10,12 @@ export const signInRequestSchema = z.strictObject({ email: emailSchema });
 export const signUpSchema = z.strictObject({
   email: emailSchema,
   displayName: trimmed(100).min(2, 'Enter your name'),
+  password: z.string().min(1).max(200),
 });
+
+/** Token from a password setup or reset link. */
+export const passwordLinkCheckSchema = z.strictObject({ token: z.string().regex(/^[A-Za-z0-9_-]{20,100}$/) });
+export const passwordLinkUseSchema = passwordLinkCheckSchema.extend({ password: z.string().min(1).max(200) });
 
 export const signInVerifySchema = z.union([
   z.strictObject({ email: emailSchema, code: z.string().trim().regex(/^\d{6}$/) }),
@@ -21,6 +26,8 @@ export const createUserSchema = z.strictObject({
   email: emailSchema,
   displayName: trimmed(100).min(1),
   platformAdmin: z.boolean().default(false),
+  /** Email them a link to set their password (it is also returned to the admin). */
+  sendEmail: z.boolean().default(true),
 });
 
 export const eventFeaturesSchema = z.strictObject({
@@ -65,12 +72,16 @@ export const eventTransitionSchema = z.strictObject({
   acknowledgeOpenItems: z.boolean().default(false),
 });
 
-export const createAssignmentSchema = z.strictObject({
-  email: emailSchema,
-  displayName: trimmed(100).min(1).optional(),
-  roleKey: z.string().regex(/^[a-z_]{2,40}$/),
-  activityId: z.uuid().optional(),
-});
+/** Add someone to an event: pick an existing account (userId) or type an email (a new account is made if needed). */
+export const createAssignmentSchema = z
+  .strictObject({
+    userId: z.uuid().optional(),
+    email: emailSchema.optional(),
+    displayName: trimmed(100).min(1).optional(),
+    roleKey: z.string().regex(/^[a-z_]{2,40}$/),
+    activityId: z.uuid().optional(),
+  })
+  .refine((v) => v.userId || v.email, { message: 'Choose a person or enter an email address.', path: ['email'] });
 
 export type CreateEventInput = z.infer<typeof createEventSchema>;
 export type EventFeatures = z.infer<typeof eventFeaturesSchema>;

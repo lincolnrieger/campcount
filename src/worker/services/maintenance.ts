@@ -19,6 +19,7 @@ const CLOSED_AT = `COALESCE(closed_at, CASE WHEN status = 'cancelled' THEN updat
 export async function runMaintenance(env: Env, now = nowIso()): Promise<{ sensitive: number; records: number }> {
   await env.DB.batch([
     env.DB.prepare(`DELETE FROM login_challenges WHERE expires_at < ?`).bind(addDays(now, -1)),
+    env.DB.prepare(`DELETE FROM password_links WHERE expires_at < ?`).bind(addDays(now, -30)),
     env.DB.prepare(`DELETE FROM sessions WHERE expires_at < ? OR revoked_at < ?`).bind(addDays(now, -1), addDays(now, -30)),
   ]);
 

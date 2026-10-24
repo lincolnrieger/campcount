@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiFailure, api } from '../api';
 import { Field, Loading, Notice } from '../components/ui';
+import { LinkShare } from '../components/LinkShare';
 import { useSession } from '../session';
 import { useApi } from '../useApi';
 import { matchesSearch } from '../../shared/search';
@@ -15,6 +16,7 @@ interface UserRow {
   platformAdmin: boolean;
   verified: boolean;
   isDemo: boolean;
+  hasPassword: boolean;
   events: number;
   lastSeen: string | null;
 }
@@ -22,7 +24,8 @@ interface UserRow {
 export function AdminUsers() {
   const { me } = useSession();
   const users = useApi<{ users: UserRow[] }>('/admin/users');
-  const [form, setForm] = useState({ email: '', displayName: '', platformAdmin: false });
+  const [form, setForm] = useState({ email: '', displayName: '', platformAdmin: false, sendEmail: true });
+  const [shared, setShared] = useState<{ userId: string; link: string; expiresAt: string; label: string } | null>(null);
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: 'ok' | 'stop'; text: string } | null>(null);
@@ -33,8 +36,9 @@ export function AdminUsers() {
     setBusy(true);
     setMessage(null);
     try {
-      await action();
-      setMessage({ tone: 'ok', text: success });
+      const result = await action();
+      const text = typeof result === 'string' ? result : success;
+      if (text) setMessage({ tone: 'ok', text });
       await users.reload();
     } catch (err) {
       setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
@@ -45,10 +49,31 @@ export function AdminUsers() {
 
   function create(e: FormEvent) {
     e.preventDefault();
+    const name = form.displayName;
     void act(async () => {
-      await api('/admin/users', { body: form });
-      setForm({ email: '', displayName: '', platformAdmin: false });
-    }, `Added ${form.displayName}. They can sign in with "Email me a sign-in code".`);
+      const res = await api<{ id: string; link: string; expiresAt: string; emailed: boolean }>('/admin/users', { body: form });
+      setForm({ email: '', displayName: '', platformAdmin: false, sendEmail: true });
+      setShared({ userId: res.id, link: res.link, expiresAt: res.expiresAt, label: `Set-up link for ${name}` });
+      setOpen(null);
+      return res.emailed
+        ? `Added ${name}. We've emailed them a link to set their password. You can also copy it below.`
+        : `Added ${name}. Send them the set-up link below so they can choose a password.`;
+    }, '');
+  }
+
+  function passwordLink(u: UserRow, sendEmail: boolean) {
+    void act(async () => {
+      const res = await api<{ link: string; expiresAt: string; purpose: 'setup' | 'reset'; emailed: boolean }>(`/admin/users/${u.id}/password-link`, {
+        body: { sendEmail },
+      });
+      if (sendEmail) {
+        setShared(null);
+        if (!res.emailed) throw new ApiFailure(503, 'email_unavailable', 'The email could not be sent. Copy the link and send it to them yourself.');
+        return `Emailed ${u.displayName} a link to ${res.purpose === 'reset' ? 'reset' : 'set'} their password.`;
+      }
+      setShared({ userId: u.id, link: res.link, expiresAt: res.expiresAt, label: `${res.purpose === 'reset' ? 'Reset' : 'Set-up'} link for ${u.displayName}` });
+      return null;
+    }, '');
   }
 
   const list = (users.data?.users ?? []).filter((u) => matchesSearch(query, u.displayName, u.email));
@@ -87,7 +112,8 @@ export function AdminUsers() {
                 <span className="people-tags">
                   {u.platformAdmin && <span className="tag tag-admin">Admin</span>}
                   {u.isDemo && <span className="tag">Demo</span>}
-                  {!u.verified && !u.isDemo && <span className="tag">Not confirmed</span>}
+                  {!u.hasPassword && !u.isDemo && u.status === 'active' && <span className="tag tag-warn">No password</span>}
+                  {u.hasPassword && !u.verified && !u.isDemo && <span className="tag">Not confirmed</span>}
                   {u.status === 'disabled' && <span className="tag tag-stop">Disabled</span>}
                 </span>
               </button>
@@ -98,6 +124,11 @@ export function AdminUsers() {
                     {u.lastSeen ? `, last active ${minutesAgo(u.lastSeen)}` : ', never signed in'}
                   </p>
                   <div className="actions flush">
+                    {!u.isDemo && u.status === 'active' && (
+                      <button className="btn btn-small" disabled={busy} onClick={() => passwordLink(u, false)}>
+                        {u.hasPassword ? 'Reset password' : 'Set-up link'}
+                      </button>
+                    )}
                     <button
                       className="btn btn-secondary btn-small"
                       disabled={busy}
@@ -156,6 +187,9 @@ export function AdminUsers() {
                       </button>
                     )}
                   </div>
+                  {shared?.userId === u.id && (
+                    <LinkShare link={shared.link} expiresAt={shared.expiresAt} label={shared.label} emailBusy={busy} onEmail={() => passwordLink(u, true)} />
+                  )}
                 </div>
               )}
             </li>
@@ -163,10 +197,16 @@ export function AdminUsers() {
         })}
       </ul>
 
+      {shared && !list.some((u) => u.id === shared.userId && open === u.id) && (
+        <div className="narrow section-gap-sm">
+          <LinkShare link={shared.link} expiresAt={shared.expiresAt} label={shared.label} />
+        </div>
+      )}
+
       <details className="section-gap narrow">
         <summary>Add someone yourself</summary>
         <form onSubmit={create} noValidate>
-          <p className="field-hint">Usually people sign up themselves, or an event manager adds them from their event's Staff page.</p>
+          <p className="field-hint">Usually people sign up themselves, or an event manager adds them from their event's Staff page. New accounts set their own password from a one-time link.</p>
           <Field id="u-name" label="Name">
             <input id="u-name" className="input" value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} />
           </Field>
@@ -178,6 +218,13 @@ export function AdminUsers() {
             <div>
               <strong>Admin</strong>
               <span>Can create events, manage everyone's accounts, use View as and read the audit log.</span>
+            </div>
+          </label>
+          <label className="check">
+            <input type="checkbox" checked={form.sendEmail} onChange={(e) => setForm({ ...form, sendEmail: e.target.checked })} />
+            <div>
+              <strong>Email them a set-up link</strong>
+              <span>They choose their own password from the link. You'll also get the link to copy.</span>
             </div>
           </label>
           <div className="actions">
