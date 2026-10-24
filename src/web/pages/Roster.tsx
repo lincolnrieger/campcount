@@ -7,6 +7,7 @@ import { Loading, Notice } from '../components/ui';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import { matchesSearch } from '../../shared/search';
+import type { RegistrationData } from './Registration';
 
 export interface Registration {
   id: string;
@@ -33,6 +34,7 @@ export function Roster() {
   const [section, setSection] = useState('');
   const [message, setMessage] = useState<{ tone: 'ok' | 'stop'; text: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const registration = useApi<RegistrationData>(can('roster.edit') ? `/events/${event.id}/registration` : null);
 
   const all = useMemo(() => data?.registrations ?? [], [data]);
   const sections = useMemo(() => [...new Set(all.map((r) => r.section))].sort(), [all]);
@@ -62,11 +64,22 @@ export function Roster() {
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
       <div className="page-head">
         <p className="lede flush">
-          {active.length} people: {active.filter((r) => r.kind === 'youth').length} youth, {active.filter((r) => r.kind === 'adult').length}{' '}
+          {active.length} {active.length === 1 ? 'person' : 'people'}: {active.filter((r) => r.kind === 'youth').length} youth, {active.filter((r) => r.kind === 'adult').length}{' '}
           adults
           {all.length > active.length && `. ${all.length - active.length} withdrawn`}
         </p>
         <div className="actions flush">
+          {can('roster.edit') && (
+            <Link className="btn" to="add">
+              Add person
+            </Link>
+          )}
+          {can('roster.edit') && (
+            <Link className="btn btn-secondary" to="registration">
+              Registration page
+              {registration.data && registration.data.counts.waiting > 0 && <span className="count-badge">{registration.data.counts.waiting}</span>}
+            </Link>
+          )}
           {can('roster.import') && (
             <Link className="btn btn-secondary" to="../import">
               Import roster
@@ -78,7 +91,7 @@ export function Roster() {
             </Link>
           )}
           {can('credentials.manage') && active.length > 0 && (
-            <Link className="btn" to="../lanyards">
+            <Link className="btn btn-secondary" to="../lanyards">
               Lanyards{withoutCard > 0 && ` (${withoutCard} to print)`}
             </Link>
           )}
@@ -90,7 +103,10 @@ export function Roster() {
           <p>
             <strong>No one on the roster yet.</strong>
           </p>
-          <p className="lede">Import the participant export from MyScout to add youth and leaders.</p>
+          <p className="lede">
+            Three ways to fill it: share the <Link to="registration">registration page</Link> so families register themselves, import the
+            MyScout participant export, or add people one at a time.
+          </p>
         </div>
       ) : (
         <>
@@ -111,7 +127,7 @@ export function Roster() {
           </div>
           <div className="section-row">
             <p className="field-hint flush">
-              {shown.length === all.length ? `${all.length} people` : `${shown.length} of ${all.length} people`}
+              {shown.length === all.length ? `${all.length} ${all.length === 1 ? 'person' : 'people'}` : `${shown.length} of ${all.length} people`}
             </p>
             {can('roster.edit') && (
               <button className="btn-link" onClick={() => setDeleting(!deleting)}>

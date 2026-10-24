@@ -11,8 +11,23 @@ to recover the system. Keep a printed copy at camp HQ.
    another **Event manager**. People can sign themselves up at `/sign-up`
    first, or are created automatically when added by email.
 2. **Turn on only the features you need** (Overview tab).
-3. **Import the roster** from MyScout (Roster tab, then Import roster). Use
-   the full participant export, including adults.
+3. **Fill the People list** (expected attendees). Three ways, which can be
+   mixed:
+   - **Registration page:** People, then Registration page, then turn on
+     *Open for registrations*. Share the link or print the QR poster.
+     Families fill in name, membership number (or "not a member"), section,
+     group, photo consent and food needs, then confirm their email with a
+     code. Several children can be registered from one email. Each
+     registration waits under *Waiting for approval* until an event manager
+     approves it (or turn on *Approve automatically*). Approved people join
+     the roster with a lanyard card and get a confirmation email. Optional:
+     a last day to register and a maximum number of people. *New link*
+     retires the old link and posters. Watch for the *Number belongs to…*
+     warning: someone typed a membership number that's on file under a
+     different name. Approving never renames the existing member.
+   - **Add person:** People, then Add person, for one-off additions.
+   - **Import** from MyScout (People tab, then Import roster). Use
+     the full participant export, including adults.
    - If dietary requirements are switched on, review each note. Record food
      needs only; leave other medical information in MyScout.
    - Re-import whenever MyScout changes. Use "mark people not in this file as
@@ -178,7 +193,8 @@ open their page.
 
 | What | Deleted |
 |---|---|
-| Dietary requirements, photo consent, card data | 90 days after the event closes |
+| Dietary requirements, photo consent, card data, registration requests (contact emails) | 90 days after the event closes |
+| Registration requests whose email was never confirmed | After 1 day |
 | Named attendance records and roster | 2 years after close (totals kept for annual reports) |
 | Sign-in codes and expired sessions | Daily |
 | Audit log | Kept 7 years |

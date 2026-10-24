@@ -20,6 +20,8 @@ export async function runMaintenance(env: Env, now = nowIso()): Promise<{ sensit
   await env.DB.batch([
     env.DB.prepare(`DELETE FROM login_challenges WHERE expires_at < ?`).bind(addDays(now, -1)),
     env.DB.prepare(`DELETE FROM password_links WHERE expires_at < ?`).bind(addDays(now, -30)),
+    // Registration requests whose email was never confirmed.
+    env.DB.prepare(`DELETE FROM registration_requests WHERE status = 'unconfirmed' AND created_at < ?`).bind(addDays(now, -1)),
     env.DB.prepare(`DELETE FROM sessions WHERE expires_at < ? OR revoked_at < ?`).bind(addDays(now, -1), addDays(now, -30)),
   ]);
 
@@ -42,6 +44,8 @@ export async function runMaintenance(env: Env, now = nowIso()): Promise<{ sensit
   for (const { id } of sensitive.results) {
     await env.DB.batch([
       env.DB.prepare(`DELETE FROM dietary_entries WHERE event_id = ?`).bind(id),
+      // Contact emails and dietary details from the registration page.
+      env.DB.prepare(`DELETE FROM registration_requests WHERE event_id = ?`).bind(id),
       env.DB.prepare(
         `UPDATE registrations SET photo_consent = 'unknown', dietary_source_hash = NULL, dietary_review_pending = 0, updated_at = ? WHERE event_id = ?`,
       ).bind(now, id),

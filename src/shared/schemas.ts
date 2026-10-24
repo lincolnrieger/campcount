@@ -140,6 +140,44 @@ export const registrationPatchSchema = z.strictObject({
 
 export const dietaryUpdateSchema = z.strictObject({ entries: z.array(dietaryEntrySchema).max(10) });
 
+// ---------------------------------------------------------------- registration
+
+/** One person, as entered on the public registration page or by an event manager. */
+export const personEntrySchema = z.strictObject({
+  firstName: trimmed(60).min(1, 'Enter a first name'),
+  preferredName: trimmed(60).default(''),
+  lastName: trimmed(60).min(1, 'Enter a last name'),
+  /** Null for people who aren't members (a guest number is made for them). */
+  memberNumber: z.string().trim().regex(/^[A-Za-z0-9-]{1,20}$/, 'Check the membership number').nullable(),
+  kind: z.enum(['youth', 'adult']),
+  section: z.enum(SECTIONS),
+  groupName: trimmed(120).default(''),
+  position: trimmed(120).default(''),
+  photoConsent: z.enum(['yes', 'no', 'unknown']),
+  dietary: z.array(dietaryEntrySchema).max(10).default([]),
+});
+export type PersonEntry = z.infer<typeof personEntrySchema>;
+
+export const publicRegistrationSchema = personEntrySchema.extend({
+  email: emailSchema,
+  /** From an earlier confirmed registration in this browser: skips the email code. */
+  contactToken: z.string().max(200).optional(),
+});
+
+export const confirmRegistrationSchema = z.strictObject({
+  requestId: z.uuid(),
+  code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code'),
+});
+
+export const registrationSettingsSchema = z.strictObject({
+  open: z.boolean().optional(),
+  autoApprove: z.boolean().optional(),
+  closesOn: isoDate.nullable().optional(),
+  limit: z.number().int().positive().max(5000).nullable().optional(),
+  /** Make a new link; the old one stops working. */
+  newLink: z.boolean().optional(),
+});
+
 export const importRequestSchema = z.strictObject({
   rows: z.array(importRowSchema).min(1).max(2000),
   withdrawMissing: z.boolean().default(false),

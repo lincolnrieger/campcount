@@ -13,6 +13,7 @@ import { rosterRoutes } from './routes/roster';
 import { pairingRoutes, scanRoutes } from './routes/scans';
 import { reportRoutes } from './routes/reports';
 import { staffRoutes } from './routes/staff';
+import { publicRegisterRoutes, registrationRoutes } from './routes/registration';
 import { runMaintenance } from './services/maintenance';
 
 export const app = new Hono<AppEnv>().basePath('/api');
@@ -39,6 +40,8 @@ app.route('/events/:eventId', rosterRoutes);
 app.route('/events/:eventId', operationsRoutes);
 app.route('/events/:eventId', scanRoutes);
 app.route('/events/:eventId', reportRoutes);
+app.route('/events/:eventId', registrationRoutes);
+app.route('/public/register', publicRegisterRoutes);
 app.route('/stations', pairingRoutes);
 
 app.notFound((c) => c.json({ error: { code: 'not_found', message: 'Not found.' } }, 404));
