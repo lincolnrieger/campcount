@@ -4,7 +4,7 @@ import { loadSnapshot, saveSnapshot } from '../offline/db';
 import type { Activity } from '../pages/Activities';
 import type { Meal } from '../pages/Meals';
 import type { EventSummary } from '../types';
-import { dayInZone, eventDays, inferDay, timeInZone } from '../../shared/time';
+import { dayInZone, eventDays, inferDay, timeInZone, timeRange } from '../../shared/time';
 
 /** One thing a volunteer can scan for: the gate, a meal or an activity. */
 export interface ScanTarget {
@@ -15,6 +15,16 @@ export interface ScanTarget {
   hint: string;
   /** Event-local day (YYYY-MM-DD), or null for "any day". */
   day: string | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+}
+
+/** Is this session happening now? (Untimed things never are; no end time means 2 hours.) */
+export function isOnNow(t: { startsAt?: string | null; endsAt?: string | null }, now = Date.now()): boolean {
+  if (!t.startsAt) return false;
+  const start = Date.parse(t.startsAt);
+  const end = t.endsAt ? Date.parse(t.endsAt) : start + 2 * 3_600_000;
+  return now >= start - 10 * 60_000 && now <= end;
 }
 
 // Kept in the device's IndexedDB store, which is wiped on sign-out.
@@ -79,6 +89,8 @@ export function buildTargets(event: EventSummary, meals: Meal[], activities: Act
         label: m.name,
         hint: [m.startsAt ? timeInZone(m.startsAt, tz) : null, m.location || null].filter(Boolean).join(', ') || 'Meal',
         day: m.startsAt ? dayInZone(m.startsAt, tz) : inferDay(m.name, days),
+        startsAt: m.startsAt,
+        endsAt: m.endsAt ?? (m.startsAt ? new Date(Date.parse(m.startsAt) + 90 * 60_000).toISOString() : null),
       });
     }
   }
@@ -89,8 +101,10 @@ export function buildTargets(event: EventSummary, meals: Meal[], activities: Act
         to: `${base}/activity/${a.id}`,
         type: 'activity',
         label: a.name,
-        hint: [a.startsAt ? timeInZone(a.startsAt, tz) : null, a.location || null].filter(Boolean).join(', ') || 'Activity',
+        hint: [a.startsAt ? timeRange(a.startsAt, a.endsAt, tz) : null, a.location || null].filter(Boolean).join(', ') || 'Runs all camp',
         day: a.startsAt ? dayInZone(a.startsAt, tz) : null,
+        startsAt: a.startsAt,
+        endsAt: a.endsAt,
       });
     }
   }

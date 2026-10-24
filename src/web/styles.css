@@ -2849,3 +2849,122 @@ li.is-muted .list-main strong {
 .activity-tile span {
   min-width: 0;
 }
+
+/* Live board groups */
+.board-search {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.board-search .filter-chip {
+  justify-self: start;
+}
+.board-group {
+  margin-bottom: var(--space-3);
+}
+.board-group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 52px;
+  padding: var(--space-2) var(--space-1);
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.board-group-title {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.board-group-title strong {
+  font-size: var(--t-md);
+}
+.board-group-title span {
+  color: var(--ink-soft);
+  font-size: var(--t-sm);
+}
+.board-group-count {
+  min-width: 2.2rem;
+  padding: 2px var(--space-2);
+  border-radius: 999px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  font-weight: 800;
+  text-align: center;
+}
+.board-chevron {
+  display: inline-flex;
+  color: var(--ink-soft);
+  transition: transform 0.15s ease;
+}
+.board-chevron.is-open {
+  transform: rotate(90deg);
+}
+.board-group-dot {
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  flex: none;
+}
+.dot-activity {
+  background: var(--gum);
+}
+.dot-on {
+  background: var(--ok);
+}
+.dot-off {
+  background: var(--warn);
+}
+.dot-never {
+  background: var(--line-strong);
+}
+.dot-group {
+  border-radius: 3px;
+  background: var(--hivis);
+}
+
+/* Activities by day, with times */
+.activity-row {
+  align-items: flex-start;
+  padding-top: var(--space-3);
+  padding-bottom: var(--space-3);
+}
+.activity-time {
+  display: grid;
+  width: 4.6rem;
+  flex: none;
+  font-size: var(--t-sm);
+}
+.activity-time span {
+  color: var(--ink-soft);
+}
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  flex-basis: 100%;
+  padding-left: calc(4.6rem + var(--space-3));
+  font-size: var(--t-sm);
+}
+.activity-row:not(:has(.activity-time)) .row-actions {
+  padding-left: 0;
+}
+.list-pad-inline {
+  padding: var(--space-4);
+}
+.session-form {
+  border-top: 1px dashed var(--rule);
+  background: #fafaf7;
+}
+.time-row {
+  grid-template-columns: repeat(2, minmax(0, 10rem));
+}
+.tag-now {
+  background: var(--ok);
+  color: #fff;
+}

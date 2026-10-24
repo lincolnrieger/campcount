@@ -18,7 +18,11 @@ to recover the system. Keep a printed copy at camp HQ.
    - Re-import whenever MyScout changes. Use "mark people not in this file as
      withdrawn" only with the complete, current export.
 4. **Add activities and meals.** Give each meal a day and time (Meals tab)
-   so scanners can pick it by day. Scanners can scan the gate and every
+   so scanners can pick it by day. Activities can run all camp, or on a
+   day with a start and end time. For an activity that runs several times,
+   add it once, then use **Add session**: it copies the activity into the
+   next time slot, which you can adjust. Each session is scanned separately,
+   and the Scan tab marks whatever is on now. Scanners can scan the gate and every
    activity; Meal team can scan every meal.
 5. **Print lanyards** (Roster tab, then Lanyards):
    - Choose lanyard size (90 × 120 mm, 4 per A4) or wallet size
@@ -51,9 +55,10 @@ to recover the system. Keep a printed copy at camp HQ.
 ## During camp
 
 - **Live tab (where is everyone):** totals for on site, left camp and not
-  arrived, who is at each activity right now, and a searchable list of
-  everyone with where they are and where they were last scanned. Tap a
-  total or an activity to filter the list. It updates every 30 seconds.
+  arrived, then everyone grouped **by where they are** (each activity with
+  its headcount, on site, left camp, not arrived), **by Scout group** or
+  **by section**. Tap a heading to fold it away, tap a total to filter, or
+  search by name or group. It updates every 30 seconds.
 - **People tab:** search anyone (one letter is enough) and tap them to see
   where they are now, every scan in order, their lanyard (Show lanyard,
   then download or replace it) and their details. Event managers can edit

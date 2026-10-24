@@ -85,14 +85,32 @@ export async function createDemoEvent(env: Env, adminUserId: string, participant
     { name: 'Archery', location: 'Range', capacity: 10, trackSignOut: 1 },
     { name: 'Climbing wall', location: 'Tower', capacity: 8, trackSignOut: 1 },
     { name: 'Campfire craft', location: 'Hall', capacity: null, trackSignOut: 0 },
-  ].map((a) => ({ ...a, id: crypto.randomUUID() }));
+  ].map((a) => ({ ...a, id: crypto.randomUUID(), startsAt: null as string | null, endsAt: null as string | null }));
+  // Sessions with set times, across the camp days.
+  const sessionDays = eventDays(today, new Date(Date.parse(today) + 2 * 86400_000).toISOString().slice(0, 10));
+  for (const [d, start, end] of [
+    [0, '13:00', '14:30'],
+    [0, '15:00', '16:30'],
+    [1, '09:00', '10:30'],
+    [1, '11:00', '12:30'],
+  ] as const) {
+    activities.push({
+      name: 'Raft building',
+      location: 'Creek',
+      capacity: 10,
+      trackSignOut: 1,
+      id: crypto.randomUUID(),
+      startsAt: zonedIso(sessionDays[d]!, start, DEMO_TZ),
+      endsAt: zonedIso(sessionDays[d]!, end, DEMO_TZ),
+    });
+  }
   for (const a of activities) {
     statements.push(
       db
         .prepare(
-          `INSERT INTO activities (id, event_id, name, location, capacity, track_sign_out, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO activities (id, event_id, name, location, capacity, track_sign_out, starts_at, ends_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .bind(a.id, eventId, a.name, a.location, a.capacity, a.trackSignOut, now, now),
+        .bind(a.id, eventId, a.name, a.location, a.capacity, a.trackSignOut, a.startsAt, a.endsAt, now, now),
     );
   }
   // Meals across the three days, timed in the event's timezone.
@@ -205,7 +223,7 @@ function demoScans(
   eventId: string,
   actorId: string,
   registrationIds: string[],
-  activities: { id: string; trackSignOut: number; capacity: number | null }[],
+  activities: { id: string; trackSignOut: number; capacity: number | null; startsAt: string | null; endsAt: string | null }[],
   meals: { id: string; startsAt: string }[],
 ): D1PreparedStatement[] {
   const nowMs = Date.now();
@@ -228,7 +246,8 @@ function demoScans(
     else here.push(id);
   }
   // Earlier sessions that have finished, then who is at each activity now.
-  const tracked = activities.filter((a) => a.trackSignOut === 1);
+  // Only all-camp activities and sessions running now have people in them.
+  const tracked = activities.filter((a) => a.trackSignOut === 1 && (!a.startsAt || (Date.parse(a.startsAt) <= nowMs && nowMs <= Date.parse(a.endsAt!))));
   const pool = [...here];
   for (const a of tracked) {
     for (let i = 0; i < 4 && pool.length; i++) {

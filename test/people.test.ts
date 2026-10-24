@@ -173,3 +173,19 @@ describe('admin activity log', () => {
     expect((await api('/admin/log', { cookie: c.manager.cookie })).status).toBe(403);
   });
 });
+
+describe('activity and meal times', () => {
+  it('keeps times and settings when an activity or meal is only cancelled', async () => {
+    const c = await camp();
+    const body = { name: 'Kayaking session 2', location: 'Lake', capacity: 12, trackSignOut: true, startsAt: '2026-12-05T11:00:00+10:30', endsAt: '2026-12-05T12:30:00+10:30' };
+    const { id } = await json(await api(`/events/${c.eventId}/activities`, { cookie: c.manager.cookie, body }));
+    await api(`/events/${c.eventId}/activities/${id}`, { cookie: c.manager.cookie, method: 'PATCH', body: { status: 'cancelled' } });
+    const a = (await json(await api(`/events/${c.eventId}/activities`, { cookie: c.manager.cookie }))).activities.find((x: { id: string }) => x.id === id);
+    expect(a).toMatchObject({ status: 'cancelled', location: 'Lake', capacity: 12, trackSignOut: true, startsAt: body.startsAt, endsAt: body.endsAt });
+
+    await api(`/events/${c.eventId}/meals/${c.mealId}`, { cookie: c.manager.cookie, method: 'PATCH', body: { startsAt: '2026-12-05T12:30:00+10:30' } });
+    await api(`/events/${c.eventId}/meals/${c.mealId}`, { cookie: c.manager.cookie, method: 'PATCH', body: { status: 'cancelled' } });
+    const m = (await json(await api(`/events/${c.eventId}/meals`, { cookie: c.manager.cookie }))).meals.find((x: { id: string }) => x.id === c.mealId);
+    expect(m).toMatchObject({ status: 'cancelled', startsAt: '2026-12-05T12:30:00+10:30' });
+  });
+});

@@ -150,28 +150,50 @@ export const importRequestSchema = z.strictObject({
 
 const isoDateTime = z.iso.datetime({ offset: true });
 
-export const activityInputSchema = z.strictObject({
+/** Activity fields without defaults, so an edit only touches what it sends. */
+const activityFields = {
   name: trimmed(80).min(1),
-  description: trimmed(1000).default(''),
-  location: trimmed(120).default(''),
-  instructions: trimmed(2000).default(''),
-  startsAt: isoDateTime.nullable().default(null),
-  endsAt: isoDateTime.nullable().default(null),
-  capacity: z.number().int().positive().max(10000).nullable().default(null),
-  capacityPolicy: z.enum(['warn', 'block']).default('warn'),
-  trackSignOut: z.boolean().default(false),
-  allowRepeat: z.boolean().default(true),
-  bookingRequired: z.boolean().default(false),
+  description: trimmed(1000),
+  location: trimmed(120),
+  instructions: trimmed(2000),
+  startsAt: isoDateTime.nullable(),
+  endsAt: isoDateTime.nullable(),
+  capacity: z.number().int().positive().max(10000).nullable(),
+  capacityPolicy: z.enum(['warn', 'block']),
+  trackSignOut: z.boolean(),
+  allowRepeat: z.boolean(),
+  bookingRequired: z.boolean(),
+};
+
+export const activityInputSchema = z.strictObject({
+  ...activityFields,
+  description: activityFields.description.default(''),
+  location: activityFields.location.default(''),
+  instructions: activityFields.instructions.default(''),
+  startsAt: activityFields.startsAt.default(null),
+  endsAt: activityFields.endsAt.default(null),
+  capacity: activityFields.capacity.default(null),
+  capacityPolicy: activityFields.capacityPolicy.default('warn'),
+  trackSignOut: activityFields.trackSignOut.default(false),
+  allowRepeat: activityFields.allowRepeat.default(true),
+  bookingRequired: activityFields.bookingRequired.default(false),
 });
-export const activityPatchSchema = activityInputSchema.partial().extend({ status: z.enum(['active', 'cancelled']).optional() });
+export const activityPatchSchema = z.strictObject(activityFields).partial().extend({ status: z.enum(['active', 'cancelled']).optional() });
+
+const mealFields = {
+  name: trimmed(80).min(1),
+  location: trimmed(120),
+  startsAt: isoDateTime.nullable(),
+  endsAt: isoDateTime.nullable(),
+};
 
 export const mealInputSchema = z.strictObject({
-  name: trimmed(80).min(1),
-  location: trimmed(120).default(''),
-  startsAt: isoDateTime.nullable().default(null),
-  endsAt: isoDateTime.nullable().default(null),
+  ...mealFields,
+  location: mealFields.location.default(''),
+  startsAt: mealFields.startsAt.default(null),
+  endsAt: mealFields.endsAt.default(null),
 });
-export const mealPatchSchema = mealInputSchema.partial().extend({ status: z.enum(['active', 'cancelled']).optional() });
+export const mealPatchSchema = z.strictObject(mealFields).partial().extend({ status: z.enum(['active', 'cancelled']).optional() });
 
 export const stationInputSchema = z.strictObject({
   name: trimmed(60).min(1),

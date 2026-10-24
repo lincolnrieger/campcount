@@ -41,6 +41,12 @@ export function timeInZone(iso: string, timeZone: string): string {
   return new Date(iso).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', timeZone });
 }
 
+/** "9:00 am to 10:30 am", "From 9:00 am", or "" when there is no set time. */
+export function timeRange(startsAt: string | null, endsAt: string | null, timeZone: string): string {
+  if (!startsAt) return '';
+  return endsAt ? `${timeInZone(startsAt, timeZone)} to ${timeInZone(endsAt, timeZone)}` : `From ${timeInZone(startsAt, timeZone)}`;
+}
+
 /** "HH:MM" of an instant in the event timezone, for time inputs. */
 export function clockInZone(iso: string, timeZone: string): string {
   return new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(iso));

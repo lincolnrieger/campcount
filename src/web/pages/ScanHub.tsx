@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Icon } from '../components/Icon';
 import { Loading, Notice } from '../components/ui';
 import type { ScanTarget } from '../scan/targets';
-import { canScan, rememberScanEvent, useLastScan, useScanEvent, useScanTargets } from '../scan/targets';
+import { canScan, isOnNow, rememberScanEvent, useLastScan, useScanEvent, useScanTargets } from '../scan/targets';
 import type { EventSummary } from '../types';
 import { useApi } from '../useApi';
 import { dayLabel, eventDays, todayInZone } from '../../shared/time';
@@ -108,7 +108,9 @@ export function ScanTargetPicker({
   };
   const gate = targets.filter((t) => t.type === 'site');
   const meals = targets.filter((t) => t.type === 'meal' && (usedDays.length < 2 || t.day === shownDay || t.day === null));
-  const activities = targets.filter((t) => t.type === 'activity' && (t.day === null || usedDays.length < 2 || t.day === shownDay));
+  const activities = targets
+    .filter((t) => t.type === 'activity' && (t.day === null || usedDays.length < 2 || t.day === shownDay))
+    .sort((a, b) => (a.startsAt ?? '').localeCompare(b.startsAt ?? '') || a.label.localeCompare(b.label));
 
   return (
     <>
@@ -144,7 +146,10 @@ function TargetList({ title, items, currentKey, onGo }: { title: string; items: 
                 <strong>{t.label}</strong>
                 <span>{t.hint}</span>
               </span>
-              {t.key === currentKey ? <span className="list-check">Scanning</span> : <Icon name="chevron" />}
+              <span className="list-side">
+                {isOnNow(t) && <span className="tag tag-now">On now</span>}
+                {t.key === currentKey ? <span className="list-check">Scanning</span> : <Icon name="chevron" />}
+              </span>
             </button>
           </li>
         ))}
