@@ -4,10 +4,19 @@ import { Link, useNavigate } from 'react-router';
 import { ApiFailure, api } from '../api';
 import { EventStatusBadge, Field, Loading, Notice, formatDateRange } from '../components/ui';
 import { useSession } from '../session';
+import { Icon } from '../components/Icon';
+import type { Me } from '../types';
 import type { EventSummary } from '../types';
 import { useApi } from '../useApi';
 import { FEATURE_COPY } from './featureCopy';
 import type { EventFeatures } from '../../shared/schemas';
+
+function greeting(me: Me | null): string {
+  const first = me?.kind === 'user' ? me.user.displayName.split(' ')[0] : '';
+  const hour = Number(new Date().toLocaleString('en-AU', { hour: 'numeric', hour12: false, timeZone: 'Australia/Adelaide' }));
+  const part = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  return first ? `${part}, ${first}` : part;
+}
 
 export function Events() {
   const { me } = useSession();
@@ -17,7 +26,10 @@ export function Events() {
   return (
     <>
       <div className="page-head">
-        <h1>Events</h1>
+        <div>
+          <h1>{greeting(me)}</h1>
+          <p className="lede flush">Your events</p>
+        </div>
         {canCreate && (
           <Link className="btn" to="/events/new">
             Create event
@@ -39,34 +51,26 @@ export function Events() {
         </div>
       )}
       {data && data.events.length > 0 && (
-        <div className="sheet-wrap">
-          <table className="sheet sheet-stack">
-            <thead>
-              <tr>
-                <th scope="col">Event</th>
-                <th scope="col">Dates</th>
-                <th scope="col">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.events.map((e) => (
-                <tr key={e.id}>
-                  <td>
-                    <Link to={`/events/${e.id}`}>
-                      <strong>{e.name}</strong>
-                    </Link>
-                    {e.isDemo && <span className="badge-demo">Demo</span>}
-                    {e.location && <div className="field-hint">{e.location}</div>}
-                  </td>
-                  <td data-label="Dates">{formatDateRange(e.startsOn, e.endsOn)}</td>
-                  <td data-label="Status">
-                    <EventStatusBadge status={e.status} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ul className="event-rows">
+          {data.events.map((e) => (
+            <li key={e.id}>
+              <Link to={`/events/${e.id}`} className="event-row">
+                <span className="event-row-main">
+                  <strong>{e.name}</strong>
+                  <span className="event-row-meta">
+                    {formatDateRange(e.startsOn, e.endsOn)}
+                    {e.location && `, ${e.location}`}
+                  </span>
+                </span>
+                <span className="event-row-side">
+                  {e.isDemo && <span className="badge-demo">Demo</span>}
+                  <EventStatusBadge status={e.status} />
+                  <Icon name="chevron" />
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
       )}
     </>
   );

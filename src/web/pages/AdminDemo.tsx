@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { ApiFailure, api } from '../api';
 import { Loading, Notice } from '../components/ui';
-import { clearDevice } from '../offline/db';
+import { Icon } from '../components/Icon';
+import { ViewAsSheet } from '../components/ViewAs';
 import { useApi } from '../useApi';
 
 interface DemoEvent {
@@ -18,6 +19,7 @@ export function AdminDemo() {
   const [size, setSize] = useState('80');
   const [message, setMessage] = useState<{ tone: 'ok' | 'stop'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [viewing, setViewing] = useState<string | null>(null);
 
   async function act(action: () => Promise<unknown>, success?: string) {
     setBusy(true);
@@ -33,23 +35,15 @@ export function AdminDemo() {
     }
   }
 
-  async function switchToAccount(account: DemoEvent['accounts'][number]) {
-    if (!window.confirm(`Switch to ${account.name}? You'll be signed out of your own account. Sign back in with your password to return.`)) return;
-    await act(async () => {
-      await clearDevice(true);
-      await api(`/admin/demo/users/${account.id}/switch`, { method: 'POST' });
-      window.location.assign('/');
-    });
-  }
-
   return (
     <>
       <div className="page-head">
         <h1>Demo mode</h1>
       </div>
       <p className="narrow">
-        Create a practice camp filled with made-up people, then try CampCount as a director, leader or volunteer. Demo camps are
-        clearly marked and can be deleted in one step. No real member data is used.
+        Create a practice camp filled with made-up people, then use View as to try it as a director, leader or volunteer. Switch
+        roles at any time from the View as button at the top of every page. Demo camps are clearly marked and can be deleted in
+        one step. No real member data is used.
       </p>
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
 
@@ -99,18 +93,12 @@ export function AdminDemo() {
               </button>
             </div>
           </div>
-          <h3>Try it as</h3>
-          <ul className="launch">
-            {e.accounts.map((a) => (
-              <li key={a.id}>
-                <button type="button" className="launch-button" disabled={busy} onClick={() => void switchToAccount(a)}>
-                  {a.role} <span>{a.activity ?? a.name}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+          <button type="button" className="btn btn-block" onClick={() => setViewing(e.id)}>
+            <Icon name="eye" /> Try it as a role
+          </button>
         </section>
       ))}
+      <ViewAsSheet open={viewing !== null} onClose={() => setViewing(null)} initialEventId={viewing ?? undefined} />
     </>
   );
 }
