@@ -3,6 +3,10 @@ import { randomInt } from '../lib/crypto';
 import { nowIso } from '../lib/time';
 import { auditStatement } from './audit';
 import { issueStatements } from './credentials';
+import { eventDays, todayInZone, weekdayName, zonedIso } from '../../shared/time';
+
+/** Demo events use the default event timezone. */
+const DEMO_TZ = 'Australia/Adelaide';
 
 /**
  * Demo data for testing CampCount end to end without real member data.
@@ -50,7 +54,7 @@ export async function createDemoEvent(env: Env, adminUserId: string, participant
   const now = nowIso();
   const tag = crypto.randomUUID().slice(0, 4).toUpperCase();
   const eventId = crypto.randomUUID();
-  const today = now.slice(0, 10);
+  const today = todayInZone(DEMO_TZ);
   const end = new Date(Date.parse(today) + 2 * 86400_000).toISOString().slice(0, 10);
   const db = env.DB;
   const statements: D1PreparedStatement[] = [];
@@ -91,11 +95,21 @@ export async function createDemoEvent(env: Env, adminUserId: string, participant
         .bind(a.id, eventId, a.name, a.location, a.capacity, a.trackSignOut, now, now),
     );
   }
-  for (const meal of ['Friday dinner', 'Saturday breakfast', 'Saturday lunch', 'Saturday dinner', 'Sunday breakfast']) {
+  // Meals across the three days, timed in the event's timezone.
+  const days = eventDays(today, end);
+  const meals: [number, string, string][] = [
+    [0, 'dinner', '18:00'],
+    [1, 'breakfast', '07:30'],
+    [1, 'lunch', '12:30'],
+    [1, 'dinner', '18:00'],
+    [2, 'breakfast', '07:30'],
+    [2, 'lunch', '12:30'],
+  ];
+  for (const [d, meal, time] of meals) {
     statements.push(
       db
-        .prepare(`INSERT INTO meal_services (id, event_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`)
-        .bind(crypto.randomUUID(), eventId, meal, now, now),
+        .prepare(`INSERT INTO meal_services (id, event_id, name, starts_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`)
+        .bind(crypto.randomUUID(), eventId, `${weekdayName(days[d]!)} ${meal}`, zonedIso(days[d]!, time, DEMO_TZ), now, now),
     );
   }
 

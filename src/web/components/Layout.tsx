@@ -38,6 +38,28 @@ function initials(name: string): string {
     .join('');
 }
 
+/** Main sections: a bottom tab bar on phones, links in the header on wider screens. */
+function TabLinks({ className, isAdmin }: { className: string; isAdmin: boolean }) {
+  const { pathname } = useLocation();
+  const scanning = pathname === '/scan' || /^\/events\/[^/]+\/scan\//.test(pathname);
+  const tabs = [
+    { to: '/', label: 'Home', icon: 'home' as const, active: !scanning && (pathname === '/' || pathname.startsWith('/events')) },
+    { to: '/scan', label: 'Scan', icon: 'scan' as const, active: scanning },
+    ...(isAdmin ? [{ to: '/admin', label: 'Admin', icon: 'admin' as const, active: pathname.startsWith('/admin') }] : []),
+    { to: '/account', label: 'You', icon: 'user' as const, active: pathname.startsWith('/account') },
+  ];
+  return (
+    <nav className={className} aria-label="Main">
+      {tabs.map((t) => (
+        <Link key={t.to} to={t.to} className={t.active ? 'is-active' : undefined} aria-current={t.active ? 'page' : undefined}>
+          <Icon name={t.icon} size={22} />
+          <span>{t.label}</span>
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
 export function Layout() {
   const { me, signOut } = useSession();
   const location = useLocation();
@@ -46,7 +68,6 @@ export function Layout() {
   const preview = me?.kind === 'user' ? me.preview : null;
   const canViewAs = me?.kind === 'user' && (me.platformPermissions.includes('platform.users.manage') || preview !== null);
   const isAdmin = me?.kind === 'user' && me.platformPermissions.includes('platform.users.manage');
-  const atHome = location.pathname === '/';
   const eventMatch = /^\/events\/([0-9a-f-]{36})/.exec(location.pathname);
 
   // New page: start at the top, like a native navigation push.
@@ -58,19 +79,11 @@ export function Layout() {
     <TitleContext.Provider value={setTitle}>
       <div className="shell">
         <header className={title ? 'topbar has-title' : 'topbar'}>
-          <Link to="/" className={atHome ? 'home-button is-current' : 'home-button'} aria-current={atHome ? 'page' : undefined}>
-            <Icon name="home" size={22} />
-            <span className="home-label">Home</span>
-          </Link>
+          {me?.kind === 'user' && <TabLinks className="topnav" isAdmin={isAdmin} />}
           <p className={title ? 'topbar-title is-shown' : 'topbar-title'} aria-hidden={!title}>
             {title}
           </p>
-          <nav className="topbar-nav" aria-label="Account">
-            {isAdmin && (
-              <Link to="/admin" className="topbar-link hide-narrow">
-                Admin
-              </Link>
-            )}
+          <div className="topbar-actions">
             {canViewAs && (
               <button type="button" className="viewas-button" onClick={() => setViewAs(true)}>
                 <Icon name="eye" size={18} />
@@ -78,7 +91,7 @@ export function Layout() {
               </button>
             )}
             {me?.kind === 'user' && (
-              <Link to="/account" className="avatar" aria-label={`Your account: ${me.user.displayName}`}>
+              <Link to="/account" className="avatar hide-phone" aria-label={`Your account: ${me.user.displayName}`}>
                 {initials(me.user.displayName)}
               </Link>
             )}
@@ -87,7 +100,7 @@ export function Layout() {
                 Unpair
               </button>
             )}
-          </nav>
+          </div>
         </header>
         {preview && (
           <div className="preview-banner" role="note">
@@ -123,6 +136,7 @@ export function Layout() {
         <main className="page" id="main">
           <Outlet />
         </main>
+        {me?.kind === 'user' && <TabLinks className="tabbar" isAdmin={isAdmin} />}
         {canViewAs && <ViewAsSheet open={viewAs} onClose={() => setViewAs(false)} initialEventId={eventMatch?.[1]} />}
       </div>
     </TitleContext.Provider>

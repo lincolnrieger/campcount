@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { ApiFailure, api } from '../api';
-import { ScanLauncher } from '../components/ScanLauncher';
+import { Link } from 'react-router';
+import { Icon } from '../components/Icon';
+import { canScan } from '../scan/targets';
 import { Exports } from './CloseOut';
 import { Notice } from '../components/ui';
 import type { EventFeatures, EventStatus } from '../../shared/schemas';
@@ -60,7 +62,16 @@ export function EventOverview() {
         </Notice>
       )}
       {event.description && <p>{event.description}</p>}
-      <ScanLauncher event={event} />
+      {canScan(event) && (
+        <Link to={`/scan?event=${event.id}`} className="scan-cta">
+          <Icon name="scan" size={28} />
+          <span>
+            <strong>Start scanning</strong>
+            <span>Gate, meals and activities</span>
+          </span>
+          <Icon name="chevron" />
+        </Link>
+      )}
       {!can('reports.view') && <Exports />}
 
       {can('event.configure') && (
