@@ -292,3 +292,56 @@ operationsRoutes.delete('/stations/:stationId', async (c) => {
   if (update!.meta.changes !== 1) throw notFound();
   return c.json({ ok: true });
 });
+
+// ---------------------------------------------------------------- deleting activities and meals
+
+/**
+ * Delete an activity or meal outright, with every scan recorded for it.
+ * Cancelling keeps the records; deleting is for mistakes and test data.
+ * Stations set up for it are stopped. The audit log keeps the name and how
+ * many scans went with it.
+ */
+async function deleteContext(c: AppContext, type: 'activity' | 'meal', id: string) {
+  const eventId = c.req.param('eventId')!;
+  requirePermission(c, type === 'activity' ? 'activities.manage' : 'meals.manage', { eventId });
+  const user = requireUser(c);
+  await requireEditable(c, eventId);
+  const table = type === 'activity' ? 'activities' : 'meal_services';
+  const row = await c.env.DB.prepare(`SELECT name FROM ${table} WHERE id = ? AND event_id = ?`).bind(id, eventId).first<{ name: string }>();
+  if (!row) throw notFound();
+  const counted = await c.env.DB.prepare(`SELECT count(*) AS n FROM scans WHERE event_id = ? AND context_type = ? AND context_id = ?`)
+    .bind(eventId, type, id)
+    .first<{ n: number }>();
+  const now = nowIso();
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE sessions SET revoked_at = ? WHERE revoked_at IS NULL AND station_id IN (SELECT id FROM stations WHERE event_id = ? AND context_type = ? AND context_id = ?)`,
+    ).bind(now, eventId, type, id),
+    c.env.DB.prepare(`UPDATE stations SET revoked_at = COALESCE(revoked_at, ?) WHERE event_id = ? AND context_type = ? AND context_id = ?`).bind(now, eventId, type, id),
+    c.env.DB.prepare(`DELETE FROM scans WHERE event_id = ? AND context_type = ? AND context_id = ?`).bind(eventId, type, id),
+    c.env.DB.prepare(`DELETE FROM ${table} WHERE id = ? AND event_id = ?`).bind(id, eventId),
+    auditStatement(c.env.DB, {
+      actor: { type: 'user', id: user.userId },
+      action: `${type}.delete`,
+      eventId,
+      targetType: type,
+      targetId: id,
+      detail: { name: row.name, scans: counted?.n ?? 0 },
+    }),
+  ]);
+  return c.json({ ok: true, scans: counted?.n ?? 0 });
+}
+
+operationsRoutes.delete('/activities/:activityId', (c) => deleteContext(c, 'activity', uuidParam(c.req.param('activityId'))));
+operationsRoutes.delete('/meals/:mealId', (c) => deleteContext(c, 'meal', uuidParam(c.req.param('mealId'))));
+
+/** How many scans an activity or meal has, so the app can warn before deleting. */
+operationsRoutes.get('/:type{activities|meals}/:id/scan-count', async (c) => {
+  const eventId = c.req.param('eventId')!;
+  const type = c.req.param('type') === 'activities' ? 'activity' : 'meal';
+  requirePermission(c, type === 'activity' ? 'activities.manage' : 'meals.manage', { eventId });
+  const row = await c.env.DB.prepare(`SELECT count(*) AS n FROM scans WHERE event_id = ? AND context_type = ? AND context_id = ?`)
+    .bind(eventId, type, uuidParam(c.req.param('id')))
+    .first<{ n: number }>();
+  return c.json({ scans: row?.n ?? 0 });
+});

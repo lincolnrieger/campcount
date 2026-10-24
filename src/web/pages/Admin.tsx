@@ -13,6 +13,11 @@ export function Admin() {
           </Link>
         </li>
         <li>
+          <Link to="/admin/log">
+            Activity log <span>Every scan and change, searchable</span>
+          </Link>
+        </li>
+        <li>
           <Link to="/admin/demo">
             Demo mode <span>Practice camps with made-up people</span>
           </Link>

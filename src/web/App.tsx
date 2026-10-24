@@ -5,6 +5,7 @@ import { Loading } from './components/ui';
 import { AdminUsers } from './pages/AdminUsers';
 import { Admin } from './pages/Admin';
 import { AdminDemo } from './pages/AdminDemo';
+import { AdminLog } from './pages/AdminLog';
 import { Account, SetPassword } from './pages/Account';
 import { EventLayout } from './pages/EventLayout';
 import { EventOverview } from './pages/EventOverview';
@@ -14,6 +15,7 @@ import { Staff } from './pages/Staff';
 import { Import } from './pages/Import';
 import { Lanyards } from './pages/Lanyards';
 import { Roster } from './pages/Roster';
+import { Person } from './pages/Person';
 import { Activities } from './pages/Activities';
 import { Meals } from './pages/Meals';
 import { Pair } from './pages/Pair';
@@ -72,6 +74,7 @@ export function App() {
           <Route index element={<EventOverview />} />
           <Route path="staff" element={<Staff />} />
           <Route path="roster" element={<Roster />} />
+          <Route path="roster/:registrationId" element={<Person />} />
           <Route path="import" element={<Import />} />
           <Route path="lanyards" element={<Lanyards />} />
           <Route path="activities" element={<Activities />} />
@@ -84,6 +87,7 @@ export function App() {
         <Route path="admin" element={<Admin />} />
         <Route path="admin/users" element={<AdminUsers />} />
         <Route path="admin/demo" element={<AdminDemo />} />
+        <Route path="admin/log" element={<AdminLog />} />
         <Route path="account" element={<Account />} />
         <Route path="account/password" element={<SetPassword />} />
         <Route path="*" element={<p>That page doesn't exist.</p>} />

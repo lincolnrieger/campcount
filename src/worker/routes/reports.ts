@@ -6,7 +6,7 @@ import { parseBody, requirePermission, requireUser } from '../context';
 import { badRequest, conflict, notFound } from '../lib/errors';
 import { nowIso } from '../lib/time';
 import { auditStatement } from '../services/audit';
-import { devices, loadEventModel, localTime, openItems, summarise, toCsv } from '../services/reports';
+import { devices, loadEventModel, localTime, openItems, summarise, toCsv, whereabouts } from '../services/reports';
 import { can } from '../services/principal';
 import type { EventRow } from './events';
 import { getEventRow } from './events';
@@ -24,7 +24,8 @@ reportRoutes.get('/live', async (c) => {
   requirePermission(c, 'reports.view', { eventId });
   const ev = await event(c, eventId);
   const model = await loadEventModel(c.env.DB, eventId, ev.feature_site === 1);
-  const items = openItems(model);
+  // People still signed in is normal during camp; only flag what needs a person to look.
+  const items = openItems(model).filter((i) => i.kind !== 'still_present');
   return c.json({
     generatedAt: nowIso(),
     timezone: ev.timezone,
@@ -32,6 +33,36 @@ reportRoutes.get('/live', async (c) => {
     openItems: items.length,
     devices: devices(model),
   });
+});
+
+/** Where everyone is right now: on or off site, which activity, and where they were last scanned. */
+reportRoutes.get('/whereabouts', async (c) => {
+  const eventId = c.req.param('eventId')!;
+  requirePermission(c, 'reports.view', { eventId });
+  const ev = await event(c, eventId);
+  const model = await loadEventModel(c.env.DB, eventId, ev.feature_site === 1);
+  const where = whereabouts(model);
+  const people = [...model.people.values()]
+    .filter((p) => p.status === 'active')
+    .map((p) => ({
+      id: p.id,
+      fullName: `${p.firstName} ${p.lastName}`,
+      groupName: p.groupName,
+      section: p.section,
+      kind: p.kind,
+      ...where.get(p.id)!,
+    }))
+    .sort((a, b) => a.fullName.localeCompare(b.fullName));
+  const activities = model.contexts
+    .filter((ctx) => ctx.type === 'activity' && ctx.status === 'active')
+    .map((ctx) => ({
+      key: ctx.key,
+      name: ctx.name,
+      capacity: ctx.capacity,
+      trackSignOut: ctx.rules.type === 'activity' && ctx.rules.trackSignOut,
+      presentNow: model.replays.get(ctx.key)!.presentNow,
+    }));
+  return c.json({ generatedAt: nowIso(), timezone: ev.timezone, siteTracked: ev.feature_site === 1, people, activities });
 });
 
 reportRoutes.get('/reconciliation', async (c) => {

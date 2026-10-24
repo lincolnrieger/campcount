@@ -4,6 +4,7 @@ import { ApiFailure, api } from '../api';
 import { Field, Loading, Notice } from '../components/ui';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
+import { deleteContext } from '../confirmDelete';
 import { clockInZone, dayInZone, dayLabel, eventDays, inferDay, timeInZone, weekdayName, zonedIso } from '../../shared/time';
 
 export interface Meal {
@@ -107,6 +108,18 @@ export function Meals() {
                       <button className="btn-link" onClick={() => void patch(m.id, { status: m.status === 'active' ? 'cancelled' : 'active' })}>
                         {m.status === 'active' ? 'Cancel' : 'Restore'}
                         <span className="visually-hidden"> {m.name}</span>
+                      </button>
+                      <button
+                        className="btn-link text-stop"
+                        onClick={async () => {
+                          try {
+                            if (await deleteContext(event.id, 'meals', m.id, m.name)) await reload();
+                          } catch (err) {
+                            setFailure(err instanceof ApiFailure ? err.message : 'Something went wrong.');
+                          }
+                        }}
+                      >
+                        Delete<span className="visually-hidden"> {m.name}</span>
                       </button>
                     </span>
                   )}

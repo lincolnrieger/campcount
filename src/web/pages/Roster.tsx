@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import type { DietaryEntryInput } from '../../shared/schemas';
 import { ApiFailure, api } from '../api';
-import { describeEntry } from '../components/DietaryEditor';
+import { Icon } from '../components/Icon';
 import { Loading, Notice } from '../components/ui';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
@@ -32,6 +32,7 @@ export function Roster() {
   const [query, setQuery] = useState('');
   const [section, setSection] = useState('');
   const [message, setMessage] = useState<{ tone: 'ok' | 'stop'; text: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const all = useMemo(() => data?.registrations ?? [], [data]);
   const sections = useMemo(() => [...new Set(all.map((r) => r.section))].sort(), [all]);
@@ -42,11 +43,11 @@ export function Roster() {
   const active = all.filter((r) => r.status === 'active');
   const withoutCard = active.filter((r) => !r.shortCode).length;
 
-  async function replaceCard(r: Registration) {
-    if (!window.confirm(`Replace ${r.displayName}'s lanyard? Their current card stops working immediately.`)) return;
+  async function remove(r: Registration, name: string) {
+    if (!window.confirm(`Delete ${name} from ${event.name}? Their card, dietary details and scans are deleted too. This can't be undone. To keep the records, withdraw them instead (open their page).`)) return;
     try {
-      await api(`/events/${event.id}/credentials/issue`, { body: { mode: 'replace', registrationIds: [r.id] } });
-      setMessage({ tone: 'ok', text: `New card issued for ${r.displayName}. Print it from Lanyards.` });
+      await api(`/events/${event.id}/registrations/${r.id}`, { method: 'DELETE' });
+      setMessage({ tone: 'ok', text: `Deleted ${name}.` });
       await reload();
     } catch (err) {
       setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
@@ -108,57 +109,50 @@ export function Roster() {
               </select>
             </div>
           </div>
-          <div className="sheet-wrap">
-            <table className="sheet sheet-stack">
-              <thead>
-                <tr>
-                  <th scope="col">Name</th>
-                  <th scope="col">Group</th>
-                  <th scope="col">Card</th>
-                  {event.features.photo && all[0]?.photoConsent !== undefined && <th scope="col">Photos</th>}
-                  {all[0]?.dietary !== undefined && <th scope="col">Dietary</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map((r) => (
-                  <tr key={r.id} className={r.status === 'withdrawn' ? 'is-muted' : undefined}>
-                    <td>
-                      <strong>
-                        {r.preferredName || r.firstName} {r.lastName}
-                      </strong>
-                      <div className="field-hint">
-                        {r.memberNumber}, {r.kind === 'adult' ? r.position || 'Adult' : r.section}
-                        {r.status === 'withdrawn' && ', withdrawn'}
-                      </div>
-                    </td>
-                    <td className="cell-plain">{r.groupName}</td>
-                    <td data-label="Card" className="cell-inline">
-                      {r.shortCode ?? <span className="field-hint">Not issued</span>}
-                      {r.shortCode && can('credentials.manage') && r.status === 'active' && (
-                        <button className="btn-link field-hint cell-action" onClick={() => void replaceCard(r)}>
-                          Replace<span className="visually-hidden"> card for {r.displayName}</span>
-                        </button>
-                      )}
-                    </td>
-                    {event.features.photo && r.photoConsent !== undefined && (
-                      <td className={r.photoConsent === 'yes' ? 'cell-plain hide-narrow' : 'cell-plain'}>
-                        {r.photoConsent === 'yes' ? 'Photos OK' : <strong className="text-stop">{r.photoConsent === 'no' ? 'No photos' : 'Photo consent not recorded'}</strong>}
-                      </td>
-                    )}
-                    {r.dietary !== undefined && (
-                      <td className="cell-plain">
-                        {r.dietary.map((d, i) => (
-                          <div key={i} className={d.category === 'allergy' ? 'text-stop' : undefined}>
-                            {describeEntry(d)}
-                          </div>
-                        ))}
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="section-row">
+            <p className="field-hint flush">
+              {shown.length === all.length ? `${all.length} people` : `${shown.length} of ${all.length} people`}
+            </p>
+            {can('roster.edit') && (
+              <button className="btn-link" onClick={() => setDeleting(!deleting)}>
+                {deleting ? 'Done' : 'Delete people'}
+              </button>
+            )}
           </div>
+          <ul className="list people-roster">
+            {shown.map((r) => {
+              const name = `${r.preferredName || r.firstName} ${r.lastName}`;
+              const allergy = r.dietary?.some((d) => d.category === 'allergy');
+              return (
+                <li key={r.id} className={r.status === 'withdrawn' ? 'is-muted' : undefined}>
+                  <div className="list-row roster-row">
+                    <Link to={r.id} className="roster-link">
+                      <span className="list-main">
+                        <strong>{name}</strong>
+                        <span>
+                          {r.groupName}
+                          {r.groupName && ', '}
+                          {r.kind === 'adult' ? r.position || 'Leader' : r.section}
+                          {r.shortCode ? `, card ${r.shortCode}` : ', no card'}
+                        </span>
+                      </span>
+                      <span className="list-side">
+                        {r.status === 'withdrawn' && <span className="tag">Withdrawn</span>}
+                        {event.features.photo && r.photoConsent === 'no' && <span className="tag tag-stop">No photos</span>}
+                        {allergy && <span className="tag tag-stop">Allergy</span>}
+                        {!deleting && <Icon name="chevron" />}
+                      </span>
+                    </Link>
+                    {deleting && (
+                      <button className="btn btn-danger btn-small" onClick={() => void remove(r, name)}>
+                        Delete<span className="visually-hidden"> {name}</span>
+                      </button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         </>
       )}
     </>

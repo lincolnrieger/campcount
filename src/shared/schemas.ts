@@ -124,6 +124,22 @@ export const importRowSchema = z.strictObject({
 });
 export type ImportRow = z.infer<typeof importRowSchema>;
 
+/** Editing one person on an event (People page). Only the fields an import would bring in. */
+export const registrationPatchSchema = z.strictObject({
+  memberNumber: importRowSchema.shape.memberNumber.optional(),
+  firstName: importRowSchema.shape.firstName.optional(),
+  preferredName: trimmed(60).optional(),
+  lastName: importRowSchema.shape.lastName.optional(),
+  kind: z.enum(['youth', 'adult']).optional(),
+  section: z.enum(SECTIONS).optional(),
+  groupName: trimmed(120).optional(),
+  position: trimmed(120).optional(),
+  photoConsent: z.enum(['yes', 'no', 'unknown']).optional(),
+  status: z.enum(['active', 'withdrawn']).optional(),
+});
+
+export const dietaryUpdateSchema = z.strictObject({ entries: z.array(dietaryEntrySchema).max(10) });
+
 export const importRequestSchema = z.strictObject({
   rows: z.array(importRowSchema).min(1).max(2000),
   withdrawMissing: z.boolean().default(false),
