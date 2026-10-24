@@ -8,6 +8,7 @@ import { nowIso } from '../lib/time';
 import { getCookie } from 'hono/cookie';
 import { auditStatement } from '../services/audit';
 import { createDemoEvent, deleteDemoEvent } from '../services/demo';
+import { deleteAccount, isLastAdmin } from '../services/accounts';
 import { SESSION_COOKIE } from '../services/sessions';
 import { sha256Hex } from '../lib/crypto';
 import { can } from '../services/principal';
@@ -18,10 +19,12 @@ export const adminRoutes = new Hono<AppEnv>();
 adminRoutes.get('/users', async (c) => {
   requirePermission(c, 'platform.users.manage');
   const { results } = await c.env.DB.prepare(
-    `SELECT u.id, u.email, u.display_name, u.status, u.created_at,
-            EXISTS (SELECT 1 FROM assignments a WHERE a.user_id = u.id AND a.role_id = 'role_platform_admin' AND a.revoked_at IS NULL) AS is_admin
-       FROM users u ORDER BY u.display_name`,
-  ).all<{ id: string; email: string; display_name: string; status: string; created_at: string; is_admin: number }>();
+    `SELECT u.id, u.email, u.display_name, u.status, u.created_at, u.email_verified_at, u.is_demo,
+            EXISTS (SELECT 1 FROM assignments a WHERE a.user_id = u.id AND a.role_id = 'role_platform_admin' AND a.revoked_at IS NULL) AS is_admin,
+            (SELECT count(DISTINCT a.event_id) FROM assignments a WHERE a.user_id = u.id AND a.revoked_at IS NULL AND a.event_id IS NOT NULL) AS events,
+            (SELECT max(s.last_seen_at) FROM sessions s WHERE s.user_id = u.id) AS last_seen
+       FROM users u WHERE u.email NOT LIKE '%@deleted.invalid' ORDER BY u.display_name COLLATE NOCASE`,
+  ).all<{ id: string; email: string; display_name: string; status: string; created_at: string; email_verified_at: string | null; is_demo: number; is_admin: number; events: number; last_seen: string | null }>();
   return c.json({
     users: results.map((u) => ({
       id: u.id,
@@ -30,6 +33,10 @@ adminRoutes.get('/users', async (c) => {
       status: u.status,
       platformAdmin: u.is_admin === 1,
       createdAt: u.created_at,
+      verified: u.email_verified_at !== null,
+      isDemo: u.is_demo === 1,
+      events: u.events,
+      lastSeen: u.last_seen,
     })),
   });
 });
@@ -95,6 +102,75 @@ adminRoutes.post('/users/:userId/status', async (c) => {
   const [update] = await c.env.DB.batch(statements);
   if (update!.meta.changes !== 1) throw notFound();
   return c.json({ ok: true });
+});
+
+const userPatchSchema = z.strictObject({
+  displayName: z.string().trim().min(1).max(100).optional(),
+  platformAdmin: z.boolean().optional(),
+});
+
+adminRoutes.patch('/users/:userId', async (c) => {
+  requirePermission(c, 'platform.users.manage');
+  const actor = requireUser(c);
+  const userId = c.req.param('userId');
+  const input = await parseBody(c, userPatchSchema);
+  const target = await c.env.DB.prepare(`SELECT id FROM users WHERE id = ?`).bind(userId).first();
+  if (!target) throw notFound();
+  const now = nowIso();
+  const statements: D1PreparedStatement[] = [];
+  if (input.displayName !== undefined) {
+    statements.push(
+      c.env.DB.prepare(`UPDATE users SET display_name = ?, updated_at = ? WHERE id = ?`).bind(input.displayName, now, userId),
+      auditStatement(c.env.DB, { actor: { type: 'user', id: actor.userId }, action: 'user.rename', targetType: 'user', targetId: userId }),
+    );
+  }
+  if (input.platformAdmin === true) {
+    statements.push(
+      c.env.DB.prepare(
+        `INSERT INTO assignments (id, user_id, role_id, created_by, created_at)
+         SELECT ?, ?, 'role_platform_admin', ?, ?
+          WHERE NOT EXISTS (SELECT 1 FROM assignments WHERE user_id = ? AND role_id = 'role_platform_admin' AND revoked_at IS NULL)`,
+      ).bind(crypto.randomUUID(), userId, actor.userId, now, userId),
+      auditStatement(c.env.DB, {
+        onlyIfChanged: true,
+        actor: { type: 'user', id: actor.userId },
+        action: 'assignment.grant',
+        targetType: 'user',
+        targetId: userId,
+        detail: { role: 'platform_admin' },
+      }),
+    );
+  }
+  if (input.platformAdmin === false) {
+    if (userId === actor.userId) throw conflict('You cannot remove your own admin access.');
+    statements.push(
+      c.env.DB.prepare(
+        `UPDATE assignments SET revoked_at = ?, revoked_by = ? WHERE user_id = ? AND role_id = 'role_platform_admin' AND revoked_at IS NULL`,
+      ).bind(now, actor.userId, userId),
+      auditStatement(c.env.DB, {
+        onlyIfChanged: true,
+        actor: { type: 'user', id: actor.userId },
+        action: 'assignment.revoke',
+        targetType: 'user',
+        targetId: userId,
+        detail: { role: 'platform_admin' },
+      }),
+    );
+  }
+  if (statements.length) await c.env.DB.batch(statements);
+  return c.json({ ok: true });
+});
+
+adminRoutes.delete('/users/:userId', async (c) => {
+  requirePermission(c, 'platform.users.manage');
+  const actor = requireUser(c);
+  const userId = c.req.param('userId');
+  if (userId === actor.userId) throw conflict('To delete your own account, use the Account page.');
+  const target = await c.env.DB.prepare(`SELECT id FROM users WHERE id = ?`).bind(userId).first();
+  if (!target) throw notFound();
+  if (await isLastAdmin(c.env, userId)) throw conflict('This is the only admin. Make someone else an admin first.');
+  const result = await deleteAccount(c.env, userId, { type: 'user', id: actor.userId });
+  return c.json({ result });
 });
 
 const auditQuery = z.object({
@@ -180,8 +256,7 @@ adminRoutes.get('/preview/options', async (c) => {
   ).all<{ id: string; name: string; event_id: string }>();
   const { results: roles } = await c.env.DB.prepare(
     `SELECT key, name, description, scope FROM roles WHERE scope <> 'platform' ORDER BY CASE key
-       WHEN 'camp_director' THEN 1 WHEN 'event_manager' THEN 2 WHEN 'activity_leader' THEN 3
-       WHEN 'meal_leader' THEN 4 WHEN 'gate_volunteer' THEN 5 ELSE 9 END, name`,
+       WHEN 'event_manager' THEN 1 WHEN 'scanner' THEN 2 WHEN 'meal_leader' THEN 3 ELSE 9 END, name`,
   ).all();
   return c.json({
     events: events.map((e) => ({

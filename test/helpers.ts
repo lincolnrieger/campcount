@@ -84,3 +84,13 @@ export async function api(path: string, opts: CallOptions = {}): Promise<Respons
 export async function json<T = any>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
+
+/** A custom role for testing permission edges that the built-in roles don't isolate. */
+export async function createRole(key: string, permissions: string[], scope: 'event' | 'activity' = 'event') {
+  await testEnv.DB.prepare(`INSERT OR IGNORE INTO roles (id, key, name, scope, created_at) VALUES (?, ?, ?, ?, ?)`)
+    .bind(`role_${key}`, key, key, scope, new Date().toISOString())
+    .run();
+  for (const p of permissions) {
+    await testEnv.DB.prepare(`INSERT OR IGNORE INTO role_permissions (role_id, permission) VALUES (?, ?)`).bind(`role_${key}`, p).run();
+  }
+}

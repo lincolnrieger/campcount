@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { hashToken } from '../src/worker/services/credentials';
-import { api, createEvent, createUser, grant, json, testEnv } from './helpers';
+import { api, createEvent, createRole, createUser, grant, json, testEnv } from './helpers';
 
 const row = (memberNumber: string, overrides: Record<string, unknown> = {}) => ({
   memberNumber,
@@ -25,7 +25,7 @@ async function setup(features: { dietary?: boolean } = { dietary: true }) {
   const eventId = await createEvent(admin.id);
   await testEnv.DB.prepare(`UPDATE events SET feature_dietary = ? WHERE id = ?`).bind(features.dietary ? 1 : 0, eventId).run();
   const director = await createUser();
-  await grant(director.id, 'camp_director', eventId);
+  await grant(director.id, 'event_manager', eventId);
   return { admin, eventId, director };
 }
 
@@ -116,8 +116,9 @@ describe('roster import', () => {
 
   it('only people with dietary.edit can submit dietary entries', async () => {
     const { eventId } = await setup();
+    await createRole('roster_clerk', ['event.view', 'roster.view', 'roster.import']);
     const manager = await createUser();
-    await grant(manager.id, 'event_manager', eventId);
+    await grant(manager.id, 'roster_clerk', eventId);
     const withDietary = row('6001', { dietaryFingerprint: FP(3), dietary: [] });
     expect((await api(`/events/${eventId}/import/commit`, { cookie: manager.cookie, body: { rows: [withDietary] } })).status).toBe(403);
     // But they can import the roster; dietary stays pending for the director.
@@ -136,19 +137,24 @@ describe('roster import', () => {
 });
 
 describe('roster visibility', () => {
-  it('hides dietary detail from event managers and the roster from volunteers', async () => {
+  it('shows dietary detail only with dietary.view_detail, and no roster to scanners or the meal team', async () => {
     const { eventId, director } = await setup();
     await api(`/events/${eventId}/import/commit`, {
       cookie: director.cookie,
       body: { rows: [row('8001', { dietaryFingerprint: FP(5), dietary: [{ category: 'preference', item: 'Vegetarian', severity: 'standard', note: '' }] })] },
     });
-    const manager = await createUser();
-    await grant(manager.id, 'event_manager', eventId);
-    const { registrations } = await json(await api(`/events/${eventId}/registrations`, { cookie: manager.cookie }));
+    await createRole('roster_viewer', ['event.view', 'roster.view', 'photo.view_status']);
+    const clerk = await createUser();
+    await grant(clerk.id, 'roster_viewer', eventId);
+    const { registrations } = await json(await api(`/events/${eventId}/registrations`, { cookie: clerk.cookie }));
     expect(registrations[0]).not.toHaveProperty('dietary');
     expect(registrations[0]).toHaveProperty('photoConsent');
+    const manager = await createUser();
+    await grant(manager.id, 'event_manager', eventId);
+    const full = await json(await api(`/events/${eventId}/registrations`, { cookie: manager.cookie }));
+    expect(full.registrations[0].dietary).toHaveLength(1);
 
-    for (const role of ['activity_leader', 'gate_volunteer', 'meal_leader']) {
+    for (const role of ['scanner', 'meal_leader']) {
       const volunteer = await createUser();
       await grant(volunteer.id, role, eventId);
       expect((await api(`/events/${eventId}/registrations`, { cookie: volunteer.cookie })).status).toBe(403);
@@ -202,7 +208,7 @@ describe('credentials', () => {
   it('printing is restricted and audited', async () => {
     const { eventId, director } = await setup();
     const gate = await createUser();
-    await grant(gate.id, 'gate_volunteer', eventId);
+    await grant(gate.id, 'scanner', eventId);
     expect((await api(`/events/${eventId}/credentials/print`, { cookie: gate.cookie, body: {} })).status).toBe(403);
     await api(`/events/${eventId}/credentials/print`, { cookie: director.cookie, body: {} });
     const audit = await testEnv.DB.prepare(`SELECT count(*) AS n FROM audit_log WHERE event_id = ? AND action = 'credentials.print'`)

@@ -16,7 +16,7 @@ describe('demo mode', () => {
 
     const demo = await json(await api('/admin/demo', { cookie: admin.cookie }));
     const accounts = demo.events.find((e: any) => e.id === eventId).accounts;
-    expect(accounts.map((a: any) => a.role).sort()).toEqual(['Activity Leader', 'Camp Director', 'Event Manager', 'Gate Volunteer', 'Meal Leader']);
+    expect(accounts.map((a: any) => a.role).sort()).toEqual(['Event manager', 'Meal team', 'Scanner']);
     const emails = await testEnv.DB.prepare(`SELECT email FROM users WHERE is_demo = 1`).all<{ email: string }>();
     expect(emails.results.every((u) => u.email.endsWith('@demo.invalid'))).toBe(true);
   });
@@ -24,7 +24,7 @@ describe('demo mode', () => {
   it('is not available to non-admins', async () => {
     const admin = await createUser({ platformAdmin: true });
     const director = await createUser();
-    await grant(director.id, 'camp_director', await createEvent(admin.id));
+    await grant(director.id, 'event_manager', await createEvent(admin.id));
     expect((await api('/admin/demo', { cookie: director.cookie, body: { participants: 10 } })).status).toBe(403);
   });
 

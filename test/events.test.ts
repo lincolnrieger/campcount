@@ -36,7 +36,7 @@ describe('events', () => {
     const e1 = await createEvent(admin.id, { name: 'Mine' });
     const e2 = await createEvent(admin.id, { name: 'Not mine' });
     const director = await createUser();
-    await grant(director.id, 'camp_director', e1);
+    await grant(director.id, 'event_manager', e1);
 
     const { events } = await json(await api('/events', { cookie: director.cookie }));
     const ids = events.map((e: { id: string }) => e.id);
@@ -48,7 +48,7 @@ describe('events', () => {
     const admin = await createUser({ platformAdmin: true });
     const other = await createEvent(admin.id);
     const director = await createUser();
-    await grant(director.id, 'camp_director', await createEvent(admin.id));
+    await grant(director.id, 'event_manager', await createEvent(admin.id));
 
     expect((await api(`/events/${other}`, { cookie: director.cookie })).status).toBe(404);
     expect((await api(`/events/${crypto.randomUUID()}`, { cookie: director.cookie })).status).toBe(404);
@@ -59,14 +59,15 @@ describe('events', () => {
     const admin = await createUser({ platformAdmin: true });
     const eventId = await createEvent(admin.id);
     const director = await createUser();
-    const manager = await createUser();
-    await grant(director.id, 'camp_director', eventId);
-    await grant(manager.id, 'event_manager', eventId);
+    const scanner = await createUser();
+    await grant(director.id, 'event_manager', eventId);
+    await grant(scanner.id, 'scanner', eventId);
     const go = (cookie: string, to: string) => api(`/events/${eventId}/transition`, { cookie, body: { to } });
 
     expect((await go(director.cookie, 'completed')).status).toBe(409); // draft -> completed not allowed
-    expect((await go(manager.cookie, 'open')).status).toBe(200); // managers can publish
-    expect((await go(manager.cookie, 'completed')).status).toBe(403); // but not close out
+    expect((await go(scanner.cookie, 'open')).status).toBe(403); // scanners can't publish
+    expect((await go(director.cookie, 'open')).status).toBe(200);
+    expect((await go(scanner.cookie, 'completed')).status).toBe(403); // or close out
     expect((await go(director.cookie, 'completed')).status).toBe(200);
     expect((await go(director.cookie, 'archived')).status).toBe(403); // archiving is a platform decision
     expect((await go(admin.cookie, 'archived')).status).toBe(200);
@@ -81,7 +82,7 @@ describe('events', () => {
     const admin = await createUser({ platformAdmin: true });
     const eventId = await createEvent(admin.id, { status: 'completed' });
     const director = await createUser();
-    await grant(director.id, 'camp_director', eventId);
+    await grant(director.id, 'event_manager', eventId);
     const res = await api(`/events/${eventId}`, { cookie: director.cookie, method: 'PATCH', body: { name: 'New' } });
     expect(res.status).toBe(409);
   });
@@ -90,7 +91,7 @@ describe('events', () => {
     const admin = await createUser({ platformAdmin: true });
     const eventId = await createEvent(admin.id);
     const director = await createUser();
-    await grant(director.id, 'camp_director', eventId);
+    await grant(director.id, 'event_manager', eventId);
     const res = await api(`/events/${eventId}`, {
       cookie: director.cookie,
       method: 'PATCH',
@@ -105,7 +106,7 @@ describe('events', () => {
     const eventId = await createEvent(admin.id);
     const activityId = await createActivity(eventId);
     const leader = await createUser();
-    await grant(leader.id, 'activity_leader', eventId, activityId);
+    await grant(leader.id, 'scanner', eventId, activityId);
     const res = await api(`/events/${eventId}`, { cookie: leader.cookie });
     expect(res.status).toBe(200);
     const { event } = await json(res);

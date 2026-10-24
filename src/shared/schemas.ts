@@ -7,6 +7,11 @@ export const emailSchema = z.string().trim().toLowerCase().pipe(z.email().max(25
 
 export const signInRequestSchema = z.strictObject({ email: emailSchema });
 
+export const signUpSchema = z.strictObject({
+  email: emailSchema,
+  displayName: trimmed(100).min(2, 'Enter your name'),
+});
+
 export const signInVerifySchema = z.union([
   z.strictObject({ email: emailSchema, code: z.string().trim().regex(/^\d{6}$/) }),
   z.strictObject({ token: z.string().regex(/^[A-Za-z0-9_-]{20,64}$/) }),

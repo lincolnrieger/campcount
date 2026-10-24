@@ -35,7 +35,7 @@ async function camp(): Promise<Camp> {
   const eventId = await createEvent(admin.id);
   await testEnv.DB.prepare(`UPDATE events SET feature_dietary = 1, feature_meals = 1, feature_site = 1 WHERE id = ?`).bind(eventId).run();
   const director = await createUser();
-  await grant(director.id, 'camp_director', eventId);
+  await grant(director.id, 'event_manager', eventId);
   const rows = [
     person('100', { dietaryFingerprint: 'a'.repeat(64), dietary: [{ category: 'allergy', item: 'Peanut', severity: 'anaphylactic', note: '' }] }),
     person('200', { photoConsent: 'no' }),
@@ -85,7 +85,7 @@ const upload = (eventId: string, cookie: string, scans: unknown[]) =>
 describe('scan snapshot', () => {
   it('contains hashes and display fields only, never tokens, codes or dietary detail outside meals', async () => {
     const c = await camp();
-    const leader = await staff(c.eventId, 'activity_leader', c.activityId);
+    const leader = await staff(c.eventId, 'scanner', c.activityId);
     const res = await api(`/events/${c.eventId}/scan/activity/${c.activityId}/snapshot`, { cookie: leader.cookie });
     expect(res.status).toBe(200);
     const text = await res.text();
@@ -106,13 +106,13 @@ describe('scan snapshot', () => {
     expect(snap.people.find((p: any) => p.memberNumber === '100').dietaryAlert).toBe('Allergy: Peanut (anaphylactic)');
     // Meal leaders are not given photo markers (they don't hold photo.view_status).
     expect(snap.people.find((p: any) => p.memberNumber === '200')).not.toHaveProperty('noPhotos');
-    const gate = await staff(c.eventId, 'gate_volunteer');
+    const gate = await staff(c.eventId, 'scanner');
     expect((await api(`/events/${c.eventId}/scan/meal/${c.mealId}/snapshot`, { cookie: gate.cookie })).status).toBe(403);
   });
 
   it('confines activity leaders to their own activity', async () => {
     const c = await camp();
-    const leader = await staff(c.eventId, 'activity_leader', c.activityId);
+    const leader = await staff(c.eventId, 'scanner', c.activityId);
     expect((await api(`/events/${c.eventId}/scan/activity/${c.otherActivityId}/snapshot`, { cookie: leader.cookie })).status).toBe(403);
     expect((await api(`/events/${c.eventId}/scan/meal/${c.mealId}/snapshot`, { cookie: leader.cookie })).status).toBe(403);
     const { activities } = await json(await api(`/events/${c.eventId}/activities`, { cookie: leader.cookie }));
@@ -122,7 +122,7 @@ describe('scan snapshot', () => {
   it('refuses scanning while the event is a draft', async () => {
     const admin = await createUser({ platformAdmin: true });
     const eventId = await createEvent(admin.id);
-    const gate = await staff(eventId, 'gate_volunteer');
+    const gate = await staff(eventId, 'scanner');
     expect((await api(`/events/${eventId}/scan/site/snapshot`, { cookie: gate.cookie })).status).toBe(409);
   });
 });
@@ -171,7 +171,7 @@ describe('scan upload', () => {
   it('rejects unknown, foreign-event and replaced cards', async () => {
     const c = await camp();
     const other = await camp();
-    const leader = await staff(c.eventId, 'activity_leader', c.activityId);
+    const leader = await staff(c.eventId, 'scanner', c.activityId);
     const ctx = { contextType: 'activity', contextId: c.activityId };
 
     const unknown = await scanItem(ctx, 'x'.repeat(22));
@@ -191,7 +191,7 @@ describe('scan upload', () => {
 
   it('accepts typed backup codes', async () => {
     const c = await camp();
-    const gate = await staff(c.eventId, 'gate_volunteer');
+    const gate = await staff(c.eventId, 'scanner');
     const code = c.cards[0]!.shortCode.toLowerCase();
     const item = {
       ...(await scanItem({ contextType: 'site', contextId: null }, 'unused')),
@@ -205,7 +205,7 @@ describe('scan upload', () => {
 
   it('blocks scans into contexts the user may not scan, writing nothing', async () => {
     const c = await camp();
-    const leader = await staff(c.eventId, 'activity_leader', c.activityId);
+    const leader = await staff(c.eventId, 'scanner', c.activityId);
     const res = await upload(c.eventId, leader.cookie, [
       await scanItem({ contextType: 'activity', contextId: c.activityId }, c.cards[0]!.token),
       await scanItem({ contextType: 'activity', contextId: c.otherActivityId }, c.cards[0]!.token),
@@ -222,7 +222,7 @@ describe('scan upload', () => {
 describe('corrections', () => {
   it('directors can void a scan with a reason; leaders cannot; history is kept', async () => {
     const c = await camp();
-    const leader = await staff(c.eventId, 'activity_leader', c.activityId);
+    const leader = await staff(c.eventId, 'scanner', c.activityId);
     const ctx = { contextType: 'activity', contextId: c.activityId };
     const s = await scanItem(ctx, c.cards[0]!.token);
     await upload(c.eventId, leader.cookie, [s]);
@@ -275,5 +275,27 @@ describe('stations', () => {
     );
     const cookie = (await api('/stations/pair', { body: { code: created.pairingCode } })).headers.get('Set-Cookie')!.split(';')[0]!;
     expect((await api(`/events/${c.eventId}/scan/meal/${dinner.id}/snapshot`, { cookie })).status).toBe(403);
+  });
+});
+
+describe('meal team view', () => {
+  it('lists who has and has not eaten, for the meal team only', async () => {
+    const c = await camp();
+    const meal = await staff(c.eventId, 'meal_leader');
+    await upload(c.eventId, meal.cookie, [await scanItem({ contextType: 'meal', contextId: c.mealId }, c.cards[0]!.token)]);
+    const res = await json(await api(`/events/${c.eventId}/meals/${c.mealId}/served`, { cookie: meal.cookie }));
+    expect(res.people).toHaveLength(3);
+    const served = res.people.filter((p: any) => p.servedAt);
+    expect(served.map((p: any) => p.id)).toEqual([c.cards[0]!.registrationId]);
+    expect(served[0].name).toMatch(/^First\d+ Person$/);
+    const scanner = await staff(c.eventId, 'scanner');
+    expect((await api(`/events/${c.eventId}/meals/${c.mealId}/served`, { cookie: scanner.cookie })).status).toBe(403);
+  });
+
+  it('gives scanners full names to search by', async () => {
+    const c = await camp();
+    const scanner = await staff(c.eventId, 'scanner');
+    const snap = await json(await api(`/events/${c.eventId}/scan/site/snapshot`, { cookie: scanner.cookie }));
+    expect(snap.people[0].fullName).toMatch(/^First\d+ Person$/);
   });
 });
