@@ -1,7 +1,15 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { isEditable } from '../../shared/lifecycle';
-import { activityInputSchema, activityPatchSchema, mealInputSchema, mealPatchSchema, stationInputSchema } from '../../shared/schemas';
+import {
+  activityInputSchema,
+  activityPatchSchema,
+  mealInputSchema,
+  mealPatchSchema,
+  stationInputSchema,
+  stationPatchSchema,
+  stationReopenSchema,
+} from '../../shared/schemas';
 import type { AppContext, AppEnv } from '../context';
 import { parseBody, requirePermission, requirePrincipal, requireUser } from '../context';
 import { badRequest, conflict, notFound } from '../lib/errors';
@@ -45,6 +53,7 @@ function activityDto(r: Record<string, unknown>) {
     allowRepeat: r.allow_repeat === 1,
     bookingRequired: r.booking_required === 1,
     signupOpen: r.signup_open === 1,
+    booked: (r.booked as number | undefined) ?? 0,
     status: r.status,
   };
 }
@@ -53,7 +62,8 @@ operationsRoutes.get('/activities', async (c) => {
   const eventId = c.req.param('eventId')!;
   const principal = requirePermission(c, 'event.view', { eventId });
   const { results } = await c.env.DB.prepare(
-    `SELECT * FROM activities WHERE event_id = ? ORDER BY starts_at IS NULL, starts_at, name COLLATE NOCASE`,
+    `SELECT a.*, (SELECT count(*) FROM activity_bookings b WHERE b.activity_id = a.id) AS booked
+       FROM activities a WHERE a.event_id = ? ORDER BY a.starts_at IS NULL, a.starts_at, a.name COLLATE NOCASE`,
   )
     .bind(eventId)
     .all<Record<string, unknown>>();
@@ -75,6 +85,7 @@ const ACTIVITY_COLUMNS: Record<string, string> = {
   trackSignOut: 'track_sign_out',
   allowRepeat: 'allow_repeat',
   bookingRequired: 'booking_required',
+  signupOpen: 'signup_open',
   status: 'status',
 };
 
@@ -216,6 +227,7 @@ operationsRoutes.get('/stations', async (c) => {
       id: s.id,
       name: s.name,
       contextType: s.context_type,
+      contextId: s.context_id,
       contextName: s.context_name,
       state: s.revoked_at
         ? 'revoked'
@@ -291,6 +303,69 @@ operationsRoutes.delete('/stations/:stationId', async (c) => {
   ]);
   if (update!.meta.changes !== 1) throw notFound();
   return c.json({ ok: true });
+});
+
+/** Rename a station or change what it scans. A paired device switches on its next refresh. */
+operationsRoutes.patch('/stations/:stationId', async (c) => {
+  const eventId = c.req.param('eventId')!;
+  const stationId = uuidParam(c.req.param('stationId'));
+  requirePermission(c, 'stations.manage', { eventId });
+  const user = requireUser(c);
+  const input = await parseBody(c, stationPatchSchema);
+  const station = await c.env.DB.prepare(`SELECT context_type, context_id FROM stations WHERE id = ? AND event_id = ?`)
+    .bind(stationId, eventId)
+    .first<{ context_type: 'activity' | 'meal' | 'site'; context_id: string | null }>();
+  if (!station) throw notFound();
+  const contextType = input.contextType ?? station.context_type;
+  const contextId = input.contextType !== undefined ? (input.contextId ?? null) : station.context_id;
+  if ((contextType === 'site') !== (contextId === null)) throw badRequest('Choose what this station scans.');
+  if (input.contextType !== undefined) await loadContext(c.env.DB, eventId, contextType, contextId);
+  await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE stations SET name = COALESCE(?, name), context_type = ?, context_id = ? WHERE id = ? AND event_id = ?`).bind(
+      input.name ?? null,
+      contextType,
+      contextId,
+      stationId,
+      eventId,
+    ),
+    auditStatement(c.env.DB, {
+      actor: { type: 'user', id: user.userId },
+      action: 'station.update',
+      eventId,
+      targetType: 'station',
+      targetId: stationId,
+      detail: { fields: Object.keys(input).join(',') },
+    }),
+  ]);
+  return c.json({ ok: true });
+});
+
+/**
+ * Reopen a stopped or expired station (or one whose pairing code ran out):
+ * it gets a fresh pairing code and a new time limit. Any device still using
+ * it is signed out and pairs again.
+ */
+operationsRoutes.post('/stations/:stationId/reopen', async (c) => {
+  const eventId = c.req.param('eventId')!;
+  const stationId = uuidParam(c.req.param('stationId'));
+  requirePermission(c, 'stations.manage', { eventId });
+  const user = requireUser(c);
+  const { hours } = await parseBody(c, stationReopenSchema);
+  const event = await getEventRow(c.env.DB, eventId);
+  if (!event) throw notFound();
+  if (event.status !== 'open') throw conflict('Open the event before reopening stations.');
+  const code = randomShortCode();
+  const now = nowIso();
+  const [update] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE stations SET revoked_at = NULL, paired_at = NULL, pairing_code_hash = ?, pairing_expires_at = ?, expires_at = ?
+        WHERE id = ? AND event_id = ?`,
+    ).bind(await sha256Hex(`pair:${code}`), addMinutes(now, PAIRING_MINUTES), addMinutes(now, hours * 60), stationId, eventId),
+    c.env.DB.prepare(`UPDATE sessions SET revoked_at = ? WHERE station_id = ? AND revoked_at IS NULL`).bind(now, stationId),
+    auditStatement(c.env.DB, { actor: { type: 'user', id: user.userId }, action: 'station.reopen', eventId, targetType: 'station', targetId: stationId, detail: { hours } }),
+  ]);
+  if (update!.meta.changes !== 1) throw notFound();
+  return c.json({ pairingCode: code, pairingExpiresAt: addMinutes(now, PAIRING_MINUTES) });
 });
 
 // ---------------------------------------------------------------- deleting activities and meals

@@ -158,26 +158,6 @@ export const personEntrySchema = z.strictObject({
 });
 export type PersonEntry = z.infer<typeof personEntrySchema>;
 
-export const publicRegistrationSchema = personEntrySchema.extend({
-  email: emailSchema,
-  /** From an earlier confirmed registration in this browser: skips the email code. */
-  contactToken: z.string().max(200).optional(),
-});
-
-export const confirmRegistrationSchema = z.strictObject({
-  requestId: z.uuid(),
-  code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code'),
-});
-
-export const registrationSettingsSchema = z.strictObject({
-  open: z.boolean().optional(),
-  autoApprove: z.boolean().optional(),
-  closesOn: isoDate.nullable().optional(),
-  limit: z.number().int().positive().max(5000).nullable().optional(),
-  /** Make a new link; the old one stops working. */
-  newLink: z.boolean().optional(),
-});
-
 export const importRequestSchema = z.strictObject({
   rows: z.array(importRowSchema).min(1).max(2000),
   withdrawMissing: z.boolean().default(false),
@@ -201,6 +181,8 @@ const activityFields = {
   trackSignOut: z.boolean(),
   allowRepeat: z.boolean(),
   bookingRequired: z.boolean(),
+  /** People can book this session themselves at the sign-up screen. */
+  signupOpen: z.boolean(),
 };
 
 export const activityInputSchema = z.strictObject({
@@ -215,6 +197,7 @@ export const activityInputSchema = z.strictObject({
   trackSignOut: activityFields.trackSignOut.default(false),
   allowRepeat: activityFields.allowRepeat.default(true),
   bookingRequired: activityFields.bookingRequired.default(false),
+  signupOpen: activityFields.signupOpen.default(false),
 });
 export const activityPatchSchema = z.strictObject(activityFields).partial().extend({ status: z.enum(['active', 'cancelled']).optional() });
 
@@ -239,6 +222,14 @@ export const stationInputSchema = z.strictObject({
   contextId: z.uuid().nullable(),
   hours: z.number().int().min(1).max(168).default(24),
 });
+
+export const stationPatchSchema = z.strictObject({
+  name: trimmed(60).min(1).optional(),
+  contextType: z.enum(['activity', 'meal', 'site']).optional(),
+  contextId: z.uuid().nullable().optional(),
+});
+
+export const stationReopenSchema = z.strictObject({ hours: z.number().int().min(1).max(168).default(12) });
 
 const hex64 = z.string().regex(/^[0-9a-f]{64}$/);
 

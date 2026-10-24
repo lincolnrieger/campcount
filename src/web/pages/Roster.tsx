@@ -7,7 +7,6 @@ import { Loading, Notice } from '../components/ui';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import { matchesSearch } from '../../shared/search';
-import type { RegistrationData } from './Registration';
 
 export interface Registration {
   id: string;
@@ -34,7 +33,6 @@ export function Roster() {
   const [section, setSection] = useState('');
   const [message, setMessage] = useState<{ tone: 'ok' | 'stop'; text: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const registration = useApi<RegistrationData>(can('roster.edit') ? `/events/${event.id}/registration` : null);
 
   const all = useMemo(() => data?.registrations ?? [], [data]);
   const sections = useMemo(() => [...new Set(all.map((r) => r.section))].sort(), [all]);
@@ -74,12 +72,6 @@ export function Roster() {
               Add person
             </Link>
           )}
-          {can('roster.edit') && (
-            <Link className="btn btn-secondary" to="registration">
-              Registration page
-              {registration.data && registration.data.counts.waiting > 0 && <span className="count-badge">{registration.data.counts.waiting}</span>}
-            </Link>
-          )}
           {can('roster.import') && (
             <Link className="btn btn-secondary" to="../import">
               Import roster
@@ -103,10 +95,7 @@ export function Roster() {
           <p>
             <strong>No one on the roster yet.</strong>
           </p>
-          <p className="lede">
-            Three ways to fill it: share the <Link to="registration">registration page</Link> so families register themselves, import the
-            MyScout participant export, or add people one at a time.
-          </p>
+          <p className="lede">Import the MyScout participant export, or add people one at a time with Add person.</p>
         </div>
       ) : (
         <>

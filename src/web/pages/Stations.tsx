@@ -13,6 +13,7 @@ interface Station {
   id: string;
   name: string;
   contextType: string;
+  contextId: string | null;
   contextName: string;
   state: 'waiting' | 'active' | 'expired' | 'revoked' | 'pairing_expired';
   expiresAt: string;
@@ -34,6 +35,18 @@ export function Stations() {
   const [form, setForm] = useState({ name: '', context: '', hours: '12' });
   const [pairing, setPairing] = useState<{ name: string; code: string } | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [reopenHours, setReopenHours] = useState('12');
+
+  async function act(action: () => Promise<unknown>) {
+    try {
+      await action();
+      setFailure(null);
+      await stations.reload();
+    } catch (err) {
+      setFailure(err instanceof ApiFailure ? err.message : 'Something went wrong.');
+    }
+  }
 
   const options = [
     ...(event.features.site ? [{ value: 'site:', label: 'On site (arrivals and departures)' }] : []),
@@ -81,50 +94,84 @@ export function Stations() {
         </div>
       )}
       {stations.loading && !stations.data && <Loading />}
+      {failure && !pairing && <Notice tone="stop">{failure}</Notice>}
       {stations.data && stations.data.stations.length > 0 && (
-        <div className="sheet-wrap">
-          <table className="sheet sheet-stack">
-            <thead>
-              <tr>
-                <th scope="col">Station</th>
-                <th scope="col">Scans</th>
-                <th scope="col">Status</th>
-                <th scope="col">
-                  <span className="visually-hidden">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {stations.data.stations.map((s) => (
-                <tr key={s.id}>
-                  <td>
-                    <strong>{s.name}</strong>
-                  </td>
-                  <td data-label="Scans">{s.contextName}</td>
-                  <td data-label="Status">{STATE_LABEL[s.state]}</td>
-                  <td className="num">
-                    {(s.state === 'active' || s.state === 'waiting') && (
-                      <button
-                        className="btn-link"
-                        onClick={async () => {
-                          if (!window.confirm(`Stop "${s.name}"? It will be signed out immediately.`)) return;
-                          await api(`/events/${event.id}/stations/${s.id}`, { method: 'DELETE' });
-                          await stations.reload();
-                        }}
-                      >
-                        Stop<span className="visually-hidden"> {s.name}</span>
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <section className="list-section">
+          <h2 className="list-heading">Stations</h2>
+          <ul className="list">
+            {stations.data.stations.map((s) => {
+              const live = s.state === 'active' || s.state === 'waiting';
+              return (
+                <li key={s.id}>
+                  {editing === s.id ? (
+                    <StationEdit
+                      station={s}
+                      options={options}
+                      onCancel={() => setEditing(null)}
+                      onSave={(body) =>
+                        void act(async () => {
+                          await api(`/events/${event.id}/stations/${s.id}`, { method: 'PATCH', body });
+                          setEditing(null);
+                        })
+                      }
+                    />
+                  ) : (
+                    <div className="list-row station-row">
+                      <span className="list-main">
+                        <strong>{s.name}</strong>
+                        <span>Scans {s.contextName}</span>
+                      </span>
+                      <span className={`tag ${s.state === 'active' ? 'tag-now' : s.state === 'waiting' ? 'tag-warn' : ''}`}>{STATE_LABEL[s.state]}</span>
+                      <span className="row-actions">
+                        <button className="btn-link" onClick={() => setEditing(s.id)}>
+                          Edit<span className="visually-hidden"> {s.name}</span>
+                        </button>
+                        {live ? (
+                          <button
+                            className="btn-link"
+                            onClick={() => {
+                              if (window.confirm(`Stop "${s.name}"? It will be signed out immediately. You can reopen it later.`))
+                                void act(() => api(`/events/${event.id}/stations/${s.id}`, { method: 'DELETE' }));
+                            }}
+                          >
+                            Stop<span className="visually-hidden"> {s.name}</span>
+                          </button>
+                        ) : (
+                          <span className="reopen">
+                            <button
+                              className="btn-link"
+                              onClick={() =>
+                                void act(async () => {
+                                  const res = await api<{ pairingCode: string }>(`/events/${event.id}/stations/${s.id}/reopen`, {
+                                    body: { hours: Number(reopenHours) },
+                                  });
+                                  setPairing({ name: s.name, code: res.pairingCode });
+                                  window.scrollTo(0, 0);
+                                })
+                              }
+                            >
+                              Reopen<span className="visually-hidden"> {s.name}</span>
+                            </button>
+                            <select className="input input-compact" aria-label={`How long ${s.name} works for`} value={reopenHours} onChange={(e) => setReopenHours(e.target.value)}>
+                              {[4, 12, 24, 48, 72].map((h) => (
+                                <option key={h} value={h}>
+                                  for {h} hours
+                                </option>
+                              ))}
+                            </select>
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       )}
       <form onSubmit={create} className="narrow section-gap" noValidate>
         <h2>Set up a station</h2>
-        {failure && <Notice tone="stop">{failure}</Notice>}
         <Field id="st-name" label="Name" hint="So you can tell devices apart, for example Meal hall tablet">
           <input id="st-name" className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </Field>
@@ -152,5 +199,53 @@ export function Stations() {
         </button>
       </form>
     </>
+  );
+}
+
+function StationEdit({
+  station,
+  options,
+  onSave,
+  onCancel,
+}: {
+  station: Station;
+  options: { value: string; label: string }[];
+  onSave: (body: object) => void;
+  onCancel: () => void;
+}) {
+  const current = `${station.contextType}:${station.contextId ?? ''}`;
+  const [name, setName] = useState(station.name);
+  const [context, setContext] = useState(current);
+  return (
+    <form
+      className="list-pad-inline"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const [contextType, contextId] = context.split(':');
+        onSave({ name, ...(context !== current ? { contextType, contextId: contextId || null } : {}) });
+      }}
+    >
+      <Field id={`st-${station.id}-name`} label="Name">
+        <input id={`st-${station.id}-name`} className="input" value={name} onChange={(e) => setName(e.target.value)} />
+      </Field>
+      <Field id={`st-${station.id}-ctx`} label="What it scans" hint="A paired device switches over the next time it opens CampCount.">
+        <select id={`st-${station.id}-ctx`} className="input" value={context} onChange={(e) => setContext(e.target.value)}>
+          {!options.some((o) => o.value === current) && <option value={current}>{station.contextName}</option>}
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <div className="actions flush-top">
+        <button className="btn btn-small" disabled={!name.trim()}>
+          Save
+        </button>
+        <button type="button" className="btn btn-secondary btn-small" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </form>
   );
 }

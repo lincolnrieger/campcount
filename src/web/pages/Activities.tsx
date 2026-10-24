@@ -5,6 +5,8 @@ import { Field, Loading, Notice } from '../components/ui';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import { deleteContext } from '../confirmDelete';
+import { matchesSearch } from '../../shared/search';
+import type { Registration } from './Roster';
 import { clockInZone, dayInZone, dayLabel, eventDays, timeInZone, zonedIso } from '../../shared/time';
 
 export interface Activity {
@@ -20,6 +22,8 @@ export interface Activity {
   trackSignOut: boolean;
   allowRepeat: boolean;
   bookingRequired: boolean;
+  signupOpen: boolean;
+  booked: number;
   status: 'active' | 'cancelled';
 }
 
@@ -31,6 +35,8 @@ interface FormState {
   capacityPolicy: 'warn' | 'block';
   trackSignOut: boolean;
   allowRepeat: boolean;
+  signupOpen: boolean;
+  bookingRequired: boolean;
   day: string; // '' = any time
   start: string;
   end: string;
@@ -44,6 +50,8 @@ const EMPTY: FormState = {
   capacityPolicy: 'warn',
   trackSignOut: true,
   allowRepeat: true,
+  signupOpen: false,
+  bookingRequired: false,
   day: '',
   start: '09:00',
   end: '10:30',
@@ -64,6 +72,8 @@ function toForm(a: Activity, tz: string): FormState {
     capacityPolicy: a.capacityPolicy,
     trackSignOut: a.trackSignOut,
     allowRepeat: a.allowRepeat,
+    signupOpen: a.signupOpen,
+    bookingRequired: a.bookingRequired,
     day: a.startsAt ? dayInZone(a.startsAt, tz) : '',
     start: a.startsAt ? clockInZone(a.startsAt, tz) : EMPTY.start,
     end: a.endsAt ? clockInZone(a.endsAt, tz) : a.startsAt ? addMinutes(clockInZone(a.startsAt, tz), 90) : EMPTY.end,
@@ -113,6 +123,8 @@ function ActivityForm({
         capacityPolicy: form.capacityPolicy,
         trackSignOut: form.trackSignOut,
         allowRepeat: form.allowRepeat,
+        signupOpen: form.signupOpen,
+        bookingRequired: form.bookingRequired,
         startsAt: timed ? zonedIso(form.day, form.start, event.timezone) : null,
         endsAt: timed && form.end ? zonedIso(form.day, form.end, event.timezone) : null,
       });
@@ -201,6 +213,24 @@ function ActivityForm({
           <span>If off, a second visit is flagged as already done.</span>
         </div>
       </label>
+      {event.features.selfSignup && (
+        <>
+          <label className="check">
+            <input type="checkbox" checked={form.signupOpen} onChange={(e) => setForm({ ...form, signupOpen: e.target.checked })} />
+            <div>
+              <strong>People can sign up</strong>
+              <span>Shows on the sign-up screen and session posters. The capacity is the number of places.</span>
+            </div>
+          </label>
+          <label className="check">
+            <input type="checkbox" checked={form.bookingRequired} onChange={(e) => setForm({ ...form, bookingRequired: e.target.checked })} />
+            <div>
+              <strong>Check bookings at the scanner</strong>
+              <span>The leader sees a warning when someone who hasn't signed up is scanned in.</span>
+            </div>
+          </label>
+        </>
+      )}
       {form.capacity && (
         <label className="check">
           <input
@@ -309,6 +339,7 @@ export function Activities() {
                             a.trackSignOut ? 'In and out' : 'Sign-in only',
                             a.capacity ? `${a.capacityPolicy === 'block' ? 'max' : 'aim for'} ${a.capacity}` : null,
                             a.allowRepeat ? null : 'once each',
+                            a.signupOpen ? `${a.booked}${a.capacity ? ` of ${a.capacity}` : ''} signed up` : a.booked ? `${a.booked} booked` : null,
                           ]
                             .filter(Boolean)
                             .join(', ')}
@@ -322,6 +353,11 @@ export function Activities() {
                           <button className="btn-link" onClick={() => setOpen(`copy:${a.id}`)}>
                             Add session<span className="visually-hidden"> of {a.name}</span>
                           </button>
+                          {(a.signupOpen || a.booked > 0) && (
+                            <button className="btn-link" aria-expanded={open === `bookings:${a.id}`} onClick={() => setOpen(open === `bookings:${a.id}` ? null : `bookings:${a.id}`)}>
+                              Bookings<span className="visually-hidden"> for {a.name}</span>
+                            </button>
+                          )}
                           <button className="btn-link" onClick={() => void patch(a, { status: a.status === 'active' ? 'cancelled' : 'active' })}>
                             {a.status === 'active' ? 'Cancel' : 'Restore'}
                             <span className="visually-hidden"> {a.name}</span>
@@ -342,6 +378,7 @@ export function Activities() {
                       )}
                     </div>
                   )}
+                  {open === `bookings:${a.id}` && <Bookings activity={a} onChange={() => void reload()} />}
                   {open === `copy:${a.id}` && (
                     <div className="list-pad-inline session-form">
                       <p className="field-legend">Another session of {a.name}</p>
@@ -379,5 +416,70 @@ export function Activities() {
         </section>
       )}
     </>
+  );
+}
+
+/** Who's booked on a session; the event team can add or remove people (the place limit doesn't apply to them). */
+function Bookings({ activity, onChange }: { activity: Activity; onChange: () => void }) {
+  const { event } = useEvent();
+  const path = `/events/${event.id}/activities/${activity.id}/bookings`;
+  const list = useApi<{ bookings: { registrationId: string; name: string; groupName: string; source: string }[] }>(path);
+  const roster = useApi<{ registrations: Registration[] }>(`/events/${event.id}/registrations`);
+  const [q, setQ] = useState('');
+  const [failure, setFailure] = useState<string | null>(null);
+  const bookedIds = new Set(list.data?.bookings.map((b) => b.registrationId));
+  const matches = q.trim()
+    ? (roster.data?.registrations ?? [])
+        .filter((r) => r.status === 'active' && !bookedIds.has(r.id) && matchesSearch(q, `${r.preferredName || r.firstName} ${r.lastName}`, r.memberNumber))
+        .slice(0, 6)
+    : [];
+
+  async function change(action: () => Promise<unknown>) {
+    try {
+      await action();
+      setFailure(null);
+      setQ('');
+      await list.reload();
+      onChange();
+    } catch (err) {
+      setFailure(err instanceof ApiFailure ? err.message : 'Something went wrong.');
+    }
+  }
+
+  return (
+    <div className="list-pad-inline bookings">
+      {failure && <Notice tone="stop">{failure}</Notice>}
+      {list.loading && !list.data && <Loading />}
+      {list.data && list.data.bookings.length === 0 && <p className="field-hint">No one has signed up yet.</p>}
+      {list.data && list.data.bookings.length > 0 && (
+        <ul className="booking-list">
+          {list.data.bookings.map((b) => (
+            <li key={b.registrationId}>
+              <span>
+                <strong>{b.name}</strong> <span className="field-hint">{b.groupName}{b.source === 'manual' ? ', added by leaders' : ''}</span>
+              </span>
+              <button className="btn-link text-stop" onClick={() => void change(() => api(`${path}/${b.registrationId}`, { method: 'DELETE' }))}>
+                Remove<span className="visually-hidden"> {b.name}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <input className="input input-compact" type="search" placeholder="Add someone: type a name" aria-label={`Add someone to ${activity.name}`} value={q} onChange={(e) => setQ(e.target.value)} />
+      {matches.length > 0 && (
+        <ul className="booking-list">
+          {matches.map((r) => (
+            <li key={r.id}>
+              <span>
+                <strong>{`${r.preferredName || r.firstName} ${r.lastName}`}</strong> <span className="field-hint">{r.groupName}</span>
+              </span>
+              <button className="btn-link" onClick={() => void change(() => api(path, { body: { registrationId: r.id } }))}>
+                Add<span className="visually-hidden"> {r.firstName}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
