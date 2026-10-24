@@ -3317,3 +3317,24 @@ li.is-muted .list-main strong {
     width: 120mm;
   }
 }
+
+/* Activity roster (leaders) */
+.activity-roster {
+  max-width: 44rem;
+}
+.roster-person {
+  flex-wrap: wrap;
+}
+.roster-person .row-actions {
+  flex-basis: auto;
+  padding-left: 0;
+  align-items: center;
+}
+.roster-flag {
+  margin-left: var(--space-2);
+  vertical-align: middle;
+}
+.tile small {
+  font-size: var(--t-sm);
+  color: var(--ink-soft);
+}

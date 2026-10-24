@@ -3,12 +3,14 @@ import { z } from 'zod';
 import { normaliseShortCode } from '../../shared/credentials';
 import { displayName } from '../../shared/names';
 import type { AppContext, AppEnv } from '../context';
-import { parseBody, requirePermission, requireUser } from '../context';
+import { parseBody, requirePermission, requirePrincipal, requireUser } from '../context';
 import { ApiError, conflict, notFound } from '../lib/errors';
 import { hmacHex, randomToken, timingSafeEqualHex } from '../lib/crypto';
 import { nowIso } from '../lib/time';
 import { auditStatement } from '../services/audit';
 import { hashToken } from '../services/credentials';
+import { contextState, loadContext } from '../services/contexts';
+import { can } from '../services/principal';
 
 /**
  * Activity sign-up. People book activity sessions themselves:
@@ -323,10 +325,16 @@ signupRoutes.post('/signup/new-link', async (c) => {
   return c.json({ ok: true });
 });
 
+/** Event managers, or the activity's own leaders. */
+function requireBookings(c: AppContext, eventId: string, activityId: string) {
+  if (can(requirePrincipal(c), 'activities.manage', { eventId })) return;
+  requirePermission(c, 'activity.bookings', { eventId, activityId });
+}
+
 /** Who is booked on an activity session. */
 signupRoutes.get('/activities/:activityId/bookings', async (c) => {
   const eventId = c.req.param('eventId')!;
-  requirePermission(c, 'activities.manage', { eventId });
+  requireBookings(c, eventId, c.req.param('activityId'));
   const { results } = await c.env.DB.prepare(
     `SELECT b.registration_id, b.source, b.created_at, p.first_name, p.preferred_name, p.last_name, r.group_name
        FROM activity_bookings b JOIN registrations r ON r.id = b.registration_id JOIN people p ON p.id = r.person_id
@@ -348,7 +356,7 @@ signupRoutes.get('/activities/:activityId/bookings', async (c) => {
 /** The event team books someone (ignores the capacity limit) or removes a booking. */
 signupRoutes.post('/activities/:activityId/bookings', async (c) => {
   const eventId = c.req.param('eventId')!;
-  requirePermission(c, 'activities.manage', { eventId });
+  requireBookings(c, eventId, c.req.param('activityId'));
   const user = requireUser(c);
   const { registrationId } = await parseBody(c, z.strictObject({ registrationId: z.uuid() }));
   const activityId = c.req.param('activityId');
@@ -370,7 +378,7 @@ signupRoutes.post('/activities/:activityId/bookings', async (c) => {
 
 signupRoutes.delete('/activities/:activityId/bookings/:registrationId', async (c) => {
   const eventId = c.req.param('eventId')!;
-  requirePermission(c, 'activities.manage', { eventId });
+  requireBookings(c, eventId, c.req.param('activityId'));
   const user = requireUser(c);
   const registrationId = c.req.param('registrationId');
   const activityId = c.req.param('activityId');
@@ -388,4 +396,69 @@ signupRoutes.delete('/activities/:activityId/bookings/:registrationId', async (c
   ]);
   if (res!.meta.changes !== 1) throw notFound();
   return c.json({ ok: true });
+});
+
+/**
+ * An activity's roster for its leaders: everyone booked or scanned in, with
+ * whether they're here now, plus the event roster (names only) for adding
+ * walk-ins. Check-ins themselves go through the normal scan upload.
+ */
+signupRoutes.get('/activities/:activityId/attendance', async (c) => {
+  const eventId = c.req.param('eventId')!;
+  const activityId = z.uuid().safeParse(c.req.param('activityId'));
+  if (!activityId.success) throw notFound();
+  const principal = requirePermission(c, 'activity.view_roster', { eventId, activityId: activityId.data });
+  const ctx = await loadContext(c.env.DB, eventId, 'activity', activityId.data);
+  const [activity, people, bookings, state] = await Promise.all([
+    c.env.DB.prepare(`SELECT name, location, instructions, starts_at, ends_at, capacity, track_sign_out, signup_open, booking_required FROM activities WHERE id = ?`)
+      .bind(activityId.data)
+      .first<Record<string, string | number | null>>(),
+    c.env.DB.prepare(
+      `SELECT r.id, p.first_name, p.preferred_name, p.last_name, r.group_name, r.section, r.kind, r.photo_consent
+         FROM registrations r JOIN people p ON p.id = r.person_id
+        WHERE r.event_id = ? AND r.status = 'active' ORDER BY p.last_name COLLATE NOCASE, p.first_name COLLATE NOCASE`,
+    )
+      .bind(eventId)
+      .all<Record<string, string>>(),
+    c.env.DB.prepare(`SELECT registration_id FROM activity_bookings WHERE activity_id = ?`).bind(activityId.data).all<{ registration_id: string }>(),
+    contextState(c.env.DB, eventId, ctx),
+  ]);
+  const booked = new Set(bookings.results.map((b) => b.registration_id));
+  const photos = can(principal, 'photo.view_status', { eventId });
+  const byId = new Map(people.results.map((p) => [p.id!, p]));
+  const involved = new Set([...booked, ...[...state.states].filter(([, s]) => s.visits > 0).map(([id]) => id)]);
+  const row = (id: string) => {
+    const p = byId.get(id)!;
+    const s = state.states.get(id);
+    return {
+      id,
+      name: `${p.preferred_name || p.first_name} ${p.last_name}`,
+      groupName: p.group_name,
+      section: p.kind === 'adult' ? 'Leader' : p.section,
+      booked: booked.has(id),
+      present: s?.present ?? false,
+      visits: s?.visits ?? 0,
+      lastAt: s?.lastAcceptedAt ?? null,
+      ...(photos ? { noPhotos: p.photo_consent === 'no' } : {}),
+    };
+  };
+  return c.json({
+    activity: {
+      id: activityId.data,
+      name: activity!.name,
+      location: activity!.location,
+      instructions: activity!.instructions,
+      startsAt: activity!.starts_at,
+      endsAt: activity!.ends_at,
+      capacity: activity!.capacity,
+      trackSignOut: activity!.track_sign_out === 1,
+      signupOpen: activity!.signup_open === 1,
+      bookingRequired: activity!.booking_required === 1,
+    },
+    presentNow: state.presentNow,
+    canBook: can(principal, 'activities.manage', { eventId }) || can(principal, 'activity.bookings', { eventId, activityId: activityId.data }),
+    canCheckIn: can(principal, 'activity.scan', { eventId, activityId: activityId.data }),
+    people: [...involved].filter((id) => byId.has(id)).map(row),
+    everyone: people.results.map((p) => ({ id: p.id, name: `${p.preferred_name || p.first_name} ${p.last_name}`, groupName: p.group_name })),
+  });
 });

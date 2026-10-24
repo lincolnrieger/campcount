@@ -19,6 +19,7 @@ import { Person } from './pages/Person';
 import { AddPerson } from './pages/AddPerson';
 import { MyActivities, SignupKiosk } from './pages/Signup';
 import { QrCodes } from './pages/QrCodes';
+import { ActivityRoster } from './pages/ActivityRoster';
 import { Activities } from './pages/Activities';
 import { Meals } from './pages/Meals';
 import { Pair } from './pages/Pair';
@@ -85,6 +86,7 @@ export function App() {
           <Route path="import" element={<Import />} />
           <Route path="lanyards" element={<Lanyards />} />
           <Route path="activities" element={<Activities />} />
+          <Route path="activities/:activityId" element={<ActivityRoster />} />
           <Route path="meals" element={<Meals />} />
           <Route path="stations" element={<Stations />} />
           <Route path="live" element={<Live />} />

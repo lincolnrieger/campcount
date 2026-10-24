@@ -16,7 +16,7 @@ describe('demo mode', () => {
 
     const demo = await json(await api('/admin/demo', { cookie: admin.cookie }));
     const accounts = demo.events.find((e: any) => e.id === eventId).accounts;
-    expect(accounts.map((a: any) => a.role).sort()).toEqual(['Event manager', 'Meal team', 'Scanner']);
+    expect(accounts.map((a: any) => a.role).sort()).toEqual(['Activity leader', 'Event manager', 'Meal team', 'Scanner']);
     const emails = await testEnv.DB.prepare(`SELECT email FROM users WHERE is_demo = 1`).all<{ email: string }>();
     expect(emails.results.every((u) => u.email.endsWith('@demo.invalid'))).toBe(true);
   });

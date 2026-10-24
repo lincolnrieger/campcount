@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
+import { Link } from 'react-router';
+import { Icon } from '../components/Icon';
 import { ApiFailure, api } from '../api';
 import { Field, Loading, Notice } from '../components/ui';
 import { useApi } from '../useApi';
@@ -271,6 +273,7 @@ export function Activities() {
   if (loading && !data) return <Loading />;
   if (error) return <Notice tone="stop">{error.message}</Notice>;
   const activities = data?.activities ?? [];
+  if (!can('activities.manage')) return <LeaderActivities activities={activities} />;
   const dayOf = (a: Activity) => (a.startsAt ? dayInZone(a.startsAt, tz) : null);
   const groups = [null, ...days, 'other']
     .map((d) => ({
@@ -347,6 +350,9 @@ export function Activities() {
                       </span>
                       {manage && (
                         <span className="row-actions">
+                          <Link className="btn-link" to={a.id}>
+                            Roster<span className="visually-hidden"> for {a.name}</span>
+                          </Link>
                           <button className="btn-link" onClick={() => setOpen(`edit:${a.id}`)}>
                             Edit<span className="visually-hidden"> {a.name}</span>
                           </button>
@@ -481,5 +487,35 @@ function Bookings({ activity, onChange }: { activity: Activity; onChange: () => 
         </ul>
       )}
     </div>
+  );
+}
+
+/** Activity leaders: just the activities they run, each opening its roster. */
+function LeaderActivities({ activities }: { activities: Activity[] }) {
+  const { event } = useEvent();
+  const tz = event.timezone;
+  const mine = activities.filter((a) => a.status === 'active').sort((x, y) => (x.startsAt ?? '').localeCompare(y.startsAt ?? ''));
+  if (mine.length === 0) return <p className="lede">You haven't been given an activity yet. Ask an event manager.</p>;
+  return (
+    <section className="list-section">
+      <h2 className="list-heading">Your activities</h2>
+      <ul className="list">
+        {mine.map((a) => (
+          <li key={a.id}>
+            <Link to={a.id} className="list-row board-row">
+              <span className="list-main">
+                <strong>{a.name}</strong>
+                <span>
+                  {[a.startsAt ? `${dayLabel(dayInZone(a.startsAt, tz))}, ${timeInZone(a.startsAt, tz)}` : 'All camp', a.location || null, a.booked ? `${a.booked} booked` : null]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+              </span>
+              <Icon name="chevron" />
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

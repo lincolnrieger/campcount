@@ -41,6 +41,7 @@ Deferred to Release 2:
 | Platform Admin | Platform | Manage users (rename, make admin, disable, delete), create events, use View as, read the audit log. Every action is audited. |
 | Event Manager | Event | Configure the event, import, manage the roster, assign staff, pair stations, correct records, export, close out. (Replaces the earlier Camp Director and Event Manager split.) |
 | Scanner | Event | Scan people on and off site and in and out of every activity. Sees activity rosters (display fields only) and counts. (Replaces Activity Leader and Gate Volunteer.) |
+| Activity Leader | Activity (one, or all if assigned to the event) | See the activity's roster and bookings, check people in and out with a tap or the scanner, add walk-ins, add or remove bookings. Nothing else in the event. |
 | Meal Team | Event (meals) | Scan meals, see the dietary alert for the scanned person, see who has and hasn't eaten. No catering or dietary reports. |
 | Station (device) | One workflow | Scan for that workflow only. Sees display fields only. It is not a person. |
 

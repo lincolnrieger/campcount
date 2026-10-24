@@ -76,7 +76,7 @@ describe('view as (role preview)', () => {
     const options = await json(await api('/admin/preview/options', { cookie: admin.cookie }));
     const event = options.events.find((e: any) => e.id === eventId);
     expect(event.activities.map((a: any) => a.id)).toContain(activityId);
-    expect(options.roles.map((r: any) => r.key)).toEqual(['event_manager', 'scanner', 'meal_leader']);
+    expect(options.roles.map((r: any) => r.key)).toEqual(['event_manager', 'scanner', 'activity_leader', 'meal_leader']);
   });
 });
 

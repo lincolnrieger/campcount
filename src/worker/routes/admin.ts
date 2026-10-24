@@ -400,7 +400,7 @@ adminRoutes.get('/preview/options', async (c) => {
   ).all<{ id: string; name: string; event_id: string }>();
   const { results: roles } = await c.env.DB.prepare(
     `SELECT key, name, description, scope FROM roles WHERE scope <> 'platform' ORDER BY CASE key
-       WHEN 'event_manager' THEN 1 WHEN 'scanner' THEN 2 WHEN 'meal_leader' THEN 3 ELSE 9 END, name`,
+       WHEN 'event_manager' THEN 1 WHEN 'scanner' THEN 2 WHEN 'activity_leader' THEN 3 WHEN 'meal_leader' THEN 4 ELSE 9 END, name`,
   ).all();
   return c.json({
     events: events.map((e) => ({
