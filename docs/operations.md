@@ -11,27 +11,9 @@ to recover the system. Keep a printed copy at camp HQ.
    another **Event manager**. People can sign themselves up at `/sign-up`
    first, or are created automatically when added by email.
 2. **Turn on only the features you need** (Overview tab).
-3. **Fill the People list** (expected attendees). Three ways, which can be
-   mixed:
-   - **Registration page:** People, then Registration page, then turn on
-     *Open for registrations*. Share the link or print the QR poster.
-     Families fill in name, membership number (or "not a member"), section,
-     group, photo consent and food needs, then confirm their email with a
-     code. Several children can be registered from one email. Each
-     registration waits under *Waiting for approval* until an event manager
-     approves it (or turn on *Approve automatically*). Approved people join
-     the roster with a lanyard card and get a confirmation email. Optional:
-     a last day to register and a maximum number of people. *New link*
-     retires the old link and posters. Watch for the *Number belongs to…*
-     warning: someone typed a membership number that's on file under a
-     different name. Approving never renames the existing member.
-   - **Add person:** People, then Add person, for one-off additions.
-   - **Import** from MyScout (People tab, then Import roster). Use
-     the full participant export, including adults.
-   - If dietary requirements are switched on, review each note. Record food
-     needs only; leave other medical information in MyScout.
-   - Re-import whenever MyScout changes. Use "mark people not in this file as
-     withdrawn" only with the complete, current export.
+3. **Fill the People list** (expected attendees): import the MyScout
+   participant export (People, then Import roster), including adults, or
+   add someone with **Add person**.
 4. **Add activities and meals.** Give each meal a day and time (Meals tab)
    so scanners can pick it by day. Activities can run all camp, or on a
    day with a start and end time. For an activity that runs several times,
@@ -63,9 +45,40 @@ to recover the system. Keep a printed copy at camp HQ.
   full-screen like an app.
 - For shared devices (meal-hall tablet, gate phone), use **Stations**: the
   event manager creates a pairing code and the device opens `/pair`. A station
-  can only scan one thing and stops automatically.
+  can only scan one thing and stops automatically. **Edit** renames it or
+  changes what it scans; **Reopen** restarts a stopped or expired station
+  with a new pairing code.
 - Phones must allow camera access for the CampCount site. On iPhone:
   Settings, Safari, Camera, Allow.
+
+## QR codes: where to find them
+
+Event Overview, then **QR codes and posters**:
+
+- **Lanyards:** each person's QR code is on their lanyard (print from
+  Lanyards). Scanning your own lanyard with a phone camera opens your
+  activities page, where you can book or cancel activity sessions.
+- **Activity sign-up screen:** the link and QR code to open on a tablet at
+  camp HQ ("Open sign-up screen"). People scan their lanyard or type the
+  code printed on it, see what's on and book. It returns to the start
+  after 90 seconds or when they tap Done. **New link** retires old links
+  and posters.
+- **Session posters:** one printable poster per session that's open for
+  sign-up. Scanning it opens the sign-up page with that session chosen.
+- **Stations:** pairing QR codes appear on the Stations tab when you set up
+  or reopen a station.
+
+## Activity sign-up
+
+1. Turn on *Activity sign-up* (Overview features, or the QR codes page).
+2. On Activities, edit each session and tick **People can sign up**. The
+   capacity is the number of places. Tick **Check bookings at the
+   scanner** to warn leaders when someone who hasn't signed up arrives.
+3. Open the sign-up screen on a tablet and print session posters.
+4. People can't book two sessions that overlap, or a full session. The
+   event team can see who's booked (Activities, then Bookings), add someone
+   (even past the limit) or remove them. Bookings show on each person's
+   page.
 
 ## During camp
 
@@ -193,8 +206,7 @@ open their page.
 
 | What | Deleted |
 |---|---|
-| Dietary requirements, photo consent, card data, registration requests (contact emails) | 90 days after the event closes |
-| Registration requests whose email was never confirmed | After 1 day |
+| Dietary requirements, photo consent, card data | 90 days after the event closes |
 | Named attendance records and roster | 2 years after close (totals kept for annual reports) |
 | Sign-in codes and expired sessions | Daily |
 | Audit log | Kept 7 years |

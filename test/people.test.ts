@@ -189,3 +189,21 @@ describe('activity and meal times', () => {
     expect(m).toMatchObject({ status: 'cancelled', startsAt: '2026-12-05T12:30:00+10:30' });
   });
 });
+
+describe('adding someone by hand', () => {
+  it('puts them on the roster with a card, and refuses a duplicate membership number', async () => {
+    const c = await camp();
+    const body = { firstName: 'Hana', lastName: 'Cook', memberNumber: null, kind: 'adult', section: 'Leaders', position: 'Cook', photoConsent: 'yes', dietary: [] };
+    const res = await api(`/events/${c.eventId}/registrations`, { cookie: c.manager.cookie, body });
+    expect(res.status).toBe(201);
+    const { registrationId } = await json(res);
+    const person = (await json(await api(`/events/${c.eventId}/registrations/${registrationId}`, { cookie: c.manager.cookie }))).registration;
+    expect(person).toMatchObject({ kind: 'adult', position: 'Cook' });
+    expect(person.memberNumber).toMatch(/^GUEST-/);
+    expect(person.shortCode).not.toBeNull();
+    expect((await api(`/events/${c.eventId}/registrations`, { cookie: c.manager.cookie, body: { ...body, memberNumber: '100' } })).status).toBe(409);
+    const scanner = await createUser();
+    await grant(scanner.id, 'scanner', c.eventId);
+    expect((await api(`/events/${c.eventId}/registrations`, { cookie: scanner.cookie, body })).status).toBe(403);
+  });
+});

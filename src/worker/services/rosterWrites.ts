@@ -1,4 +1,8 @@
-import type { ImportRow } from '../../shared/schemas';
+import type { ImportRow, PersonEntry } from '../../shared/schemas';
+import type { Env } from '../env';
+import { randomInt } from '../lib/crypto';
+import { nowIso } from '../lib/time';
+import { issueStatements } from './credentials';
 
 /**
  * Statements that put one person on an event roster (or update them):
@@ -79,4 +83,47 @@ export function rowStatements(
     }
   }
   return statements;
+}
+
+/** A guest number for people who aren't Scouts members. */
+export function guestNumber(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return `GUEST-${Array.from({ length: 6 }, () => chars[randomInt(chars.length)]).join('')}`;
+}
+
+export function toImportRow(p: PersonEntry & { memberNumber: string }): ImportRow {
+  return {
+    memberNumber: p.memberNumber,
+    firstName: p.firstName,
+    preferredName: p.preferredName,
+    lastName: p.lastName,
+    kind: p.kind,
+    section: p.kind === 'adult' ? 'Leaders' : p.section,
+    groupName: p.groupName,
+    position: p.kind === 'adult' ? p.position || 'Leader' : `${p.section.replace(/s$/, '')} member`,
+    roleLabel: p.kind === 'adult' ? 'Leader' : 'Participant',
+    team: '',
+    sourceStatus: 'Registered on CampCount',
+    photoConsent: p.photoConsent,
+    dietaryFingerprint: null,
+    dietary: p.dietary,
+  };
+}
+
+/**
+ * Put one person on the roster with a lanyard card, returning their
+ * registration id. Existing members keep the names already on file.
+ */
+export async function addToRoster(env: Env, eventId: string, row: ImportRow, recordedBy: string, keepExistingNames: boolean): Promise<string> {
+  const now = nowIso();
+  await env.DB.batch(rowStatements(env.DB, eventId, row, false, now, recordedBy, { keepExistingNames }));
+  const reg = await env.DB.prepare(
+    `SELECT r.id FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.event_id = ? AND p.member_number = ?`,
+  )
+    .bind(eventId, row.memberNumber)
+    .first<{ id: string }>();
+  // Someone already on the roster keeps the card they may have printed.
+  const hasCard = await env.DB.prepare(`SELECT 1 FROM credentials WHERE registration_id = ? AND status = 'active'`).bind(reg!.id).first();
+  if (!hasCard) await env.DB.batch(await issueStatements(env, eventId, [reg!.id]));
+  return reg!.id;
 }

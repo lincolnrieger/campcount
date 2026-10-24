@@ -17,7 +17,7 @@ const MATRIX: Record<string, string[]> = {
     'roster.edit', 'roster.import', 'roster.view', 'site.scan', 'staff.manage', 'stations.manage',
   ],
   scanner: ['activity.scan', 'activity.view_roster', 'event.view', 'photo.view_status', 'site.scan'],
-  meal_leader: ['dietary.view_alert', 'dietary.view_detail', 'event.view', 'meal.scan'],
+  meal_leader: ['dietary.view_alert', 'event.view', 'meal.scan'],
 };
 
 describe('system roles', () => {

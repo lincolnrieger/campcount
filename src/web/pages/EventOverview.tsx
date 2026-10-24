@@ -4,7 +4,7 @@ import { Link } from 'react-router';
 import { Icon } from '../components/Icon';
 import { canScan } from '../scan/targets';
 import { useApi } from '../useApi';
-import type { RegistrationData } from './Registration';
+import type { Registration } from './Roster';
 import { Exports } from './CloseOut';
 import { Notice } from '../components/ui';
 import type { EventFeatures, EventStatus } from '../../shared/schemas';
@@ -27,7 +27,8 @@ export function EventOverview() {
   const [busy, setBusy] = useState(false);
   const editable = can('event.configure') && (event.status === 'draft' || event.status === 'open');
   const dirty = JSON.stringify(features) !== JSON.stringify(event.features);
-  const registration = useApi<RegistrationData>(can('roster.edit') ? `/events/${event.id}/registration` : null);
+  const roster = useApi<{ registrations: Registration[] }>(can('roster.view') ? `/events/${event.id}/registrations` : null);
+  const expected = roster.data?.registrations.filter((r) => r.status === 'active') ?? null;
 
   async function run(action: () => Promise<unknown>, success: string) {
     setBusy(true);
@@ -75,23 +76,30 @@ export function EventOverview() {
           <Icon name="chevron" />
         </Link>
       )}
-      {registration.data && (
-        <Link to="roster/registration" className="expected">
+      {expected && (
+        <Link to="roster" className="expected">
           <span className="expected-main">
-            <strong>{registration.data.counts.registered}</strong>
-            <span>
-              expected attendees
-              {registration.data.settings.limit ? ` of ${registration.data.settings.limit}` : ''}
-            </span>
+            <strong>{expected.length}</strong>
+            <span>expected attendees</span>
           </span>
           <span className="expected-side">
-            {registration.data.counts.waiting > 0 ? (
-              <span className="tag tag-warn">{registration.data.counts.waiting} waiting for approval</span>
-            ) : (
-              <span className="field-hint">{registration.data.settings.open ? 'Registration open' : 'Registration closed'}</span>
-            )}
+            <span className="field-hint">
+              {expected.filter((r) => r.kind === 'youth').length} youth, {expected.filter((r) => r.kind === 'adult').length} adults
+            </span>
             <Icon name="chevron" />
           </span>
+        </Link>
+      )}
+      {(can('activities.manage') || can('credentials.manage')) && (
+        <Link to="qr-codes" className="expected">
+          <span className="expected-main">
+            <Icon name="qr" size={22} />
+            <span>
+              <strong className="expected-title">QR codes and posters</strong>
+              <span className="field-hint">Lanyards, the activity sign-up screen and session posters</span>
+            </span>
+          </span>
+          <Icon name="chevron" />
         </Link>
       )}
       {!can('reports.view') && <Exports />}

@@ -6,5 +6,8 @@ export const FEATURE_COPY: Record<keyof EventFeatures, { label: string; hint: st
   dietary: { label: 'Dietary requirements', hint: 'Allergy alerts at meal scans and a catering summary.' },
   site: { label: 'On-site tracking', hint: 'Scan leaders and participants on and off site.' },
   photo: { label: 'Photo consent markers', hint: 'Show a "No photos" marker when scanning people without consent.' },
-  selfSignup: { label: 'Activity self sign-up', hint: 'Participants book activities by scanning a poster and their own lanyard.' },
+  selfSignup: {
+    label: 'Activity sign-up',
+    hint: 'People book activity sessions themselves at a sign-up screen, from a session poster, or from their own lanyard QR.',
+  },
 };

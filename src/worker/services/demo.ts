@@ -63,8 +63,8 @@ export async function createDemoEvent(env: Env, adminUserId: string, participant
     db
       .prepare(
         `INSERT INTO events (id, slug, name, description, location, starts_on, ends_on, status, feature_activities, feature_meals,
-           feature_site, feature_dietary, feature_photo, is_demo, created_by, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 'Demo Activity Centre', ?, ?, 'open', 1, 1, 1, 1, 1, 1, ?, ?, ?)`,
+           feature_site, feature_dietary, feature_photo, feature_self_signup, is_demo, created_by, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'Demo Activity Centre', ?, ?, 'open', 1, 1, 1, 1, 1, 1, 1, ?, ?, ?)`,
       )
       .bind(
         eventId,
@@ -108,9 +108,11 @@ export async function createDemoEvent(env: Env, adminUserId: string, participant
     statements.push(
       db
         .prepare(
-          `INSERT INTO activities (id, event_id, name, location, capacity, track_sign_out, starts_at, ends_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO activities (id, event_id, name, location, capacity, track_sign_out, starts_at, ends_at, signup_open, booking_required, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .bind(a.id, eventId, a.name, a.location, a.capacity, a.trackSignOut, a.startsAt, a.endsAt, now, now),
+        // Timed sessions are open for sign-up, so the sign-up screen has something to show.
+        .bind(a.id, eventId, a.name, a.location, a.capacity, a.trackSignOut, a.startsAt, a.endsAt, a.startsAt ? 1 : 0, a.startsAt ? 1 : 0, now, now),
     );
   }
   // Meals across the three days, timed in the event's timezone.

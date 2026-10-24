@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { credentialUrl, formatShortCode } from '../../shared/credentials';
 import { displayName } from '../../shared/names';
 import { isEditable } from '../../shared/lifecycle';
-import { dietaryUpdateSchema, importRequestSchema, registrationPatchSchema } from '../../shared/schemas';
+import { dietaryUpdateSchema, importRequestSchema, personEntrySchema, registrationPatchSchema } from '../../shared/schemas';
 import type { AppContext, AppEnv } from '../context';
 import { parseBody, requirePermission, requireUser } from '../context';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
@@ -15,7 +15,7 @@ import { duplicateMemberNumbers, planImport } from '../services/import';
 import { can } from '../services/principal';
 import { getEventRow } from './events';
 import { loadEventModel, whereabouts } from '../services/reports';
-import { rowStatements } from '../services/rosterWrites';
+import { addToRoster, guestNumber, rowStatements, toImportRow } from '../services/rosterWrites';
 
 export const rosterRoutes = new Hono<AppEnv>();
 
@@ -136,6 +136,12 @@ rosterRoutes.get('/registrations/:registrationId', async (c) => {
       .all<Record<string, string>>(),
     loadEventModel(c.env.DB, eventId, event.feature_site === 1),
   ]);
+  const bookings = await c.env.DB.prepare(
+    `SELECT a.id, a.name, a.starts_at, a.ends_at, b.source FROM activity_bookings b JOIN activities a ON a.id = b.activity_id
+      WHERE b.registration_id = ? ORDER BY a.starts_at IS NULL, a.starts_at`,
+  )
+    .bind(id)
+    .all<{ id: string; name: string; starts_at: string | null; ends_at: string | null; source: string }>();
   const outcomeOf = (scanId: string, key: string) => model.replays.get(key)?.outcomes.get(scanId);
   return c.json({
     registration: {
@@ -162,6 +168,7 @@ rosterRoutes.get('/registrations/:registrationId', async (c) => {
       cards: can(principal, 'credentials.manage', { eventId }),
     },
     where: whereabouts(model).get(id) ?? null,
+    bookings: bookings.results.map((b) => ({ activityId: b.id, name: b.name, startsAt: b.starts_at, endsAt: b.ends_at, selfBooked: b.source === 'self_signup' })),
     history: scans.results.map((s) => {
       const evaluated = outcomeOf(s.id!, `${s.context_type}:${s.context_id ?? ''}`);
       return {
@@ -292,6 +299,37 @@ rosterRoutes.delete('/registrations/:registrationId', async (c) => {
     }),
   ]);
   return c.json({ ok: true, scans: reg.scans });
+});
+
+/** An event manager adds someone by hand. They join the roster straight away, with a card. */
+rosterRoutes.post('/registrations', async (c) => {
+  const eventId = c.req.param('eventId')!;
+  requirePermission(c, 'roster.edit', { eventId });
+  const user = requireUser(c);
+  const e = await editableEvent(c, eventId);
+  const input = await parseBody(c, personEntrySchema);
+  const memberNumber = input.memberNumber?.toUpperCase() ?? guestNumber();
+  const already = await c.env.DB.prepare(
+    `SELECT 1 FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.event_id = ? AND p.member_number = ? AND r.status = 'active'`,
+  )
+    .bind(e.id, memberNumber)
+    .first();
+  if (already) throw conflict('Someone with that membership number is already on this event.');
+  const registrationId = await addToRoster(
+    c.env,
+    e.id,
+    toImportRow({ ...input, memberNumber, dietary: e.feature_dietary ? input.dietary : [] }),
+    user.userId,
+    false,
+  );
+  await auditStatement(c.env.DB, {
+    actor: { type: 'user', id: user.userId },
+    action: 'registration.add',
+    eventId: e.id,
+    targetType: 'registration',
+    targetId: registrationId,
+  }).run();
+  return c.json({ registrationId }, 201);
 });
 
 // ---------------------------------------------------------------- import

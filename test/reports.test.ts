@@ -147,17 +147,18 @@ describe('exports', () => {
     expect((await api(`/events/${c.eventId}/exports/attendance.csv`, { cookie: manager.cookie })).status).toBe(200);
     expect((await api(`/events/${c.eventId}/exports/dietary-list.csv`, { cookie: leader.cookie })).status).toBe(403);
     expect((await api(`/events/${c.eventId}/exports/dietary-list.csv`, { cookie: meal.cookie })).status).toBe(403);
-    expect((await api(`/events/${c.eventId}/exports/catering.csv`, { cookie: meal.cookie })).status).toBe(200);
+    // The meal team sees allergy alerts at the scan, but not the catering report.
+    expect((await api(`/events/${c.eventId}/exports/catering.csv`, { cookie: meal.cookie })).status).toBe(403);
     expect((await api(`/events/${c.eventId}/exports/attendance.csv`, { cookie: meal.cookie })).status).toBe(403);
     expect((await api(`/events/${c.eventId}/exports/attendance.csv`, { cookie: leader.cookie })).status).toBe(403);
     expect((await api(`/events/${c.eventId}/exports/dietary-list.csv`, { cookie: manager.cookie })).status).toBe(200);
 
     const listed = await json(await api(`/events/${c.eventId}/exports`, { cookie: meal.cookie }));
-    expect(listed.exports.map((e: any) => e.key)).toEqual(['catering']);
+    expect(listed.exports.map((e: any) => e.key)).toEqual([]);
     const audit = await testEnv.DB.prepare(`SELECT count(*) AS n FROM audit_log WHERE event_id = ? AND action = 'export.download'`)
       .bind(c.eventId)
       .first<{ n: number }>();
-    expect(audit!.n).toBe(3);
+    expect(audit!.n).toBe(2); // only the manager's two successful downloads
   });
 
   it('scanners are kept out of the live dashboard and close-out', async () => {

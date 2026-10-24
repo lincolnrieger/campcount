@@ -12,7 +12,7 @@ import { buildLanyardPdf, downloadPdf } from '../lanyards/pdf';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import { LanyardCard } from './Lanyards';
-import { timeInZone } from '../../shared/time';
+import { dayInZone, dayLabel, timeInZone, timeRange } from '../../shared/time';
 
 export interface Where {
   site: 'on' | 'off' | 'never' | null;
@@ -40,6 +40,7 @@ interface PersonData {
   };
   can: { edit: boolean; editDietary: boolean; cards: boolean };
   where: Where | null;
+  bookings: { activityId: string; name: string; startsAt: string | null; endsAt: string | null; selfBooked: boolean }[];
   history: { id: string; at: string; type: 'activity' | 'meal' | 'site'; place: string; direction: 'in' | 'out'; method: string; outcome: string; message: string; by: string }[];
 }
 
@@ -153,6 +154,25 @@ export function Person() {
         <section className="list-section">
           <h3 className="list-heading">Right now</h3>
           <WhereNow where={data.where} tz={tz} />
+        </section>
+      )}
+
+      {data.bookings.length > 0 && (
+        <section className="list-section">
+          <h3 className="list-heading">Signed up for</h3>
+          <ul className="list">
+            {data.bookings.map((b) => (
+              <li key={b.activityId} className="list-row">
+                <span className="list-main">
+                  <strong>{b.name}</strong>
+                  <span>
+                    {b.startsAt ? `${dayLabel(dayInZone(b.startsAt, tz))}, ${timeRange(b.startsAt, b.endsAt, tz)}` : 'Any time'}
+                    {b.selfBooked ? '' : ', booked by leaders'}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
