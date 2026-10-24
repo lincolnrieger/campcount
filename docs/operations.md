@@ -5,8 +5,11 @@ to recover the system. Keep a printed copy at camp HQ.
 
 ## Two weeks before camp
 
-1. **Create the event** (platform admin) and add the Camp Director on the
-   Staff tab. The director adds everyone else.
+1. **Create the event** (platform admin) and add an Event manager on the
+   Staff tab. Event managers add everyone else as **Scanner** (site and
+   activity scanning), **Meal team** (meal scanning and "Who's eaten") or
+   another **Event manager**. People can sign themselves up at `/sign-up`
+   first, or are created automatically when added by email.
 2. **Turn on only the features you need** (Overview tab).
 3. **Import the roster** from MyScout (Roster tab, then Import roster). Use
    the full participant export, including adults.
@@ -14,8 +17,8 @@ to recover the system. Keep a printed copy at camp HQ.
      needs only; leave other medical information in MyScout.
    - Re-import whenever MyScout changes. Use "mark people not in this file as
      withdrawn" only with the complete, current export.
-4. **Add activities and meals.** Assign activity leaders to their activity
-   so they only see that one.
+4. **Add activities and meals.** Scanners can scan the gate and every
+   activity; Meal team can scan every meal.
 5. **Print lanyards** (Roster tab, then Lanyards):
    - Choose lanyard size (90 × 120 mm, 4 per A4) or wallet size
      (86 × 54 mm, 10 per A4).
@@ -39,7 +42,7 @@ to recover the system. Keep a printed copy at camp HQ.
 - On iPhone, Safari's Share → **Add to Home Screen** makes CampCount open
   full-screen like an app.
 - For shared devices (meal-hall tablet, gate phone), use **Stations**: the
-  director creates a pairing code and the device opens `/pair`. A station
+  event manager creates a pairing code and the device opens `/pair`. A station
   can only scan one thing and stops automatically.
 - Phones must allow camera access for the CampCount site. On iPhone:
   Settings, Safari, Camera, Allow.
@@ -60,7 +63,7 @@ to recover the system. Keep a printed copy at camp HQ.
      their account (People), which signs out every session immediately.
   3. Scans not yet uploaded from that phone are lost. Check the paper roll
      for that period.
-- **Wrong person scanned:** a director opens Close-out and chooses "Don't
+- **Wrong person scanned:** an event manager opens Close-out and chooses "Don't
   count this scan", with a reason. The original stays on record.
 - **Phones or system unavailable:** switch to the paper roll sheets. Write
   the time beside each tick. Afterwards, enter them with "Find by name".
@@ -79,8 +82,8 @@ of made-up people (membership numbers start with `DEMO`). It comes with
 activities, meals, lanyard cards and demo accounts for each role.
 
 - **View as** (the eye button at the top of every page) shows any event,
-  demo or real, exactly as a chosen role sees it: Director, Manager, Activity
-  leader for a particular activity, Meal leader, or Gate volunteer.
+  demo or real, exactly as a chosen role sees it: Event manager, Scanner or
+  Meal team.
 - A yellow bar shows what you're viewing as. **Switch** changes role and
   **Back to me** returns to your own access, with no need to sign in
   again.
@@ -89,6 +92,18 @@ activities, meals, lanyard cards and demo accounts for each role.
 - Delete the demo camp when you're done.
 - Demo accounts use the reserved `.invalid` email domain and can't receive
   email.
+
+## Accounts
+
+- Anyone can create an account at `/sign-up` with their name and email;
+  a 6-digit code confirms the email. Unconfirmed sign-ups with no events
+  are removed after 7 days.
+- Admins manage everyone on **People**: rename, make or remove admin,
+  disable (signs them out) or delete.
+- Anyone can rename or delete their own account from **Your account**.
+- Deleting someone with scan or audit history wipes their name and email
+  instead of removing the record, so past reports stay consistent. The last
+  admin can't be deleted.
 
 ## Close-out
 

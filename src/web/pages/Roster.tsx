@@ -6,6 +6,7 @@ import { describeEntry } from '../components/DietaryEditor';
 import { Loading, Notice } from '../components/ui';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
+import { matchesSearch } from '../../shared/search';
 
 export interface Registration {
   id: string;
@@ -36,9 +37,7 @@ export function Roster() {
   const sections = useMemo(() => [...new Set(all.map((r) => r.section))].sort(), [all]);
   const shown = all.filter((r) => {
     if (section && r.section !== section) return false;
-    if (!query) return true;
-    const q = query.toLowerCase();
-    return `${r.firstName} ${r.preferredName} ${r.lastName} ${r.memberNumber} ${r.groupName}`.toLowerCase().includes(q);
+    return matchesSearch(query, `${r.preferredName || r.firstName} ${r.lastName}`, r.firstName, r.memberNumber, r.shortCode, r.groupName);
   });
   const active = all.filter((r) => r.status === 'active');
   const withoutCard = active.filter((r) => !r.shortCode).length;
@@ -97,7 +96,7 @@ export function Roster() {
           <div className="row filters">
             <div className="field">
               <label htmlFor="roster-q">Search</label>
-              <input id="roster-q" className="input" type="search" value={query} onChange={(e) => setQuery(e.target.value)} />
+              <input id="roster-q" className="input" type="search" placeholder="Name, number or card" value={query} onChange={(e) => setQuery(e.target.value)} />
             </div>
             <div className="field">
               <label htmlFor="roster-section">Section</label>

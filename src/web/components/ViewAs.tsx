@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router';
 import { ApiFailure, api } from '../api';
 import { clearDevice } from '../offline/db';
 import { useSession } from '../session';
@@ -24,8 +23,7 @@ export async function stopPreview() {
 
 /** Bottom sheet (phones) / dialog (desktop) for choosing an event and role to view as. */
 export function ViewAsSheet({ open, onClose, initialEventId }: { open: boolean; onClose: () => void; initialEventId?: string }) {
-  const { me, refresh } = useSession();
-  const navigate = useNavigate();
+  const { me } = useSession();
   const dialog = useRef<HTMLDialogElement>(null);
   const [options, setOptions] = useState<Options | null>(null);
   const [eventId, setEventId] = useState(initialEventId ?? '');
@@ -55,9 +53,8 @@ export function ViewAsSheet({ open, onClose, initialEventId }: { open: boolean; 
     setError(null);
     try {
       await startPreview(eventId, roleKey, activityId);
-      await refresh();
-      onClose();
-      navigate(`/events/${eventId}`);
+      // Full reload so nothing loaded under the previous role lingers on screen.
+      window.location.assign(`/events/${eventId}`);
     } catch (err) {
       setError(err instanceof ApiFailure ? err.message : 'Something went wrong.');
     } finally {
@@ -69,9 +66,7 @@ export function ViewAsSheet({ open, onClose, initialEventId }: { open: boolean; 
     setBusy(true);
     try {
       await stopPreview();
-      await refresh();
-      onClose();
-      navigate('/');
+      window.location.assign('/');
     } finally {
       setBusy(false);
     }

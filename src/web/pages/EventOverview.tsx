@@ -55,8 +55,7 @@ export function EventOverview() {
       {!can('event.configure') && can('staff.manage') && (
         <Notice title="You can manage staff for this event">
           <p>
-            To change settings, import the roster or see participant details, add yourself on the Staff page as Camp
-            Director. That assignment is recorded in the audit log.
+            To change settings or see participant details, use View as (the eye button) or add yourself as an event manager on the Staff page. Both are recorded in the audit log.
           </p>
         </Notice>
       )}

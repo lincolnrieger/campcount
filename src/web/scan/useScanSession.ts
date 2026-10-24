@@ -10,6 +10,7 @@ import { onSynced, requestSync } from '../offline/sync';
 export interface SnapshotPerson {
   id: string;
   name: string;
+  fullName?: string;
   memberNumber: string;
   group: string;
   section: string;

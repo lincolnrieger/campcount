@@ -46,7 +46,7 @@ export function Events() {
           <p className="lede">
             {canCreate
               ? 'Create an event to get started.'
-              : 'Ask your camp director to add you to their event. It will appear here as soon as they do.'}
+              : 'Nothing here yet. Ask an event manager to add you using the email you signed up with, and it will show up here.'}
           </p>
         </div>
       )}

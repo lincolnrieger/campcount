@@ -43,7 +43,8 @@ meRoutes.get('/', (c) => {
 meRoutes.get('/roles', async (c) => {
   requirePrincipal(c);
   const { results } = await c.env.DB.prepare(
-    `SELECT key, name, description, scope FROM roles WHERE scope <> 'platform' ORDER BY name`,
+    `SELECT key, name, description, scope FROM roles WHERE scope <> 'platform'
+      ORDER BY CASE key WHEN 'scanner' THEN 1 WHEN 'meal_leader' THEN 2 WHEN 'event_manager' THEN 3 ELSE 9 END, name`,
   ).all();
   return c.json({ roles: results });
 });

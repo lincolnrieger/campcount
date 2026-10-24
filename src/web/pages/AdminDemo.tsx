@@ -41,7 +41,7 @@ export function AdminDemo() {
         <h1>Demo mode</h1>
       </div>
       <p className="narrow">
-        Create a practice camp filled with made-up people, then use View as to try it as a director, leader or volunteer. Switch
+        Create a practice camp filled with made-up people, then use View as to try it as an event manager, scanner or the meal team. Switch
         roles at any time from the View as button at the top of every page. Demo camps are clearly marked and can be deleted in
         one step. No real member data is used.
       </p>
@@ -62,7 +62,7 @@ export function AdminDemo() {
           <button
             className="btn"
             disabled={busy}
-            onClick={() => void act(() => api('/admin/demo', { body: { participants: Number(size) } }), 'Demo camp created. You are its Camp Director.')}
+            onClick={() => void act(() => api('/admin/demo', { body: { participants: Number(size) } }), 'Demo camp ready. You are its event manager.')}
           >
             {busy ? 'Creating…' : 'Create'}
           </button>

@@ -46,6 +46,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/sign-in" element={<SignIn />} />
+      <Route path="/sign-up" element={<SignIn />} />
       <Route path="/sign-in/verify" element={<VerifyLink />} />
       <Route path="/pair" element={<Pair />} />
       <Route

@@ -117,7 +117,7 @@ counters.
 | Threat | Control |
 |---|---|
 | Cross-event access / IDOR | Every event-scoped service function takes `eventId` from the authorised assignment, not from the client. Isolation tests. |
-| Over-broad data to volunteers | Scan responses use per-role DTOs. Activity leaders never get list or export endpoints. |
+| Over-broad data to volunteers | Scan responses use per-role DTOs. Scanners and Meal team never get export endpoints. |
 | Sensitive data in import | Browser-side allowlist; the server rejects unknown fields (strict Zod). |
 | Forged or guessed QR | 128-bit random tokens; only hashes stored; revocation; scans need an authenticated scanner. |
 | Public sign-up abuse | Only open while the Director enables it; Turnstile; rate limits; requires a valid lanyard code. |

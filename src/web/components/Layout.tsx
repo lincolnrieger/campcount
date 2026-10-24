@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
-import { Link, Outlet, useLocation, useNavigate } from 'react-router';
+import { Link, Outlet, useLocation } from 'react-router';
 import { Icon } from './Icon';
 import { ViewAsSheet, stopPreview } from './ViewAs';
 import { useSession } from '../session';
@@ -39,9 +39,8 @@ function initials(name: string): string {
 }
 
 export function Layout() {
-  const { me, signOut, refresh } = useSession();
+  const { me, signOut } = useSession();
   const location = useLocation();
-  const navigate = useNavigate();
   const [title, setTitle] = useState<string | null>(null);
   const [viewAs, setViewAs] = useState(false);
   const preview = me?.kind === 'user' ? me.preview : null;
@@ -104,8 +103,7 @@ export function Layout() {
                 type="button"
                 onClick={async () => {
                   await stopPreview();
-                  await refresh();
-                  navigate('/');
+                  window.location.assign('/');
                 }}
               >
                 Back to me

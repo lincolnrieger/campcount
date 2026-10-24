@@ -86,3 +86,18 @@ describe('MyScout mapping', () => {
     expect(rows[2]!.errors).toContain('Same membership number as line 3');
   });
 });
+
+describe('name search', async () => {
+  const { matchesSearch } = await import('../src/shared/search');
+  it('one letter finds first or last names starting with it', () => {
+    expect(matchesSearch('l', 'Lily Nguyen')).toBe(true);
+    expect(matchesSearch('L', 'Sam Lee')).toBe(true);
+    expect(matchesSearch('l', 'Ella Smith')).toBe(false);
+  });
+  it('longer text matches anywhere in the full name, or the membership number and code', () => {
+    expect(matchesSearch('ella', 'Bella Smith')).toBe(true);
+    expect(matchesSearch('sam lee', 'Sam Lee')).toBe(true);
+    expect(matchesSearch('800012', 'Sam Lee', '800012')).toBe(true);
+    expect(matchesSearch('k7qm', 'Sam Lee', null, 'K7QM-3XRP')).toBe(true);
+  });
+});

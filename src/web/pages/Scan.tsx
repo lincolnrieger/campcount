@@ -3,6 +3,8 @@ import type { FormEvent } from 'react';
 import { Link, useParams } from 'react-router';
 import type { ContextType, Direction } from '../../shared/scanRules';
 import { Notice } from '../components/ui';
+import { api } from '../api';
+import { matchesSearch, searchRank } from '../../shared/search';
 import { useSyncStatus } from '../offline/sync';
 import { createDetector } from '../scan/decoder';
 import type { Feedback, ScanInput, SnapshotPerson } from '../scan/useScanSession';
@@ -72,7 +74,7 @@ function ResultPanel({ feedback, contextType }: { feedback: Feedback | null; con
         </span>
         <p className="result-title">{feedback.title}</p>
       </div>
-      {p && <p className="result-name">{p.name}</p>}
+      {p && <p className="result-name">{p.fullName ?? p.name}</p>}
       {p && (
         <p className="result-meta">
           {p.group}, member {p.memberNumber}
@@ -100,7 +102,7 @@ export function Scan() {
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [camera, setCamera] = useState<'off' | 'starting' | 'on' | 'denied' | 'unavailable'>('off');
   const [sound, setSound] = useState(true);
-  const [panel, setPanel] = useState<'none' | 'code' | 'name'>('none');
+  const [panel, setPanel] = useState<'none' | 'code' | 'name' | 'eaten'>('none');
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const lastCode = useRef<{ value: string; at: number } | null>(null);
@@ -283,6 +285,11 @@ export function Scan() {
         <button type="button" className="btn btn-secondary" aria-expanded={panel === 'name'} onClick={() => setPanel(panel === 'name' ? 'none' : 'name')}>
           Find by name
         </button>
+        {ctx.type === 'meal' && (
+          <button type="button" className="btn btn-secondary" aria-expanded={panel === 'eaten'} onClick={() => setPanel(panel === 'eaten' ? 'none' : 'eaten')}>
+            Who's eaten
+          </button>
+        )}
         {camera === 'on' && (
           <button type="button" className="btn btn-secondary" onClick={stopCamera}>
             Stop camera
@@ -290,11 +297,12 @@ export function Scan() {
         )}
       </div>
       {panel === 'code' && <CodeEntry onSubmit={(code) => void record({ kind: 'code', code })} />}
+      {panel === 'eaten' && ctx.type === 'meal' && ctx.id && <WhoHasEaten eventId={eventId} mealId={ctx.id} refreshKey={session.entries.length} />}
       {panel === 'name' && (
         <NameSearch
           people={session.snapshot.people}
           onPick={(p) => {
-            if (window.confirm(`Record ${p.name} (${p.group}) without their card?`)) void record({ kind: 'manual', registrationId: p.id });
+            if (window.confirm(`Record ${p.fullName ?? p.name} (${p.group}) without their card?`)) void record({ kind: 'manual', registrationId: p.id });
           }}
         />
       )}
@@ -363,21 +371,74 @@ function CodeEntry({ onSubmit }: { onSubmit: (code: string) => void }) {
 
 function NameSearch({ people, onPick }: { people: SnapshotPerson[]; onPick: (p: SnapshotPerson) => void }) {
   const [q, setQ] = useState('');
-  const matches =
-    q.trim().length < 2
-      ? []
-      : people.filter((p) => `${p.name} ${p.memberNumber}`.toLowerCase().includes(q.trim().toLowerCase())).slice(0, 8);
+  const matches = q.trim()
+    ? people
+        .filter((p) => matchesSearch(q, p.fullName ?? p.name, p.memberNumber))
+        .sort((a, b) => searchRank(q, a.fullName ?? a.name) - searchRank(q, b.fullName ?? b.name) || (a.fullName ?? a.name).localeCompare(b.fullName ?? b.name))
+        .slice(0, 30)
+    : [];
   return (
     <div className="scan-panel">
       <label htmlFor="name-q">Name or membership number</label>
-      <input id="name-q" className="input" type="search" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} />
-      <p className="field-hint">Use this only when a card won't scan. It is recorded as a manual entry.</p>
+      <input id="name-q" className="input" type="search" autoComplete="off" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Start typing, even one letter" />
+      <p className="field-hint">For when a card won't scan. It's saved as a manual entry.</p>
       <ul className="name-results">
         {matches.map((p) => (
           <li key={p.id}>
-            <button type="button" className="btn btn-secondary btn-block" onClick={() => onPick(p)}>
-              {p.name}, {p.group}
+            <button type="button" className="name-result" onClick={() => onPick(p)}>
+              <strong>{p.fullName ?? p.name}</strong>
+              <span>{p.group}</span>
             </button>
+          </li>
+        ))}
+      </ul>
+      {q.trim() && matches.length === 0 && <p className="field-hint">No one on this list matches "{q}".</p>}
+    </div>
+  );
+}
+
+/** For the meal team: who has and hasn't eaten yet at this meal. */
+function WhoHasEaten({ eventId, mealId, refreshKey }: { eventId: string; mealId: string; refreshKey: number }) {
+  const [data, setData] = useState<{ people: { id: string; name: string; group: string; servedAt: string | null }[] } | null>(null);
+  const [show, setShow] = useState<'not' | 'eaten'>('not');
+  const [q, setQ] = useState('');
+  const [offline, setOffline] = useState(false);
+  useEffect(() => {
+    api<{ people: { id: string; name: string; group: string; servedAt: string | null }[] }>(`/events/${eventId}/meals/${mealId}/served`)
+      .then((d) => {
+        setData(d);
+        setOffline(false);
+      })
+      .catch(() => setOffline(true));
+  }, [eventId, mealId, refreshKey]);
+  if (!data) return <p className="field-hint">{offline ? 'Needs signal to load the list.' : 'Loading…'}</p>;
+  const eaten = data.people.filter((p) => p.servedAt);
+  const notYet = data.people.filter((p) => !p.servedAt);
+  const list = (show === 'eaten' ? eaten : notYet).filter((p) => matchesSearch(q, p.name));
+  return (
+    <div className="scan-panel">
+      <div className="segmented" role="tablist" aria-label="Show">
+        <button type="button" role="tab" aria-selected={show === 'not'} onClick={() => setShow('not')}>
+          Not yet <span>{notYet.length}</span>
+        </button>
+        <button type="button" role="tab" aria-selected={show === 'eaten'} onClick={() => setShow('eaten')}>
+          Eaten <span>{eaten.length}</span>
+        </button>
+      </div>
+      <input className="input section-gap-sm" type="search" aria-label="Search names" placeholder="Search names" value={q} onChange={(e) => setQ(e.target.value)} />
+      {offline && <p className="field-hint">No signal: showing the last list loaded.</p>}
+      <ul className="eaten-list">
+        {list.map((p) => (
+          <li key={p.id}>
+            <span>
+              <strong>{p.name}</strong>
+              <span className="field-hint"> {p.group}</span>
+            </span>
+            {p.servedAt && (
+              <span className="field-hint">
+                {new Date(p.servedAt).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Adelaide' })}
+              </span>
+            )}
           </li>
         ))}
       </ul>
