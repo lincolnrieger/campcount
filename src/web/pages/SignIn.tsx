@@ -2,17 +2,18 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { ApiFailure, api } from '../api';
-import { Field, Notice } from '../components/ui';
+import { Field, Loading, Notice, Skeleton, SkeletonHeading } from '../components/ui';
 import { useSession } from '../session';
 import type { Me } from '../types';
+import { useTitle } from '../useTitle';
 
 function SignInFrame({ children }: { children: ReactNode }) {
   return (
     <div className="signin">
-      <div className="signin-band">
+      <header className="signin-band">
         <p className="wordmark">CampCount</p>
         <p>Attendance, meals and activities for Scouts SA camps.</p>
-      </div>
+      </header>
       <main className="signin-body">{children}</main>
     </div>
   );
@@ -58,6 +59,7 @@ async function afterSignIn(refresh: () => Promise<void>, navigate: ReturnType<ty
 }
 
 export function SignIn() {
+  useTitle('Sign in');
   const { refresh } = useSession();
   const navigate = useNavigate();
   const [pending] = useState(loadPending);
@@ -140,11 +142,11 @@ export function SignIn() {
   return (
     <SignInFrame>
       {step !== 'code' && (
-        <div className="auth-tabs" role="tablist" aria-label="Sign in or create an account">
-          <button type="button" role="tab" aria-selected={step === 'password'} onClick={() => { setStep('password'); setError(null); }}>
+        <div className="auth-tabs" role="group" aria-label="Sign in or create an account">
+          <button type="button" aria-pressed={step === 'password'} onClick={() => { setStep('password'); setError(null); }}>
             Sign in
           </button>
-          <button type="button" role="tab" aria-selected={step === 'signup'} onClick={() => { setStep('signup'); setError(null); }}>
+          <button type="button" aria-pressed={step === 'signup'} onClick={() => { setStep('signup'); setError(null); }}>
             Create account
           </button>
         </div>
@@ -285,6 +287,7 @@ export function SignIn() {
  * scanners cannot use it up.
  */
 export function VerifyLink() {
+  useTitle('Sign in');
   const { refresh } = useSession();
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
@@ -328,6 +331,7 @@ export function VerifyLink() {
  * until the person chooses their password.
  */
 export function PasswordLink() {
+  useTitle('Set your password');
   const { refresh } = useSession();
   const navigate = useNavigate();
   const [token] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get('t'));
@@ -377,7 +381,10 @@ export function PasswordLink() {
   if (!target) {
     return (
       <SignInFrame>
-        <p className="lede">Checking your link…</p>
+        <Loading label="Checking your link">
+          <SkeletonHeading />
+          <Skeleton width="100%" height="48px" radius="var(--radius-control)" />
+        </Loading>
       </SignInFrame>
     );
   }

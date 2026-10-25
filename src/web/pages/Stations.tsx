@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiFailure, api } from '../api';
 import { QrCode } from '../components/QrCode';
-import { Field, Loading, Notice } from '../components/ui';
+import { Field, Loading, Notice, SkeletonList } from '../components/ui';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import type { Activity } from './Activities';
@@ -76,8 +76,8 @@ export function Stations() {
   return (
     <>
       <p className="narrow">
-        A station is a shared phone or tablet, such as the meal-hall tablet, that can scan for one activity, meal or the site gate
-        and nothing else. It needs no account. Stop it at any time and it is signed out straight away.
+        A station is a shared phone or tablet that scans one activity, meal or the gate, and nothing else. Stopping it signs it out
+        straight away.
       </p>
       {pairing && (
         <div className="pairing">
@@ -93,7 +93,11 @@ export function Stations() {
           </button>
         </div>
       )}
-      {stations.loading && !stations.data && <Loading />}
+      {stations.loading && !stations.data && (
+        <Loading label="Loading stations">
+          <SkeletonList rows={2} aside="tag" heading />
+        </Loading>
+      )}
       {failure && !pairing && <Notice tone="stop">{failure}</Notice>}
       {stations.data && stations.data.stations.length > 0 && (
         <section className="list-section">
@@ -172,7 +176,7 @@ export function Stations() {
       )}
       <form onSubmit={create} className="narrow section-gap" noValidate>
         <h2>Set up a station</h2>
-        <Field id="st-name" label="Name" hint="So you can tell devices apart, for example Meal hall tablet">
+        <Field id="st-name" label="Name" hint="For example, Meal hall tablet">
           <input id="st-name" className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </Field>
         <Field id="st-ctx" label="What it scans">
@@ -185,7 +189,7 @@ export function Stations() {
             ))}
           </select>
         </Field>
-        <Field id="st-hours" label="Works for" hint="It stops automatically after this.">
+        <Field id="st-hours" label="Works for">
           <select id="st-hours" className="input" value={form.hours} onChange={(e) => setForm({ ...form, hours: e.target.value })}>
             {[4, 12, 24, 48, 72].map((h) => (
               <option key={h} value={h}>

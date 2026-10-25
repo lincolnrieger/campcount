@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ApiFailure, api } from '../api';
-import { Loading, Notice } from '../components/ui';
+import { Loading, Notice, SkeletonList } from '../components/ui';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import { minutesAgo } from './Live';
@@ -54,7 +54,12 @@ export function CloseOut() {
     }
   }
 
-  if (rec.loading && !rec.data) return <Loading />;
+  if (rec.loading && !rec.data)
+    return (
+      <Loading label="Loading close-out">
+        <SkeletonList rows={4} aside="button" heading />
+      </Loading>
+    );
   if (rec.error) return <Notice tone="stop">{rec.error.message}</Notice>;
   const items = rec.data?.items ?? [];
   const groups = [...new Set(items.map((i) => i.contextKey))];

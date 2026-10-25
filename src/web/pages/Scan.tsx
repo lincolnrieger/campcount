@@ -1,9 +1,10 @@
+import { useTitle } from '../useTitle';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 import type { ContextType, Direction } from '../../shared/scanRules';
 import { Icon } from '../components/Icon';
-import { Notice } from '../components/ui';
+import { Loading, Notice, Skeleton, SkeletonList } from '../components/ui';
 import { useSession } from '../session';
 import { rememberLastScan, useEventSummary } from '../scan/targets';
 import { ScanSwitcher } from './ScanHub';
@@ -103,6 +104,7 @@ function ResultPanel({ feedback, contextType }: { feedback: Feedback | null; con
 export function Scan() {
   const { eventId, type, contextId } = useParams() as { eventId: string; type: ContextType; contextId?: string };
   const session = useScanSession(eventId, type, contextId ?? null);
+  useTitle(session.snapshot ? `Scan: ${session.snapshot.context.name}` : 'Scan');
   const { me } = useSession();
   const location = useLocation();
   const event = useEventSummary(me?.kind === 'user' ? eventId : null);
@@ -227,22 +229,44 @@ export function Scan() {
       </div>
     );
   }
-  if (!session.snapshot) return <p className="lede">Downloading the list for this phone…</p>;
+  if (!session.snapshot)
+    return (
+      <div className="scan">
+        <Loading label="Downloading the list for this phone">
+          <div className="scan-head">
+            <div>
+              <Skeleton width="8rem" height="0.9rem" />
+              <Skeleton width="12rem" height="1.8rem" radius="6px" className="skeleton-gap-sm" />
+            </div>
+            <Skeleton width="6.5rem" height="1rem" />
+          </div>
+          <Skeleton width="100%" height="min(46dvh, 100vw)" radius="18px" className="skeleton-gap" />
+          <Skeleton width="100%" height="5.5rem" radius="18px" className="skeleton-gap" />
+          <div className="scan-tools">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} width="100%" height="68px" radius="var(--radius)" />
+            ))}
+          </div>
+        </Loading>
+      </div>
+    );
   const ctx = session.snapshot.context;
 
   return (
     <div className="scan">
       <header className="scan-head">
         {event ? (
-          <button type="button" className="scan-switch" onClick={() => setSwitching(true)} aria-haspopup="dialog">
-            <span className="scan-kicker">{session.snapshot.event.name}</span>
-            <span className="scan-title">
-              {ctx.name}
-              <span className="scan-switch-hint">
-                <Icon name="swap" size={16} /> Switch
+          <h1 className="scan-heading">
+            <button type="button" className="scan-switch" onClick={() => setSwitching(true)} aria-haspopup="dialog">
+              <span className="scan-kicker">{session.snapshot.event.name}</span>
+              <span className="scan-title">
+                {ctx.name}
+                <span className="scan-switch-hint">
+                  <Icon name="swap" size={16} /> Switch
+                </span>
               </span>
-            </span>
-          </button>
+            </button>
+          </h1>
         ) : (
           <div>
             <p className="scan-kicker">{session.snapshot.event.name}</p>
@@ -269,13 +293,12 @@ export function Scan() {
       )}
 
       {twoWay && (
-        <div className="direction" role="radiogroup" aria-label="Scan direction">
+        <div className="direction" role="group" aria-label="Scan direction">
           {(['in', 'out'] as Direction[]).map((d) => (
             <button
               key={d}
               type="button"
-              role="radio"
-              aria-checked={direction === d}
+              aria-pressed={direction === d}
               className={direction === d ? 'is-on' : undefined}
               onClick={() => setDirection(d)}
             >
@@ -424,6 +447,9 @@ function CodeEntry({ onSubmit }: { onSubmit: (code: string) => void }) {
 
 function NameSearch({ people, onPick }: { people: SnapshotPerson[]; onPick: (p: SnapshotPerson) => void }) {
   const [q, setQ] = useState('');
+  // The panel opens because the person tapped "Find name", so move them into the field they asked for.
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => input.current?.focus(), []);
   const matches = q.trim()
     ? people
         .filter((p) => matchesSearch(q, p.fullName ?? p.name, p.memberNumber))
@@ -433,8 +459,8 @@ function NameSearch({ people, onPick }: { people: SnapshotPerson[]; onPick: (p: 
   return (
     <div className="scan-panel">
       <label htmlFor="name-q">Name or membership number</label>
-      <input id="name-q" className="input" type="search" autoComplete="off" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Start typing, even one letter" />
-      <p className="field-hint">For when a card won't scan. It's saved as a manual entry.</p>
+      <input id="name-q" ref={input} className="input" type="search" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Start typing, even one letter" />
+      <p className="field-hint">Saved as a hand-entered scan.</p>
       <ul className="name-results">
         {matches.map((p) => (
           <li key={p.id}>
@@ -464,17 +490,27 @@ function WhoHasEaten({ eventId, mealId, refreshKey }: { eventId: string; mealId:
       })
       .catch(() => setOffline(true));
   }, [eventId, mealId, refreshKey]);
-  if (!data) return <p className="field-hint">{offline ? 'Needs signal to load the list.' : 'Loading…'}</p>;
+  if (!data)
+    return offline ? (
+      <p className="field-hint">Needs signal to load the list.</p>
+    ) : (
+      <div className="scan-panel">
+        <Loading label="Loading who has eaten">
+          <Skeleton width="100%" height="48px" radius="12px" />
+          <SkeletonList rows={5} lines={1} aside="none" />
+        </Loading>
+      </div>
+    );
   const eaten = data.people.filter((p) => p.servedAt);
   const notYet = data.people.filter((p) => !p.servedAt);
   const list = (show === 'eaten' ? eaten : notYet).filter((p) => matchesSearch(q, p.name));
   return (
     <div className="scan-panel">
-      <div className="segmented" role="tablist" aria-label="Show">
-        <button type="button" role="tab" aria-selected={show === 'not'} onClick={() => setShow('not')}>
+      <div className="segmented" role="group" aria-label="Show">
+        <button type="button" aria-pressed={show === 'not'} onClick={() => setShow('not')}>
           Not yet <span>{notYet.length}</span>
         </button>
-        <button type="button" role="tab" aria-selected={show === 'eaten'} onClick={() => setShow('eaten')}>
+        <button type="button" aria-pressed={show === 'eaten'} onClick={() => setShow('eaten')}>
           Eaten <span>{eaten.length}</span>
         </button>
       </div>

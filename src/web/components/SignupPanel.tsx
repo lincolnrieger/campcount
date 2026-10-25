@@ -127,7 +127,7 @@ export function SignupPanel({
       )}
 
       <section className="list-section">
-        <h3 className="list-heading">{view.person.name}'s activities</h3>
+        <h2 className="list-heading">{view.person.name}'s activities</h2>
         {view.bookings.length === 0 ? (
           <p className="field-hint">Nothing booked yet.</p>
         ) : (
@@ -157,7 +157,7 @@ export function SignupPanel({
 
       {view.open ? (
         <section className="list-section">
-          <h3 className="list-heading">Book an activity</h3>
+          <h2 className="list-heading">Book an activity</h2>
           <input className="input" type="search" placeholder="Type an activity, for example kayak" aria-label="Search activities" value={q} onChange={(e) => setQ(e.target.value)} />
           <div className="section-gap-sm">
             <SessionBoard sessions={shown} tz={tz} booked={booked} highlight={highlight} busy={busy} onBook={onBook} />

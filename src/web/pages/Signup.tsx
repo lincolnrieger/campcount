@@ -6,8 +6,9 @@ import { ApiFailure, api } from '../api';
 import { Icon } from '../components/Icon';
 import { SessionBoard, SignupPanel } from '../components/SignupPanel';
 import type { SignupSession, SignupView } from '../components/SignupPanel';
-import { Field, Notice, formatDateRange } from '../components/ui';
+import { Field, formatDateRange, Loading, Notice, SkeletonList } from '../components/ui';
 import { createDetector } from '../scan/decoder';
+import { useTitle } from '../useTitle';
 
 /** Back to the start screen after this long without a tap, so the next person starts fresh. */
 const IDLE_MS = 90_000;
@@ -18,7 +19,7 @@ function Frame({ title, subtitle, children }: { title: string; subtitle?: string
   return (
     <div className="signup-page">
       <header className="signup-band">
-        <p className="wordmark">{title}</p>
+        <h1 className="wordmark">{title}</h1>
         {subtitle && <p>{subtitle}</p>}
       </header>
       <main className="signup-body">{children}</main>
@@ -63,6 +64,7 @@ function usePerson(onError: (text: string) => void) {
  * lanyard or types its code, books, and taps Done.
  */
 export function SignupKiosk() {
+  useTitle('Activity sign-up');
   const { code } = useParams() as { code: string };
   const [params] = useSearchParams();
   const highlight = params.get('activity');
@@ -131,7 +133,9 @@ export function SignupKiosk() {
   if (!board) {
     return (
       <Frame title="Activity sign-up">
-        <p className="lede">Loading…</p>
+        <Loading label="Loading activities">
+          <SkeletonList rows={4} aside="tag" heading />
+        </Loading>
       </Frame>
     );
   }
@@ -165,7 +169,7 @@ export function SignupKiosk() {
                 Signing up for <strong>{wanted.name}</strong>. Scan your lanyard to book.
               </p>
             )}
-            <h1>Scan your lanyard</h1>
+            <h2>Scan your lanyard</h2>
             <LanyardCamera onToken={(token) => void identify({ token })} />
             <form
               className="kiosk-type"
@@ -276,6 +280,7 @@ function LanyardCamera({ onToken }: { onToken: (token: string) => void }) {
  * see and change their activity bookings.
  */
 export function MyActivities() {
+  useTitle('Your activities');
   // The token is in the URL fragment, which browsers never send to a server.
   const [token] = useState(() => window.location.hash.slice(1));
   const [error, setError] = useState<string | null>(null);
@@ -305,7 +310,10 @@ export function MyActivities() {
   if (!person.view) {
     return (
       <Frame title="CampCount">
-        <p className="lede">Loading…</p>
+        <Loading label="Loading your activities">
+          <SkeletonList rows={2} aside="none" heading />
+          <SkeletonList rows={4} aside="button" heading />
+        </Loading>
       </Frame>
     );
   }

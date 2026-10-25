@@ -3,7 +3,7 @@ import { ApiFailure, api } from '../api';
 import { clearDevice } from '../offline/db';
 import { useSession } from '../session';
 import { Icon } from './Icon';
-import { Notice } from './ui';
+import { Loading, Notice, Skeleton, SkeletonList } from './ui';
 
 interface Options {
   events: { id: string; name: string; isDemo: boolean; status: string; activities: { id: string; name: string }[] }[];
@@ -80,12 +80,18 @@ export function ViewAsSheet({ open, onClose, initialEventId }: { open: boolean; 
           <Icon name="close" />
         </button>
       </div>
-      <p className="field-hint">See exactly what each role sees. Nothing changes for anyone else.</p>
+      <p className="field-hint">Nothing changes for anyone else.</p>
       {error && <Notice tone="stop">{error}</Notice>}
       {current && (
         <button type="button" className="btn btn-block section-gap-sm" disabled={busy} onClick={() => void backToMe()}>
           Back to me
         </button>
+      )}
+      {!options && !error && (
+        <Loading label="Loading events and roles">
+          <Skeleton width="100%" height="48px" radius="var(--radius-control)" />
+          <SkeletonList rows={3} lines={2} aside="none" />
+        </Loading>
       )}
       {options && (
         <>

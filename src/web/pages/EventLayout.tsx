@@ -1,8 +1,9 @@
+import { useTitle } from '../useTitle';
 import { createContext, useContext, useEffect, useRef } from 'react';
 import { NavLink, Outlet, useLocation, useParams } from 'react-router';
 import { useCollapsingTitle } from '../components/Layout';
 import type { Permission } from '../../shared/permissions';
-import { EventStatusBadge, Loading, Notice, formatDateRange } from '../components/ui';
+import { EventStatusBadge, formatDateRange, Loading, Notice, Skeleton, SkeletonHeading, SkeletonList } from '../components/ui';
 import type { EventSummary } from '../types';
 import { useApi } from '../useApi';
 
@@ -24,7 +25,14 @@ export function EventLayout() {
   const { eventId } = useParams();
   const { data, error, loading, reload } = useApi<{ event: EventSummary }>(`/events/${eventId}`);
 
-  if (loading && !data) return <Loading />;
+  if (loading && !data)
+    return (
+      <Loading label="Loading event">
+        <SkeletonHeading width="16rem" />
+        <div className="skeleton-tabs">{[5, 4, 4, 5, 4].map((w, i) => <Skeleton key={i} width={`${w}rem`} height="1rem" />)}</div>
+        <SkeletonList rows={4} />
+      </Loading>
+    );
   if (error) return <Notice tone="stop">{error.status === 404 ? 'This event does not exist, or you are not assigned to it.' : error.message}</Notice>;
   if (!data) return null;
   return <EventShell event={data.event} reload={reload} />;
@@ -50,6 +58,9 @@ function EventShell({ event, reload }: { event: EventSummary; reload: () => Prom
     { to: 'close-out', label: 'Close-out', show: can('reports.view') && event.status !== 'draft' },
     { to: 'staff', label: 'Staff', show: can('staff.manage') },
   ];
+
+  const here = location.pathname.replace(/^\/events\/[^/]+\/?/, '').split('/')[0] ?? '';
+  useTitle(`${tabs.find((t) => t.to === here)?.label ?? 'Overview'}: ${event.name}`);
 
   return (
     <EventContext.Provider value={{ event, can, reload }}>

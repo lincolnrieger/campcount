@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 import type { DietaryEntryInput } from '../../shared/schemas';
 import { ApiFailure, api } from '../api';
 import { Icon } from '../components/Icon';
-import { Loading, Notice } from '../components/ui';
+import { Loading, Notice, Skeleton, SkeletonList } from '../components/ui';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import { matchesSearch } from '../../shared/search';
@@ -54,7 +54,18 @@ export function Roster() {
     }
   }
 
-  if (loading && !data) return <Loading />;
+  if (loading && !data)
+    return (
+      <Loading label="Loading people">
+        <Skeleton width="12rem" height="1rem" className="skeleton-gap" />
+        <div className="skeleton-actions">
+          <Skeleton width="9rem" height="48px" radius="var(--radius-control)" />
+          <Skeleton width="9rem" height="48px" radius="var(--radius-control)" />
+        </div>
+        <Skeleton width="100%" height="48px" radius="var(--radius-control)" className="skeleton-gap" />
+        <SkeletonList rows={6} />
+      </Loading>
+    );
   if (error) return <Notice tone="stop">{error.message}</Notice>;
 
   return (
@@ -115,8 +126,8 @@ export function Roster() {
             </div>
           </div>
           <div className="section-row">
-            <p className="field-hint flush">
-              {shown.length === all.length ? `${all.length} ${all.length === 1 ? 'person' : 'people'}` : `${shown.length} of ${all.length} people`}
+            <p className="field-hint flush" aria-live="polite">
+              {shown.length !== all.length && `${shown.length} of ${all.length} people`}
             </p>
             {can('roster.edit') && (
               <button className="btn-link" onClick={() => setDeleting(!deleting)}>

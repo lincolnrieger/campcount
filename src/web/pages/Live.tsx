@@ -4,7 +4,7 @@ import { Icon } from '../components/Icon';
 import { matchesSearch, searchRank } from '../../shared/search';
 import { timeInZone } from '../../shared/time';
 import type { Where } from './Person';
-import { Loading, Notice } from '../components/ui';
+import { Loading, Notice, Skeleton, SkeletonList, SkeletonTiles } from '../components/ui';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 
@@ -123,7 +123,17 @@ export function Live() {
     return () => clearInterval(timer);
   }, [reload, reloadWhere]);
 
-  if ((loading && !data) || (where.loading && !where.data)) return <Loading />;
+  if ((loading && !data) || (where.loading && !where.data))
+    return (
+      <Loading label="Loading where everyone is">
+        <Skeleton width="80%" height="0.9rem" className="skeleton-gap" />
+        <SkeletonTiles />
+        <Skeleton width="100%" height="48px" radius="12px" className="skeleton-gap" />
+        <Skeleton width="100%" height="48px" radius="var(--radius-control)" className="skeleton-gap" />
+        <SkeletonList rows={4} lines={2} aside="none" heading />
+        <SkeletonList rows={3} lines={2} aside="none" heading />
+      </Loading>
+    );
   if (error || where.error) return <Notice tone="stop">{(error ?? where.error)!.message}</Notice>;
   if (!data || !where.data) return null;
   const tz = data.timezone;
@@ -142,7 +152,7 @@ export function Live() {
   return (
     <div className="board">
       <p className="field-hint">
-        As of {at}, updating every 30 seconds. Phones without signal upload later, so recent changes can take a while to show.
+        Updated {at}. Phones without signal upload when they reconnect.
       </p>
       {data.openItems > 0 && (
         <Notice tone="warn">
@@ -170,7 +180,7 @@ export function Live() {
       )}
 
       <section className="list-section">
-        <div className="segmented segmented-3" role="tablist" aria-label="Group people by">
+        <div className="segmented segmented-3" role="group" aria-label="Group people by">
           {(
             [
               ['where', 'Where'],
@@ -178,7 +188,7 @@ export function Live() {
               ['section', 'Section'],
             ] as const
           ).map(([k, label]) => (
-            <button key={k} type="button" role="tab" aria-selected={groupBy === k} onClick={() => setGroupBy(k)}>
+            <button key={k} type="button" aria-pressed={groupBy === k} onClick={() => setGroupBy(k)}>
               {label}
             </button>
           ))}

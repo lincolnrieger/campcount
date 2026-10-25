@@ -6,7 +6,7 @@ import { canScan } from '../scan/targets';
 import { useApi } from '../useApi';
 import type { Registration } from './Roster';
 import { Exports } from './CloseOut';
-import { Notice } from '../components/ui';
+import { Loading, Notice, Skeleton } from '../components/ui';
 import type { EventFeatures, EventStatus } from '../../shared/schemas';
 import { EVENT_TRANSITIONS } from '../../shared/lifecycle';
 import { FeatureChecklist } from './Events';
@@ -76,6 +76,11 @@ export function EventOverview() {
           <Icon name="chevron" />
         </Link>
       )}
+      {roster.loading && !roster.data && (
+        <Loading label="Loading attendees">
+          <Skeleton width="100%" height="74px" radius="var(--radius)" className="skeleton-gap-lg" />
+        </Loading>
+      )}
       {expected && (
         <Link to="roster" className="expected">
           <span className="expected-main">
@@ -105,8 +110,7 @@ export function EventOverview() {
       {!can('reports.view') && <Exports />}
 
       {can('event.configure') && (
-      <section aria-labelledby="features-heading" className="narrow">
-        <h2 id="features-heading">Features</h2>
+      <section className="narrow features">
         <FeatureChecklist value={features} onChange={setFeatures} disabled={!editable || busy} />
         {editable && (
           <button
