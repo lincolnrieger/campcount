@@ -4,8 +4,10 @@ import { useNavigate, useSearchParams } from 'react-router';
 import { ApiFailure, api } from '../api';
 import { Field, Notice } from '../components/ui';
 import { useSession } from '../session';
+import { useTitle } from '../useTitle';
 
 export function SetPassword() {
+  useTitle('Password');
   const { me, refresh } = useSession();
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -81,6 +83,7 @@ export function SetPassword() {
 }
 
 export function Account() {
+  useTitle('Your account');
   const { me, signOut, refresh } = useSession();
   const navigate = useNavigate();
   const [message, setMessage] = useState<{ tone: 'ok' | 'stop'; text: string } | null>(null);

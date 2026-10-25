@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Loading, Notice } from '../components/ui';
+import { Loading, Notice, SkeletonList } from '../components/ui';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import type { Registration } from './Roster';
@@ -16,7 +16,12 @@ export function RollSheet() {
   const [who, setWho] = useState<'all' | 'youth' | 'adult'>('all');
   const [columns, setColumns] = useState('In, Out');
 
-  if (loading && !data) return <Loading />;
+  if (loading && !data)
+    return (
+      <Loading label="Loading roll sheet">
+        <SkeletonList rows={8} lines={1} aside="none" />
+      </Loading>
+    );
   if (error) return <Notice tone="stop">{error.message}</Notice>;
   const people = (data?.registrations ?? [])
     .filter((r) => r.status === 'active' && (who === 'all' || r.kind === who))

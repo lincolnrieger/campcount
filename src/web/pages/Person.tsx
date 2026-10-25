@@ -1,3 +1,4 @@
+import { useTitle } from '../useTitle';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
@@ -6,7 +7,7 @@ import { SECTIONS } from '../../shared/schemas';
 import { ApiFailure, api } from '../api';
 import { DietaryEditor, describeEntry } from '../components/DietaryEditor';
 import { Icon } from '../components/Icon';
-import { Field, Loading, Notice } from '../components/ui';
+import { Field, Loading, Notice, Skeleton, SkeletonHeading, SkeletonList } from '../components/ui';
 import type { Card } from '../lanyards/pdf';
 import { buildLanyardPdf, downloadPdf } from '../lanyards/pdf';
 import { useApi } from '../useApi';
@@ -89,6 +90,7 @@ export function Person() {
   const navigate = useNavigate();
   const path = `/events/${event.id}/registrations/${registrationId}`;
   const { data, error, loading, reload } = useApi<PersonData>(path);
+  useTitle(data ? `${data.registration.preferredName || data.registration.firstName} ${data.registration.lastName}` : 'Person');
   const [editing, setEditing] = useState(false);
   const [editingDiet, setEditingDiet] = useState<DietaryEntryInput[] | null>(null);
   const [card, setCard] = useState<Card | null>(null);
@@ -109,7 +111,15 @@ export function Person() {
     }
   }
 
-  if (loading && !data) return <Loading />;
+  if (loading && !data)
+    return (
+      <Loading label="Loading person">
+        <Skeleton width="5rem" height="1rem" className="skeleton-gap" />
+        <SkeletonHeading width="13rem" />
+        <SkeletonList rows={2} lines={1} aside="none" heading />
+        <SkeletonList rows={4} lines={2} aside="none" heading />
+      </Loading>
+    );
   if (error) return <Notice tone="stop">{error.status === 404 ? 'This person is no longer on the event.' : error.message}</Notice>;
   if (!data) return null;
   const r = data.registration;

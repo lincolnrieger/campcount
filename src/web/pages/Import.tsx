@@ -6,7 +6,7 @@ import { TARGET_FIELDS, autoMap, flagDuplicates, missingRequired, normaliseDieta
 import type { DietaryEntryInput, ImportRow } from '../../shared/schemas';
 import { ApiFailure, api } from '../api';
 import { DietaryEditor } from '../components/DietaryEditor';
-import { Loading, Notice } from '../components/ui';
+import { Loading, Notice, Skeleton } from '../components/ui';
 import { readFirstSheet } from '../import/xlsx';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
@@ -148,7 +148,12 @@ export function Import() {
     }
   }
 
-  if (context.loading && !context.data) return <Loading />;
+  if (context.loading && !context.data)
+    return (
+      <Loading label="Loading import">
+        <Skeleton width="100%" height="9rem" radius="var(--radius)" />
+      </Loading>
+    );
   if (context.error) return <Notice tone="stop">{context.error.message}</Notice>;
   const mappedCount = Object.keys(mapping).length;
 

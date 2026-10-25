@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiFailure, api } from '../api';
-import { Field, Loading, Notice } from '../components/ui';
+import { Field, Loading, Notice, SkeletonList } from '../components/ui';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import { matchesSearch, searchRank } from '../../shared/search';
@@ -124,7 +124,11 @@ export function Staff() {
     <>
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
       <h2>People on this event</h2>
-      {staff.loading && !staff.data && <Loading />}
+      {staff.loading && !staff.data && (
+        <Loading label="Loading staff">
+          <SkeletonList rows={3} aside="button" />
+        </Loading>
+      )}
       {staff.error && <Notice tone="stop">{staff.error.message}</Notice>}
       {staff.data && staff.data.staff.length === 0 && (
         <div className="empty">
@@ -179,7 +183,7 @@ export function Staff() {
                     </select>
                   </td>
                   <td className="num">
-                    <button className="btn-link" onClick={() => void remove(row)}>
+                    <button className="btn-link text-stop" onClick={() => void remove(row)}>
                       Remove<span className="visually-hidden"> {row.user.displayName}</span>
                     </button>
                   </td>
@@ -192,11 +196,11 @@ export function Staff() {
 
       <form onSubmit={add} noValidate className="narrow section-gap">
         <h2>Add someone</h2>
-        <div className="segmented section-gap-sm" role="tablist" aria-label="Who are you adding?">
-          <button type="button" role="tab" aria-selected={mode === 'existing'} onClick={() => setMode('existing')}>
+        <div className="segmented section-gap-sm" role="group" aria-label="Who are you adding?">
+          <button type="button" aria-pressed={mode === 'existing'} onClick={() => setMode('existing')}>
             Has an account
           </button>
-          <button type="button" role="tab" aria-selected={mode === 'new'} onClick={() => setMode('new')}>
+          <button type="button" aria-pressed={mode === 'new'} onClick={() => setMode('new')}>
             Someone new
           </button>
         </div>
@@ -224,7 +228,13 @@ export function Staff() {
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                 />
-                <PersonResults people={people.data?.people ?? []} query={query} onPick={setPicked} />
+                {people.data ? (
+                  <PersonResults people={people.data.people} query={query} onPick={setPicked} />
+                ) : (
+                  <Loading label="Loading accounts">
+                    <SkeletonList rows={3} aside="tag" />
+                  </Loading>
+                )}
                 <span className="field-hint">
                   Not listed?{' '}
                   <button type="button" className="btn-link" onClick={() => setMode('new')}>

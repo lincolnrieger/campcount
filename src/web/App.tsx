@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router';
 import type { ReactNode } from 'react';
 import { Layout } from './components/Layout';
-import { Loading } from './components/ui';
+import { Loading, SkeletonHeading, SkeletonList } from './components/ui';
 import { AdminUsers } from './pages/AdminUsers';
 import { Admin } from './pages/Admin';
 import { AdminDemo } from './pages/AdminDemo';
@@ -34,7 +34,15 @@ import { useSession } from './session';
 function RequireSignIn({ children }: { children: ReactNode }) {
   const { me, loading } = useSession();
   const location = useLocation();
-  if (loading) return <Loading />;
+  if (loading)
+    return (
+      <div className="page">
+        <Loading>
+          <SkeletonHeading />
+          <SkeletonList rows={3} />
+        </Loading>
+      </div>
+    );
   if (!me) return <Navigate to="/sign-in" replace state={{ from: location.pathname }} />;
   return <>{children}</>;
 }

@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Icon } from '../components/Icon';
-import { Loading, Notice } from '../components/ui';
+import { Loading, Notice, Skeleton, SkeletonHeading, SkeletonList } from '../components/ui';
 import type { ScanTarget } from '../scan/targets';
 import { canScan, isOnNow, rememberScanEvent, useLastScan, useScanEvent, useScanTargets } from '../scan/targets';
 import type { EventSummary } from '../types';
 import { useApi } from '../useApi';
 import { dayLabel, eventDays, todayInZone } from '../../shared/time';
+import { useTitle } from '../useTitle';
 
 /** The Scan tab: pick an event (if more than one), then what to scan. */
 export function ScanHub() {
+  useTitle('Scan');
   const { data, error, loading } = useApi<{ events: EventSummary[] }>('/events');
   const [params, setParams] = useSearchParams();
   const stored = useScanEvent();
@@ -22,7 +24,15 @@ export function ScanHub() {
     if (event) rememberScanEvent(event.id);
   }, [event]);
 
-  if ((loading && !data) || stored === undefined) return <Loading />;
+  if ((loading && !data) || stored === undefined)
+    return (
+      <Loading label="Loading what you can scan">
+        <SkeletonHeading width="6rem" />
+        <div className="skeleton-strip">{[0, 1, 2].map((i) => <Skeleton key={i} width="64px" height="68px" radius="var(--radius)" />)}</div>
+        <SkeletonList rows={1} heading />
+        <SkeletonList rows={3} heading />
+      </Loading>
+    );
   if (error) return <Notice tone="stop">{error.message}</Notice>;
 
   if (!event) {
@@ -93,7 +103,14 @@ export function ScanTargetPicker({
   const [day, setDay] = useState<string | null>(null);
   const shownDay = day ?? current?.day ?? (usedDays.includes(today) ? today : (usedDays[0] ?? null));
 
-  if (!targets) return <Loading />;
+  if (!targets)
+    return (
+      <Loading label="Loading what you can scan">
+        <div className="skeleton-strip">{[0, 1, 2].map((i) => <Skeleton key={i} width="64px" height="68px" radius="var(--radius)" />)}</div>
+        <SkeletonList rows={1} heading />
+        <SkeletonList rows={3} heading />
+      </Loading>
+    );
   if (targets.length === 0) {
     return <p className="lede">{offline ? 'No signal, and this phone has not loaded this event yet.' : 'Nothing is set up to scan at this event yet.'}</p>;
   }
@@ -116,9 +133,9 @@ export function ScanTargetPicker({
     <>
       {offline && <p className="field-hint">No signal: showing the list saved on this phone.</p>}
       {usedDays.length > 1 && (
-        <div className="day-strip" role="tablist" aria-label="Day">
+        <div className="day-strip" role="group" aria-label="Day">
           {usedDays.map((d) => (
-            <button key={d} type="button" role="tab" aria-selected={d === shownDay} onClick={() => setDay(d)}>
+            <button key={d} type="button" aria-pressed={d === shownDay} onClick={() => setDay(d)}>
               <span>{dayLabel(d).split(' ')[0]}</span>
               <strong>{dayLabel(d).split(' ')[1]}</strong>
               {d === today && <em>Today</em>}

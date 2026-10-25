@@ -78,6 +78,9 @@ export function Layout() {
   return (
     <TitleContext.Provider value={setTitle}>
       <div className="shell">
+        <a href="#main" className="skip-link">
+          Skip to content
+        </a>
         <header className={title ? 'topbar has-title' : 'topbar'}>
           {me?.kind === 'user' && <TabLinks className="topnav" isAdmin={isAdmin} />}
           <p className={title ? 'topbar-title is-shown' : 'topbar-title'} aria-hidden={!title}>
@@ -85,7 +88,7 @@ export function Layout() {
           </p>
           <div className="topbar-actions">
             {canViewAs && (
-              <button type="button" className="viewas-button" onClick={() => setViewAs(true)}>
+              <button type="button" className="viewas-button" aria-label="View as" aria-haspopup="dialog" onClick={() => setViewAs(true)}>
                 <Icon name="eye" size={18} />
                 <span>View as</span>
               </button>
@@ -133,7 +136,7 @@ export function Layout() {
             to go back to your own account.
           </div>
         )}
-        <main className="page" id="main">
+        <main className="page" id="main" tabIndex={-1}>
           <Outlet />
         </main>
         {me?.kind === 'user' && <TabLinks className="tabbar" isAdmin={isAdmin} />}

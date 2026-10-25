@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiFailure, api } from '../api';
-import { Field, Loading, Notice } from '../components/ui';
+import { Field, Loading, Notice, SkeletonList } from '../components/ui';
 import { LinkShare } from '../components/LinkShare';
 import { useSession } from '../session';
 import { useApi } from '../useApi';
 import { matchesSearch } from '../../shared/search';
 import { minutesAgo } from './Live';
+import { useTitle } from '../useTitle';
 
 interface UserRow {
   id: string;
@@ -22,6 +23,7 @@ interface UserRow {
 }
 
 export function AdminUsers() {
+  useTitle('People');
   const { me } = useSession();
   const users = useApi<{ users: UserRow[] }>('/admin/users');
   const [form, setForm] = useState({ email: '', displayName: '', platformAdmin: false, sendEmail: true });
@@ -83,7 +85,6 @@ export function AdminUsers() {
       <div className="page-head">
         <div>
           <h1>People</h1>
-          <p className="lede flush">Everyone with a CampCount account. People can also sign themselves up.</p>
         </div>
       </div>
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
@@ -93,7 +94,11 @@ export function AdminUsers() {
         </label>
         <input id="people-q" className="input" type="search" placeholder="Search by name or email" value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
-      {users.loading && !users.data && <Loading />}
+      {users.loading && !users.data && (
+        <Loading label="Loading people">
+          <SkeletonList rows={6} aside="tag" />
+        </Loading>
+      )}
       {users.error && <Notice tone="stop">{users.error.message}</Notice>}
       <ul className="people-list">
         {list.map((u) => {
@@ -206,7 +211,6 @@ export function AdminUsers() {
       <details className="section-gap narrow">
         <summary>Add someone yourself</summary>
         <form onSubmit={create} noValidate>
-          <p className="field-hint">Usually people sign up themselves, or an event manager adds them from their event's Staff page. New accounts set their own password from a one-time link.</p>
           <Field id="u-name" label="Name">
             <input id="u-name" className="input" value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} />
           </Field>

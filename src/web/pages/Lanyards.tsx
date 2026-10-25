@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ApiFailure, api } from '../api';
 import { Icon } from '../components/Icon';
 import { QrCode } from '../components/QrCode';
-import { Loading, Notice } from '../components/ui';
+import { Loading, Notice, Skeleton } from '../components/ui';
 import type { Card, CardSize } from '../lanyards/pdf';
 import { CARD_SIZES, SECTION_COLOURS, bandLabel, buildLanyardPdf, downloadPdf } from '../lanyards/pdf';
 import { useEvent } from './EventLayout';
@@ -109,7 +109,19 @@ export function Lanyards() {
   }
 
   if (!can('credentials.manage')) return <Notice tone="stop">You do not have permission to print lanyards.</Notice>;
-  if (!cards) return message ? <Notice tone={message.tone}>{message.text}</Notice> : <Loading label="Loading cards" />;
+  if (!cards)
+    return message ? (
+      <Notice tone={message.tone}>{message.text}</Notice>
+    ) : (
+      <Loading label="Loading cards">
+        <Skeleton width="100%" height="7rem" radius="var(--radius)" />
+        <div className="card-grid card-grid-lanyard">
+          {Array.from({ length: 8 }, (_, i) => (
+            <Skeleton key={i} width="100%" height="auto" radius="4px" className="skeleton-card" />
+          ))}
+        </div>
+      </Loading>
+    );
 
   const toggle = (id: string) =>
     setExcluded((prev) => {
@@ -172,8 +184,8 @@ export function Lanyards() {
       </div>
 
       <p className="field-hint narrow">
-        The PDF opens in any PDF viewer. Print on A4 at 100% (actual size) and cut along the dashed lines. Each card has a QR code and a
-        typed backup code; neither contains personal details. Keep spare cards secure, and replace lost ones from the roster.
+        Print on A4 at 100% (actual size) and cut along the dashed lines. Keep spare cards secure: a card is enough to be scanned as
+        that person.
       </p>
 
       <ul className={`card-grid card-grid-${size}`}>

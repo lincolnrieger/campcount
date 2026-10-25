@@ -5,7 +5,7 @@ import { Icon } from '../components/Icon';
 import { QrCode } from '../components/QrCode';
 import { placesLeft } from '../components/SignupPanel';
 import type { SignupSession } from '../components/SignupPanel';
-import { Loading, Notice } from '../components/ui';
+import { Loading, Notice, Skeleton } from '../components/ui';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import { dayInZone, dayLabel, timeRange } from '../../shared/time';
@@ -48,8 +48,8 @@ export function QrCodes() {
         <h2 className="list-heading">Lanyards</h2>
         <div className="list-pad">
           <p>
-            Everyone's QR code is on their lanyard. Scanners read it at the gate, meals and activities. If someone scans their own lanyard with
-            a phone camera, it opens their activities page where they can see and change their bookings.
+            Everyone's QR code is on their lanyard. Scanning your own lanyard with a phone camera opens your activities page, where you can
+            see and change your bookings.
           </p>
           {can('credentials.manage') && (
             <Link to="../lanyards" relative="path" className="btn btn-small">
@@ -62,7 +62,11 @@ export function QrCodes() {
       {manage && (
         <section className="list-section no-print">
           <h2 className="list-heading">Activity sign-up screen</h2>
-          {signup.loading && !signup.data && <Loading />}
+          {signup.loading && !signup.data && (
+            <Loading label="Loading sign-up screen">
+              <Skeleton width="100%" height="15rem" radius="var(--radius)" />
+            </Loading>
+          )}
           {signup.data && !signup.data.enabled && (
             <div className="list-pad">
               <p>Let people book activity sessions themselves by scanning their lanyard at a tablet, or from a session poster.</p>
@@ -97,7 +101,7 @@ export function QrCodes() {
                 <input className="input input-compact link-share-input" readOnly value={signup.data.link} onFocus={(e) => e.target.select()} aria-label="Sign-up screen link" />
                 <div className="actions flush-top">
                   <a className="btn btn-small" href={signup.data.link} target="_blank" rel="noreferrer">
-                    Open sign-up screen
+                    Open sign-up screen<span className="visually-hidden"> (opens in a new tab)</span>
                   </a>
                   <button className="btn btn-secondary btn-small" onClick={() => void navigator.clipboard?.writeText(signup.data!.link).then(() => setCopied(true))}>
                     {copied ? 'Copied' : 'Copy link'}

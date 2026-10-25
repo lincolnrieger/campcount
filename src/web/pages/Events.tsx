@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { ApiFailure, api } from '../api';
-import { EventStatusBadge, Field, Loading, Notice, formatDateRange } from '../components/ui';
+import { EventStatusBadge, Field, formatDateRange, Loading, Notice, SkeletonList } from '../components/ui';
 import { useSession } from '../session';
 import { Icon } from '../components/Icon';
 import type { Me } from '../types';
@@ -10,6 +10,7 @@ import type { EventSummary } from '../types';
 import { useApi } from '../useApi';
 import { FEATURE_COPY } from './featureCopy';
 import type { EventFeatures } from '../../shared/schemas';
+import { useTitle } from '../useTitle';
 
 function greeting(me: Me | null): string {
   const first = me?.kind === 'user' ? me.user.displayName.split(' ')[0] : '';
@@ -19,6 +20,7 @@ function greeting(me: Me | null): string {
 }
 
 export function Events() {
+  useTitle('Home');
   const { me } = useSession();
   const { data, error, loading } = useApi<{ events: EventSummary[] }>('/events');
   const canCreate = me?.kind === 'user' && me.platformPermissions.includes('platform.events.create');
@@ -28,7 +30,6 @@ export function Events() {
       <div className="page-head">
         <div>
           <h1>{greeting(me)}</h1>
-          <p className="lede flush">Your events</p>
         </div>
         {canCreate && (
           <Link className="btn" to="/events/new">
@@ -36,7 +37,11 @@ export function Events() {
           </Link>
         )}
       </div>
-      {loading && <Loading />}
+      {loading && (
+        <Loading label="Loading your events">
+          <SkeletonList rows={3} aside="tag" />
+        </Loading>
+      )}
       {error && <Notice tone="stop">{error.message}</Notice>}
       {data && data.events.length === 0 && (
         <div className="empty">
@@ -97,7 +102,7 @@ export function FeatureChecklist({
   return (
     <fieldset className="field fieldset-plain">
       <legend>What will this event use?</legend>
-      <span className="field-hint">Switch on only what you need. You can change this until the event closes.</span>
+      <span className="field-hint">You can change this until the event closes.</span>
       {(Object.keys(FEATURE_COPY) as (keyof EventFeatures)[]).map((key) => (
         <label className="check" key={key}>
           <input
@@ -117,6 +122,7 @@ export function FeatureChecklist({
 }
 
 export function NewEvent() {
+  useTitle('New event');
   const navigate = useNavigate();
   const [form, setForm] = useState({ name: '', location: '', startsOn: '', endsOn: '', description: '' });
   const [features, setFeatures] = useState<EventFeatures>(DEFAULT_FEATURES);

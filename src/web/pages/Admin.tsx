@@ -1,6 +1,8 @@
+import { useTitle } from '../useTitle';
 import { Link } from 'react-router';
 
 export function Admin() {
+  useTitle('Admin');
   return (
     <>
       <div className="page-head">

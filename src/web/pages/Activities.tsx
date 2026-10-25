@@ -3,7 +3,7 @@ import type { FormEvent } from 'react';
 import { Link } from 'react-router';
 import { Icon } from '../components/Icon';
 import { ApiFailure, api } from '../api';
-import { Field, Loading, Notice } from '../components/ui';
+import { Field, Loading, Notice, Skeleton, SkeletonList } from '../components/ui';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import { deleteContext } from '../confirmDelete';
@@ -152,17 +152,16 @@ function ActivityForm({
         <span className="field-legend" id={`${id}-when`}>
           When
         </span>
-        <div className="chip-row" role="radiogroup" aria-labelledby={`${id}-when`}>
-          <button type="button" role="radio" aria-checked={!timed} className="chip-toggle" onClick={() => setForm({ ...form, day: '' })}>
+        <div className="chip-row" role="group" aria-labelledby={`${id}-when`}>
+          <button type="button" aria-pressed={!timed} className="chip-toggle" onClick={() => setForm({ ...form, day: '' })}>
             All camp
           </button>
           {days.map((d) => (
-            <button key={d} type="button" role="radio" aria-checked={form.day === d} className="chip-toggle" onClick={() => setForm({ ...form, day: d })}>
+            <button key={d} type="button" aria-pressed={form.day === d} className="chip-toggle" onClick={() => setForm({ ...form, day: d })}>
               {dayLabel(d)}
             </button>
           ))}
         </div>
-        {!timed && <span className="field-hint">Runs the whole camp, with no set time.</span>}
       </div>
       {timed && (
         <div className="row time-row">
@@ -178,7 +177,7 @@ function ActivityForm({
               }}
             />
           </Field>
-          <Field id={`${id}-end`} label="Ends" hint="Optional" error={badTimes ? 'Must be after the start' : undefined}>
+          <Field id={`${id}-end`} label="Ends (optional)" error={badTimes ? 'Must be after the start' : undefined}>
             <input id={`${id}-end`} className="input input-time" type="time" value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} />
           </Field>
         </div>
@@ -270,7 +269,13 @@ export function Activities() {
   const tz = event.timezone;
   const days = eventDays(event.startsOn, event.endsOn);
 
-  if (loading && !data) return <Loading />;
+  if (loading && !data)
+    return (
+      <Loading label="Loading activities">
+        <SkeletonList rows={4} aside="none" heading />
+        <SkeletonList rows={2} aside="none" heading />
+      </Loading>
+    );
   if (error) return <Notice tone="stop">{error.message}</Notice>;
   const activities = data?.activities ?? [];
   if (!can('activities.manage')) return <LeaderActivities activities={activities} />;
@@ -455,7 +460,12 @@ function Bookings({ activity, onChange }: { activity: Activity; onChange: () => 
   return (
     <div className="list-pad-inline bookings">
       {failure && <Notice tone="stop">{failure}</Notice>}
-      {list.loading && !list.data && <Loading />}
+      {list.loading && !list.data && (
+        <Loading label="Loading bookings">
+          <Skeleton width="100%" height="2.5rem" />
+          <Skeleton width="100%" height="2.5rem" />
+        </Loading>
+      )}
       {list.data && list.data.bookings.length === 0 && <p className="field-hint">No one has signed up yet.</p>}
       {list.data && list.data.bookings.length > 0 && (
         <ul className="booking-list">

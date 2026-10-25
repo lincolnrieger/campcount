@@ -1,4 +1,5 @@
 import js from '@eslint/js';
+import jsxA11y from 'eslint-plugin-jsx-a11y';
 import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
@@ -31,9 +32,13 @@ export default tseslint.config(
   {
     files: ['src/web/**/*.{ts,tsx}'],
     languageOptions: { globals: globals.browser },
-    plugins: { 'react-hooks': reactHooks },
+    plugins: { 'react-hooks': reactHooks, 'jsx-a11y': jsxA11y },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // Accessibility checks for JSX (WCAG). Strict mode, so problems fail the lint.
+      ...jsxA11y.flatConfigs.strict.rules,
+      // Our <Field> component associates its label with the input by id.
+      'jsx-a11y/label-has-associated-control': ['error', { assert: 'either', controlComponents: ['Field'], depth: 3 }],
       // Data loading on mount legitimately sets state from an effect.
       'react-hooks/set-state-in-effect': 'off',
     },

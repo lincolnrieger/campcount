@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { ApiFailure, api } from '../api';
-import { Loading, Notice } from '../components/ui';
+import { Loading, Notice, SkeletonList } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { ViewAsSheet } from '../components/ViewAs';
 import { useApi } from '../useApi';
+import { useTitle } from '../useTitle';
 
 interface DemoEvent {
   id: string;
@@ -15,6 +16,7 @@ interface DemoEvent {
 }
 
 export function AdminDemo() {
+  useTitle('Demo mode');
   const { data, error, loading, reload } = useApi<{ events: DemoEvent[] }>('/admin/demo');
   const [size, setSize] = useState('80');
   const [message, setMessage] = useState<{ tone: 'ok' | 'stop'; text: string } | null>(null);
@@ -41,9 +43,7 @@ export function AdminDemo() {
         <h1>Demo mode</h1>
       </div>
       <p className="narrow">
-        Create a practice camp filled with made-up people, then use View as to try it as an event manager, scanner or the meal team. Switch
-        roles at any time from the View as button at the top of every page. Demo camps are clearly marked and can be deleted in
-        one step. No real member data is used.
+        Create a practice camp filled with made-up people, then use View as to try each role. No real member data is used.
       </p>
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
 
@@ -69,7 +69,11 @@ export function AdminDemo() {
         </div>
       </section>
 
-      {loading && !data && <Loading />}
+      {loading && !data && (
+        <Loading label="Loading demo camps">
+          <SkeletonList rows={2} aside="button" />
+        </Loading>
+      )}
       {error && <Notice tone="stop">{error.message}</Notice>}
       {data?.events.map((e) => (
         <section key={e.id} className="section-gap demo-event">

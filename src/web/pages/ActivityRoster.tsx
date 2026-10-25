@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { ApiFailure, api } from '../api';
 import { Icon } from '../components/Icon';
-import { Loading, Notice } from '../components/ui';
+import { Loading, Notice, Skeleton, SkeletonHeading, SkeletonList, SkeletonTiles } from '../components/ui';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import { matchesSearch, searchRank } from '../../shared/search';
@@ -109,7 +109,16 @@ export function ActivityRoster() {
   }
 
   const involved = useMemo(() => new Set((data?.people ?? []).map((p) => p.id)), [data]);
-  if (loading && !data) return <Loading />;
+  if (loading && !data)
+    return (
+      <Loading label="Loading activity">
+        <Skeleton width="5.5rem" height="1rem" className="skeleton-gap" />
+        <SkeletonHeading width="12rem" />
+        <SkeletonTiles />
+        <Skeleton width="100%" height="72px" radius="var(--radius)" className="skeleton-gap" />
+        <SkeletonList rows={5} aside="button" />
+      </Loading>
+    );
   if (error) return <Notice tone="stop">{error.status === 404 || error.status === 403 ? "You don't have access to this activity." : error.message}</Notice>;
   if (!data) return null;
   const a = data.activity;
@@ -170,7 +179,7 @@ export function ActivityRoster() {
 
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
 
-      <div className="segmented segmented-3" role="tablist" aria-label="Show">
+      <div className="segmented segmented-3" role="group" aria-label="Show">
         {(
           [
             ['booked', `Booked ${booked.length}`],
@@ -178,7 +187,7 @@ export function ActivityRoster() {
             ['all', `Everyone ${data.people.length}`],
           ] as const
         ).map(([k, label]) => (
-          <button key={k} type="button" role="tab" aria-selected={show === k} onClick={() => setShow(k)}>
+          <button key={k} type="button" aria-pressed={show === k} onClick={() => setShow(k)}>
             {label}
           </button>
         ))}

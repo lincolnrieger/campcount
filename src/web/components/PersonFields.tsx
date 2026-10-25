@@ -74,11 +74,11 @@ export function PersonFields({
   const name = value.preferredName || value.firstName || 'them';
   return (
     <>
-      <div className="segmented" role="radiogroup" aria-label="Who is coming">
-        <button type="button" role="radio" aria-checked={value.kind === 'youth'} onClick={() => set('kind', 'youth')}>
+      <div className="segmented" role="group" aria-label="Who is coming">
+        <button type="button" aria-pressed={value.kind === 'youth'} onClick={() => set('kind', 'youth')}>
           {youthLabel}
         </button>
-        <button type="button" role="radio" aria-checked={value.kind === 'adult'} onClick={() => set('kind', 'adult')}>
+        <button type="button" aria-pressed={value.kind === 'adult'} onClick={() => set('kind', 'adult')}>
           {adultLabel}
         </button>
       </div>
@@ -88,9 +88,9 @@ export function PersonFields({
           <span className="field-legend" id="pf-section">
             Section
           </span>
-          <div className="chip-row" role="radiogroup" aria-labelledby="pf-section">
+          <div className="chip-row" role="group" aria-labelledby="pf-section">
             {YOUTH_SECTIONS.map((s) => (
-              <button key={s} type="button" role="radio" aria-checked={value.section === s} className="chip-toggle" onClick={() => set('section', s)}>
+              <button key={s} type="button" aria-pressed={value.section === s} className="chip-toggle" onClick={() => set('section', s)}>
                 {s}
               </button>
             ))}
@@ -141,11 +141,11 @@ export function PersonFields({
           <span className="field-legend" id="pf-photo">
             Can {name} be in photos?
           </span>
-          <div className="chip-row" role="radiogroup" aria-labelledby="pf-photo">
-            <button type="button" role="radio" aria-checked={value.photoConsent === 'yes'} className="chip-toggle" onClick={() => set('photoConsent', 'yes')}>
+          <div className="chip-row" role="group" aria-labelledby="pf-photo">
+            <button type="button" aria-pressed={value.photoConsent === 'yes'} className="chip-toggle" onClick={() => set('photoConsent', 'yes')}>
               Yes
             </button>
-            <button type="button" role="radio" aria-checked={value.photoConsent === 'no'} className="chip-toggle" onClick={() => set('photoConsent', 'no')}>
+            <button type="button" aria-pressed={value.photoConsent === 'no'} className="chip-toggle" onClick={() => set('photoConsent', 'no')}>
               No photos
             </button>
           </div>

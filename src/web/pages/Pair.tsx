@@ -4,9 +4,11 @@ import { useNavigate } from 'react-router';
 import { ApiFailure, api } from '../api';
 import { Field, Notice } from '../components/ui';
 import { useSession } from '../session';
+import { useTitle } from '../useTitle';
 
 /** Turn this device into a station. The code can also arrive in the URL fragment from the pairing QR. */
 export function Pair() {
+  useTitle('Pair a station');
   const { refresh } = useSession();
   const navigate = useNavigate();
   const [code, setCode] = useState(() => window.location.hash.slice(1).toUpperCase());

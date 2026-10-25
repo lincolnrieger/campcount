@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiFailure, api } from '../api';
-import { Field, Loading, Notice } from '../components/ui';
+import { Field, Loading, Notice, SkeletonList } from '../components/ui';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import { deleteContext } from '../confirmDelete';
@@ -58,7 +58,13 @@ export function Meals() {
     }
   }
 
-  if (loading && !data) return <Loading />;
+  if (loading && !data)
+    return (
+      <Loading label="Loading meals">
+        <SkeletonList rows={3} aside="button" heading />
+        <SkeletonList rows={3} aside="button" heading />
+      </Loading>
+    );
   if (error) return <Notice tone="stop">{error.message}</Notice>;
   const meals = data?.meals ?? [];
   const mealDay = (m: Meal) => (m.startsAt ? dayInZone(m.startsAt, tz) : inferDay(m.name, days));
@@ -136,9 +142,9 @@ export function Meals() {
             <span className="field-legend" id="meal-day-label">
               Day
             </span>
-            <div className="chip-row" role="radiogroup" aria-labelledby="meal-day-label">
+            <div className="chip-row" role="group" aria-labelledby="meal-day-label">
               {days.map((d) => (
-                <button key={d} type="button" role="radio" aria-checked={day === d} className="chip-toggle" onClick={() => setDay(d)}>
+                <button key={d} type="button" aria-pressed={day === d} className="chip-toggle" onClick={() => setDay(d)}>
                   {dayLabel(d)}
                 </button>
               ))}
@@ -148,13 +154,12 @@ export function Meals() {
             <span className="field-legend" id="meal-kind-label">
               Meal
             </span>
-            <div className="chip-row" role="radiogroup" aria-labelledby="meal-kind-label">
+            <div className="chip-row" role="group" aria-labelledby="meal-kind-label">
               {[...KINDS, { label: 'Other', time }].map((k) => (
                 <button
                   key={k.label}
                   type="button"
-                  role="radio"
-                  aria-checked={kind === k.label}
+                  aria-pressed={kind === k.label}
                   className="chip-toggle"
                   onClick={() => {
                     setKind(k.label);

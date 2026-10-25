@@ -2,10 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { ApiFailure, api } from '../api';
 import { Icon } from '../components/Icon';
-import { Loading, Notice } from '../components/ui';
+import { Loading, Notice, SkeletonList } from '../components/ui';
 import type { EventSummary } from '../types';
 import { useApi } from '../useApi';
 import { scanVerb } from './Person';
+import { useTitle } from '../useTitle';
 
 interface ScanEntry {
   kind: 'scan';
@@ -134,6 +135,7 @@ const OUTCOME: Record<string, { label: string; tone: string } | undefined> = {
 };
 
 export function AdminLog() {
+  useTitle('Activity log');
   const events = useApi<{ events: EventSummary[] }>('/events');
   const [eventId, setEventId] = useState('');
   const [kind, setKind] = useState<'all' | 'scans' | 'changes'>('all');
@@ -181,10 +183,10 @@ export function AdminLog() {
       <div className="page-head">
         <div>
           <h1>Activity log</h1>
-          <p className="lede flush">Every scan and every change, newest first. Times are Adelaide time.</p>
+          <p className="lede flush">Times are Adelaide time.</p>
         </div>
       </div>
-      <div className="segmented segmented-3" role="tablist" aria-label="Show">
+      <div className="segmented segmented-3" role="group" aria-label="Show">
         {(
           [
             ['all', 'Everything'],
@@ -192,7 +194,7 @@ export function AdminLog() {
             ['changes', 'Changes'],
           ] as const
         ).map(([k, label]) => (
-          <button key={k} type="button" role="tab" aria-selected={kind === k} onClick={() => setKind(k)}>
+          <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)}>
             {label}
           </button>
         ))}
@@ -219,7 +221,11 @@ export function AdminLog() {
         </div>
       </div>
       {error && <Notice tone="stop">{error}</Notice>}
-      {!entries && !error && <Loading />}
+      {!entries && !error && (
+        <Loading label="Loading the log">
+          <SkeletonList rows={6} aside="tag" heading />
+        </Loading>
+      )}
       {entries && entries.length === 0 && <p className="field-hint">Nothing recorded{query ? ` matching "${query}"` : ''}.</p>}
       {[...days].map(([day, items]) => (
         <section key={day} className="list-section log-day">
