@@ -5,35 +5,36 @@ to recover the system. Keep a printed copy at camp HQ.
 
 ## Two weeks before camp
 
-1. **Create the event** (platform admin) and add an Event manager on the
-   Staff tab. Event managers add everyone else as **Scanner** (site and
+1. **Create the event** (platform admin). Its Overview shows a **Get ready**
+   checklist that links to each step below and ends with **Open event**. Add an
+   Event manager in Settings › Staff. Event managers add everyone else as **Scanner** (site and
    activity scanning), **Activity leader** (runs one activity, or all of
    them: its roster, bookings, and checking people in and out), **Meal
    team** (meal scanning and "Who's eaten") or another **Event manager**. People can sign themselves up at `/sign-up`
    first, or are created automatically when added by email.
-2. **Turn on only the features you need** (Overview tab).
+2. **Turn on only the features you need** (Settings › Event).
 3. **Fill the People list** (expected attendees): import the MyScout
-   participant export (People, then Import roster), including adults, or
+   participant export (People, ⋯, Import from MyScout), including adults, or
    add someone with **Add person**.
 4. **Add activities and meals.** Give each meal a day and time (Meals tab)
    so scanners can pick it by day. Activities can run all camp, or on a
    day with a start and end time. For an activity that runs several times,
-   add it once, then use **Add session**: it copies the activity into the
+   add it once, then open it and choose ⋯, **Add another session**: it copies the activity into the
    next time slot, which you can adjust. Each session is scanned separately,
    and the Scan tab marks whatever is on now. Scanners can scan the gate and every
    activity; Meal team can scan every meal.
-5. **Print lanyards** (Roster tab, then Lanyards):
+5. **Print lanyards** (People, ⋯, Print lanyards):
    - Choose lanyard size (90 × 120 mm, 4 per A4) or wallet size
      (86 × 54 mm, 10 per A4).
    - Filter by group, or untick cards you don't need.
    - Download the PDF. It opens on phones and computers.
    - Print at 100% (actual size). Keep spare and unused cards secure: a card is
    enough to be scanned as that person.
-6. **Print paper roll sheets** (Roster tab, then Paper roll sheet) for each
+6. **Print paper roll sheets** (People, ⋯, Print roll sheet) for each
    meal and the gate. They are the fallback if phones fail. Store them
    securely.
 7. **Dry run:** open the event, scan a few test cards on each volunteer's
-   phone, including once in aeroplane mode, then use Close-out to check
+   phone, including once in aeroplane mode, then use Reports to check
    the scans arrived. Correct the test scans or reset before camp.
 
 ## Setting up volunteers' phones
@@ -44,40 +45,39 @@ to recover the system. Keep a printed copy at camp HQ.
   signal**, then open their scanner once so the list downloads to the phone.
 - On iPhone, Safari's Share → **Add to Home Screen** makes CampCount open
   full-screen like an app.
-- For shared devices (meal-hall tablet, gate phone), use **Stations**: the
-  event manager creates a pairing code and the device opens `/pair`. A station
-  can only scan one thing and stops automatically. **Edit** renames it or
-  changes what it scans; **Reopen** restarts a stopped or expired station
+- For shared devices (meal-hall tablet, gate phone), use **Stations**
+  (Settings › Stations): the event manager creates a pairing code and the device opens `/pair`. A station
+  can only scan one thing and stops automatically. In its ⋯ menu, **Edit
+  station** renames it or changes what it scans; **Reopen station** restarts a stopped or expired station
   with a new pairing code.
 - Phones must allow camera access for the CampCount site. On iPhone:
   Settings, Safari, Camera, Allow.
 
 ## QR codes: where to find them
 
-Event Overview, then **QR codes and posters**:
-
-- **Lanyards:** each person's QR code is on their lanyard (print from
-  Lanyards). Scanning your own lanyard with a phone camera opens your
+- **Lanyards:** each person's QR code is on their lanyard (People, ⋯, Print
+  lanyards). Scanning your own lanyard with a phone camera opens your
   activities page, where you can book or cancel activity sessions.
-- **Activity sign-up screen:** the link and QR code to open on a tablet at
-  camp HQ ("Open sign-up screen"). People scan their lanyard or type the
+- **Activity sign-up screen** (Activities, ⋯, Sign-up screen and posters):
+  the link and QR code to open on a tablet at camp HQ ("Open sign-up screen"). People scan their lanyard or type the
   code printed on it, see what's on and book. It returns to the start
-  after 90 seconds or when they tap Done. **New link** retires old links
-  and posters.
-- **Session posters:** one printable poster per session that's open for
+  after 90 seconds or when they tap "Finish and clear screen". **Replace
+  link** retires old links and posters.
+- **Session posters** (same page): one printable poster per session that's open for
   sign-up. Scanning it opens the sign-up page with that session chosen.
-- **Stations:** pairing QR codes appear on the Stations tab when you set up
+- **Stations:** pairing QR codes appear in Settings › Stations when you set up
   or reopen a station.
 
 ## Activity sign-up
 
-1. Turn on *Activity sign-up* (Overview features, or the QR codes page).
-2. On Activities, edit each session and tick **People can sign up**. The
+1. Turn on *Activity sign-up* (Settings › Event, or the Sign-up screen page).
+2. On Activities, open each session, choose ⋯, **Edit activity** and tick
+   **People can sign up**. The
    capacity is the number of places. Tick **Check bookings at the
    scanner** to warn leaders when someone who hasn't signed up arrives.
 3. Open the sign-up screen on a tablet and print session posters.
 4. People can't book two sessions that overlap, or a full session. The
-   event team can see who's booked (Activities, then Bookings), add someone
+   event team can see who's booked on the activity's page, add someone
    (even past the limit) or remove them. Bookings show on each person's
    page.
 
@@ -87,7 +87,7 @@ Event Overview, then **QR codes and posters**:
   booked, who's here (and since when) and who's left; tap **Check in** or
   **Check out**, or **Open scanner** to scan lanyards (works offline).
   **Add someone** finds anyone on camp to check in as a walk-in or book.
-  Event managers get the same page from **Roster** on each activity.
+  Event managers get the same page by tapping any activity.
 
 - **Live tab (where is everyone):** totals for on site, left camp and not
   arrived, then everyone grouped **by where they are** (each activity with
@@ -95,7 +95,7 @@ Event Overview, then **QR codes and posters**:
   **by section**. Tap a heading to fold it away, tap a total to filter, or
   search by name or group. It updates every 30 seconds.
 - **People tab:** search anyone (one letter is enough) and tap them to see
-  where they are now, every scan in order, their lanyard (Show lanyard,
+  where they are now, every scan in order, their lanyard (Show card,
   then download or replace it) and their details. Event managers can edit
   details and dietary needs there.
 
@@ -111,16 +111,16 @@ Event Overview, then **QR codes and posters**:
   lost.
 - **Card won't scan:** use "Type a code" (the code printed under the QR),
   or "Find by name". Manual entries are marked as such in reports.
-- **Lost card:** People tab, open the person, Show lanyard, then Replace
+- **Lost card:** People tab, open the person, Show card, then Replace
   card. The old card stops working. Download the new one as a PDF or
   reprint from Lanyards.
 - **Lost or stolen phone:**
-  1. For a station, stop it on the Stations tab.
+  1. For a station, stop it in Settings › Stations.
   2. For a volunteer's own phone, a platform admin disables or re-enables
-     their account (People), which signs out every session immediately.
+     their account (Admin › Accounts), which signs out every session immediately.
   3. Scans not yet uploaded from that phone are lost. Check the paper roll
      for that period.
-- **Wrong person scanned:** an event manager opens Close-out and chooses "Don't
+- **Wrong person scanned:** an event manager opens Reports and chooses "Don't
   count this scan", with a reason. The original stays on record.
 - **Phones or system unavailable:** switch to the paper roll sheets. Write
   the time beside each tick. Afterwards, enter them with "Find by name".
@@ -134,7 +134,7 @@ procedure and do a physical headcount.
 
 ## Practising with demo mode
 
-Platform admins can open Admin, then Demo mode, to create a practice camp
+Platform admins can open Admin, then Demo camps, to create a practice camp
 of made-up people (membership numbers start with `DEMO`). It comes with
 activities, meals, lanyard cards and demo accounts for each role.
 
@@ -195,11 +195,11 @@ downloads), newest first. Filter by event or to scans or changes only, and
 search by person, place, staff member or action. Tap a scanned person to
 open their page.
 
-## Close-out
+## Closing the event (Reports tab)
 
 1. Make sure every scanning phone has had signal and shows "All
-   uploaded". Close-out lists each phone's last upload.
-2. On Close-out, resolve each item:
+   uploaded". Reports lists each phone's last upload.
+2. On Reports, resolve each item:
    - people still signed in or on site
    - scans needing review
    - unknown cards
@@ -249,7 +249,7 @@ The job runs daily at 03:17 UTC and records each purge in the audit log.
 ## Security incident response
 
 1. **Contain:**
-   - Disable affected accounts (People).
+   - Disable affected accounts (Admin › Accounts).
    - Stop stations.
    - If needed, close the event to stop scanning.
 2. **Assess:**

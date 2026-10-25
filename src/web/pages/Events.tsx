@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { ApiFailure, api } from '../api';
-import { EventStatusBadge, Field, formatDateRange, Loading, Notice, SkeletonList } from '../components/ui';
+import { BackLink, EventStatusBadge, Field, formatDateRange, Loading, LoadError, Notice, SkeletonList } from '../components/ui';
 import { useSession } from '../session';
 import { Icon } from '../components/Icon';
 import type { Me } from '../types';
@@ -11,6 +11,7 @@ import { useApi } from '../useApi';
 import { FEATURE_COPY } from './featureCopy';
 import type { EventFeatures } from '../../shared/schemas';
 import { useTitle } from '../useTitle';
+import { useToast } from '../components/Toast';
 
 function greeting(me: Me | null): string {
   const first = me?.kind === 'user' ? me.user.displayName.split(' ')[0] : '';
@@ -22,7 +23,7 @@ function greeting(me: Me | null): string {
 export function Events() {
   useTitle('Home');
   const { me } = useSession();
-  const { data, error, loading } = useApi<{ events: EventSummary[] }>('/events');
+  const { data, error, loading, reload } = useApi<{ events: EventSummary[] }>('/events');
   const canCreate = me?.kind === 'user' && me.platformPermissions.includes('platform.events.create');
 
   return (
@@ -42,7 +43,7 @@ export function Events() {
           <SkeletonList rows={3} aside="tag" />
         </Loading>
       )}
-      {error && <Notice tone="stop">{error.message}</Notice>}
+      {error && <LoadError error={error} onRetry={reload} />}
       {data && data.events.length === 0 && (
         <div className="empty">
           <p>
@@ -51,8 +52,13 @@ export function Events() {
           <p className="lede">
             {canCreate
               ? 'Create an event to get started.'
-              : 'Nothing here yet. Ask an event manager to add you using the email you signed up with, and it will show up here.'}
+              : 'Ask an event manager to add you using the email you signed up with, and it will show up here.'}
           </p>
+          {canCreate && (
+            <Link className="btn" to="/events/new">
+              Create event
+            </Link>
+          )}
         </div>
       )}
       {data && data.events.length > 0 && (
@@ -124,6 +130,7 @@ export function FeatureChecklist({
 export function NewEvent() {
   useTitle('New event');
   const navigate = useNavigate();
+  const toast = useToast();
   const [form, setForm] = useState({ name: '', location: '', startsOn: '', endsOn: '', description: '' });
   const [features, setFeatures] = useState<EventFeatures>(DEFAULT_FEATURES);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -137,12 +144,13 @@ export function NewEvent() {
     setFailure(null);
     try {
       const { event } = await api<{ event: EventSummary }>('/events', { body: { ...form, features } });
-      navigate(`/events/${event.id}/staff`, { state: { created: true } });
+      navigate(`/events/${event.id}`);
+      toast(`Created ${event.name}. Work through Get ready, then open it.`);
     } catch (err) {
       if (err instanceof ApiFailure) {
         setErrors(err.fieldErrors());
         setFailure(err.message);
-      }
+      } else setFailure('Something went wrong. Check your signal and try again.');
     } finally {
       setBusy(false);
     }
@@ -150,6 +158,7 @@ export function NewEvent() {
 
   return (
     <form onSubmit={submit} noValidate className="narrow">
+      <BackLink to="/" label="Home" />
       <h1>Create event</h1>
       <p className="lede">The event starts as a draft. Nobody can scan until you open it.</p>
       {failure && <Notice tone="stop">{failure}</Notice>}

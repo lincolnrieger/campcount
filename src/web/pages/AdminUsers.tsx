@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiFailure, api } from '../api';
-import { Field, Loading, Notice, SkeletonList } from '../components/ui';
+import { Field, Loading, LoadError, Notice, PageHeader, SkeletonList } from '../components/ui';
+import { Menu } from '../components/Menu';
 import { LinkShare } from '../components/LinkShare';
 import { useSession } from '../session';
 import { useApi } from '../useApi';
@@ -23,7 +24,7 @@ interface UserRow {
 }
 
 export function AdminUsers() {
-  useTitle('People');
+  useTitle('Accounts');
   const { me } = useSession();
   const users = useApi<{ users: UserRow[] }>('/admin/users');
   const [form, setForm] = useState({ email: '', displayName: '', platformAdmin: false, sendEmail: true });
@@ -32,6 +33,7 @@ export function AdminUsers() {
   const [open, setOpen] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: 'ok' | 'stop'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [adding, setAdding] = useState(false);
   const myId = me?.kind === 'user' ? me.user.id : null;
 
   async function act(action: () => Promise<unknown>, success: string) {
@@ -57,6 +59,7 @@ export function AdminUsers() {
       setForm({ email: '', displayName: '', platformAdmin: false, sendEmail: true });
       setShared({ userId: res.id, link: res.link, expiresAt: res.expiresAt, label: `Set-up link for ${name}` });
       setOpen(null);
+      setAdding(false);
       return res.emailed
         ? `Added ${name}. We've emailed them a link to set their password. You can also copy it below.`
         : `Added ${name}. Send them the set-up link below so they can choose a password.`;
@@ -82,11 +85,17 @@ export function AdminUsers() {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>People</h1>
-        </div>
-      </div>
+      <PageHeader
+        title={<span className="visually-hidden">Accounts</span>}
+        sub={users.data && `${users.data.users.length} accounts`}
+        actions={
+          !adding && (
+            <button className="btn" onClick={() => setAdding(true)}>
+              Add account
+            </button>
+          )
+        }
+      />
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
       <div className="field">
         <label htmlFor="people-q" className="visually-hidden">
@@ -99,7 +108,8 @@ export function AdminUsers() {
           <SkeletonList rows={6} aside="tag" />
         </Loading>
       )}
-      {users.error && <Notice tone="stop">{users.error.message}</Notice>}
+      {users.error && <LoadError error={users.error} onRetry={users.reload} />}
+      {users.data && list.length === 0 && <p className="field-hint">No accounts match "{query}".</p>}
       <ul className="people-list">
         {list.map((u) => {
           const isMe = u.id === myId;
@@ -131,66 +141,54 @@ export function AdminUsers() {
                   <div className="actions flush">
                     {!u.isDemo && u.status === 'active' && (
                       <button className="btn btn-small" disabled={busy} onClick={() => passwordLink(u, false)}>
-                        {u.hasPassword ? 'Reset password' : 'Set-up link'}
+                        {u.hasPassword ? 'Make reset link' : 'Make set-up link'}
                       </button>
                     )}
-                    <button
-                      className="btn btn-secondary btn-small"
-                      disabled={busy}
-                      onClick={() => {
-                        const name = window.prompt('New name', u.displayName);
-                        if (name && name.trim() && name.trim() !== u.displayName) {
-                          void act(() => api(`/admin/users/${u.id}`, { method: 'PATCH', body: { displayName: name.trim() } }), `Renamed to ${name.trim()}.`);
-                        }
-                      }}
-                    >
-                      Rename
-                    </button>
-                    {!isMe && (
-                      <button
-                        className="btn btn-secondary btn-small"
-                        disabled={busy}
-                        onClick={() =>
-                          void act(
-                            () => api(`/admin/users/${u.id}`, { method: 'PATCH', body: { platformAdmin: !u.platformAdmin } }),
-                            u.platformAdmin ? `${u.displayName} is no longer an admin.` : `${u.displayName} is now an admin.`,
-                          )
-                        }
-                      >
-                        {u.platformAdmin ? 'Remove admin' : 'Make admin'}
-                      </button>
-                    )}
-                    {!isMe && (
-                      <button
-                        className="btn btn-secondary btn-small"
-                        disabled={busy}
-                        onClick={() =>
-                          void act(
-                            () => api(`/admin/users/${u.id}/status`, { body: { status: u.status === 'active' ? 'disabled' : 'active' } }),
-                            u.status === 'active' ? `Disabled ${u.displayName}. They've been signed out.` : `Enabled ${u.displayName}.`,
-                          )
-                        }
-                      >
-                        {u.status === 'active' ? 'Disable' : 'Enable'}
-                      </button>
-                    )}
-                    {!isMe && (
-                      <button
-                        className="btn btn-danger btn-small"
-                        disabled={busy}
-                        onClick={() => {
-                          if (!window.confirm(`Delete ${u.displayName}'s account? This can't be undone.`)) return;
-                          void act(async () => {
-                            const res = await api<{ result: string }>(`/admin/users/${u.id}`, { method: 'DELETE' });
-                            if (res.result === 'anonymised') {
-                              setMessage({ tone: 'ok', text: `${u.displayName}'s account was removed. Their name was wiped from past records.` });
+                    <Menu
+                      label={`More actions for ${u.displayName}`}
+                      items={[
+                        {
+                          label: 'Rename account',
+                          onSelect: () => {
+                            const name = window.prompt('New name', u.displayName);
+                            if (name && name.trim() && name.trim() !== u.displayName) {
+                              void act(() => api(`/admin/users/${u.id}`, { method: 'PATCH', body: { displayName: name.trim() } }), `Renamed to ${name.trim()}.`);
                             }
-                          }, `Deleted ${u.displayName}.`);
-                        }}
-                      >
-                        Delete
-                      </button>
-                    )}
+                          },
+                        },
+                        !isMe && {
+                          label: u.platformAdmin ? 'Remove admin rights' : 'Make admin',
+                          onSelect: () =>
+                            void act(
+                              () => api(`/admin/users/${u.id}`, { method: 'PATCH', body: { platformAdmin: !u.platformAdmin } }),
+                              u.platformAdmin ? `${u.displayName} is no longer an admin.` : `${u.displayName} is now an admin.`,
+                            ),
+                        },
+                        !isMe && {
+                          label: u.status === 'active' ? 'Disable account' : 'Enable account',
+                          onSelect: () => {
+                            if (u.status === 'active' && !window.confirm(`Disable ${u.displayName}'s account? They're signed out straight away and can't sign in until you enable it.`)) return;
+                            void act(
+                              () => api(`/admin/users/${u.id}/status`, { body: { status: u.status === 'active' ? 'disabled' : 'active' } }),
+                              u.status === 'active' ? `Disabled ${u.displayName}. They've been signed out.` : `Enabled ${u.displayName}.`,
+                            );
+                          },
+                        },
+                        !isMe && {
+                          label: 'Delete account…',
+                          danger: true,
+                          onSelect: () => {
+                            if (!window.confirm(`Delete ${u.displayName}'s account? This can't be undone.`)) return;
+                            void act(async () => {
+                              const res = await api<{ result: string }>(`/admin/users/${u.id}`, { method: 'DELETE' });
+                              if (res.result === 'anonymised') {
+                                setMessage({ tone: 'ok', text: `${u.displayName}'s account was removed. Their name was wiped from past records.` });
+                              }
+                            }, `Deleted ${u.displayName}.`);
+                          },
+                        },
+                      ]}
+                    />
                   </div>
                   {shared?.userId === u.id && (
                     <LinkShare link={shared.link} expiresAt={shared.expiresAt} label={shared.label} emailBusy={busy} onEmail={() => passwordLink(u, true)} />
@@ -208,9 +206,9 @@ export function AdminUsers() {
         </div>
       )}
 
-      <details className="section-gap narrow">
-        <summary>Add someone yourself</summary>
-        <form onSubmit={create} noValidate>
+      {adding && (
+        <form onSubmit={create} noValidate className="narrow panel">
+          <h2>Add account</h2>
           <Field id="u-name" label="Name">
             <input id="u-name" className="input" value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} />
           </Field>
@@ -233,11 +231,14 @@ export function AdminUsers() {
           </label>
           <div className="actions">
             <button className="btn" disabled={busy || !form.email || !form.displayName}>
-              Add person
+              {busy ? 'Adding…' : 'Add account'}
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={() => setAdding(false)}>
+              Cancel
             </button>
           </div>
         </form>
-      </details>
+      )}
     </>
   );
 }

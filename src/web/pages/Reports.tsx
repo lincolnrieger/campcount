@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { ApiFailure, api } from '../api';
-import { Loading, Notice, SkeletonList } from '../components/ui';
+import { ActionButton, Loading, LoadError, Notice, SkeletonList } from '../components/ui';
+import { useToast } from '../components/Toast';
+import { useTitle } from '../useTitle';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import { minutesAgo } from './Live';
@@ -17,7 +19,14 @@ interface Item {
 
 export function Exports() {
   const { event } = useEvent();
-  const { data } = useApi<{ exports: { key: string; label: string }[] }>(`/events/${event.id}/exports`);
+  const { data, error, reload } = useApi<{ exports: { key: string; label: string }[] }>(`/events/${event.id}/exports`);
+  if (error && error.status !== 403)
+    return (
+      <section aria-labelledby="exports-heading" className="section-gap">
+        <h2 id="exports-heading">Downloads</h2>
+        <LoadError error={error} onRetry={reload} />
+      </section>
+    );
   if (!data || data.exports.length === 0) return null;
   return (
     <section aria-labelledby="exports-heading" className="section-gap">
@@ -36,8 +45,11 @@ export function Exports() {
   );
 }
 
-export function CloseOut() {
+/** Reports: the check-up before closing, downloads, and closing the event. */
+export function Reports() {
+  useTitle('Reports');
   const { event, can, reload: reloadEvent } = useEvent();
+  const toast = useToast();
   const rec = useApi<{ items: Item[]; devices: { deviceId: string; lastUpload: string; scans: number }[]; pendingDietary: number; timezone: string }>(
     `/events/${event.id}/reconciliation`,
   );
@@ -47,7 +59,8 @@ export function CloseOut() {
   async function act(action: () => Promise<unknown>, success: string) {
     try {
       await action();
-      setMessage({ tone: 'ok', text: success });
+      setMessage(null);
+      toast(success);
       await rec.reload();
     } catch (err) {
       setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
@@ -56,11 +69,11 @@ export function CloseOut() {
 
   if (rec.loading && !rec.data)
     return (
-      <Loading label="Loading close-out">
+      <Loading label="Loading reports">
         <SkeletonList rows={4} aside="button" heading />
       </Loading>
     );
-  if (rec.error) return <Notice tone="stop">{rec.error.message}</Notice>;
+  if (rec.error) return <LoadError error={rec.error} onRetry={rec.reload} />;
   const items = rec.data?.items ?? [];
   const groups = [...new Set(items.map((i) => i.contextKey))];
   const time = (iso: string | null) =>
@@ -69,9 +82,10 @@ export function CloseOut() {
   return (
     <>
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
-      <p className="narrow">
-        Before closing the event, check that every phone has uploaded and resolve the records below. Scan records are operational records.
-        They are not proof of where someone is and do not replace a roll call.
+      <h2>Before you close</h2>
+      <p className="narrow field-hint">
+        Check every phone has uploaded, then sort out the records below. Scan records are not proof of where someone is and don't replace a
+        roll call.
       </p>
 
       {(rec.data?.devices ?? []).length > 0 && (
@@ -91,7 +105,7 @@ export function CloseOut() {
       )}
 
       {items.length === 0 ? (
-        <Notice tone="ok" title="Nothing to reconcile">
+        <Notice tone="ok" title="Nothing to sort out">
           <p>No one is still signed in and no scans need checking.</p>
         </Notice>
       ) : (
@@ -100,7 +114,7 @@ export function CloseOut() {
           const present = list.filter((i) => i.kind === 'still_present');
           return (
             <section key={key} className="section-gap">
-              <h2>{list[0]!.contextName || 'Unknown'}</h2>
+              <h3>{list[0]!.contextName || 'Unknown'}</h3>
               {correct && present.length > 0 && (
                 <button
                   className="btn btn-secondary"
@@ -161,12 +175,13 @@ export function CloseOut() {
         <section className="section-gap narrow">
           <h2>Close the event</h2>
           <p>Closing stops scanning and locks settings. You can reopen it for late corrections.</p>
-          <button
+          <ActionButton
             className="btn"
-            onClick={() => {
-              const warn = items.length > 0 ? `${items.length} records are unresolved. ` : '';
-              if (window.confirm(`${warn}Close ${event.name}?`)) {
-                void act(async () => {
+            busyLabel="Closing…"
+            onAction={async () => {
+              const warn = items.length > 0 ? `${items.length} records are still to sort out. ` : '';
+              if (window.confirm(`${warn}Close ${event.name}? Scanning stops and settings are locked.`)) {
+                await act(async () => {
                   await api(`/events/${event.id}/transition`, { body: { to: 'completed' } });
                   await reloadEvent();
                 }, 'Event closed.');
@@ -174,7 +189,7 @@ export function CloseOut() {
             }}
           >
             Close event
-          </button>
+          </ActionButton>
         </section>
       )}
     </>

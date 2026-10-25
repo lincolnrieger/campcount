@@ -150,7 +150,7 @@ export function DietaryEditor({
             setDraft({ category: 'allergy', item: '', severity: 'standard', note: '' });
           }}
         >
-          Add
+          Add dietary need
         </button>
       </details>
     </div>

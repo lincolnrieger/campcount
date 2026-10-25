@@ -1,5 +1,5 @@
 import type { ImportRow } from './schemas';
-import { SECTIONS } from './schemas';
+import { SECTIONS } from './sections';
 
 /** CampCount fields a source column can be mapped to. */
 export const TARGET_FIELDS = {

@@ -1,17 +1,20 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { useNavigate } from 'react-router';
 import { ApiFailure, api } from '../api';
-import { Icon } from '../components/Icon';
+import { useToast } from '../components/Toast';
+import { useTitle } from '../useTitle';
 import { EMPTY_PERSON, PersonFields, personBody, personReady } from '../components/PersonFields';
 import type { PersonForm } from '../components/PersonFields';
-import { Notice } from '../components/ui';
+import { BackLink, Notice } from '../components/ui';
 import { useEvent } from './EventLayout';
 
 /** Event managers add one person by hand; they go straight on the roster with a card. */
 export function AddPerson() {
+  useTitle('Add person');
   const { event } = useEvent();
   const navigate = useNavigate();
+  const toast = useToast();
   const [person, setPerson] = useState<PersonForm>(EMPTY_PERSON);
   const [error, setError] = useState<{ text: string; fields: Record<string, string> } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -23,6 +26,7 @@ export function AddPerson() {
     try {
       const res = await api<{ registrationId: string }>(`/events/${event.id}/registrations`, { body: personBody(person) });
       navigate(`../${res.registrationId}`, { relative: 'path', replace: true });
+      toast(`Added ${person.preferredName || person.firstName} ${person.lastName}.`);
     } catch (err) {
       setError({ text: err instanceof ApiFailure ? err.message : 'Something went wrong.', fields: err instanceof ApiFailure ? err.fieldErrors() : {} });
       setBusy(false);
@@ -31,10 +35,8 @@ export function AddPerson() {
 
   return (
     <form onSubmit={submit} noValidate className="narrow">
-      <Link to=".." relative="path" className="back-link">
-        <Icon name="back" size={18} /> People
-      </Link>
-      <h2>Add a person</h2>
+      <BackLink to=".." label="People" />
+      <h2>Add person</h2>
       <p className="lede">They join the roster straight away and get a lanyard card. For lots of people, import from MyScout instead.</p>
       {error && <Notice tone="stop">{error.text}</Notice>}
       <PersonFields
@@ -48,7 +50,7 @@ export function AddPerson() {
       />
       <div className="actions">
         <button className="btn" disabled={busy || !personReady(person, false)}>
-          {busy ? 'Adding…' : 'Add to event'}
+          {busy ? 'Adding…' : 'Add person'}
         </button>
       </div>
     </form>

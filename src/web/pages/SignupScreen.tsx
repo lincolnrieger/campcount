@@ -5,7 +5,9 @@ import { Icon } from '../components/Icon';
 import { QrCode } from '../components/QrCode';
 import { placesLeft } from '../components/SignupPanel';
 import type { SignupSession } from '../components/SignupPanel';
-import { Loading, Notice, Skeleton } from '../components/ui';
+import { ActionButton, BackLink, Loading, LoadError, Notice, PageHeader, Skeleton } from '../components/ui';
+import { useToast } from '../components/Toast';
+import { useTitle } from '../useTitle';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import { dayInZone, dayLabel, timeRange } from '../../shared/time';
@@ -16,9 +18,11 @@ interface SignupInfo {
   sessions: SignupSession[];
 }
 
-/** Every QR code an event uses, in one place: lanyards, the sign-up screen, session posters and stations. */
-export function QrCodes() {
+/** Activities › Sign-up screen: the kiosk link for camp HQ and a poster for each session people can book. */
+export function SignupScreen() {
+  useTitle('Sign-up screen');
   const { event, can, reload: reloadEvent } = useEvent();
+  const toast = useToast();
   const manage = can('activities.manage');
   const signup = useApi<SignupInfo>(manage ? `/events/${event.id}/signup` : null);
   const [picked, setPicked] = useState<Set<string> | null>(null);
@@ -29,7 +33,8 @@ export function QrCodes() {
   async function act(action: () => Promise<unknown>, ok: string) {
     try {
       await action();
-      setMessage({ tone: 'ok', text: ok });
+      setMessage(null);
+      toast(ok);
       await signup.reload();
     } catch (err) {
       setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
@@ -42,26 +47,17 @@ export function QrCodes() {
 
   return (
     <div className="qr-page">
+      <div className="no-print">
+        <BackLink to=".." label="Activities" />
+        <PageHeader title="Sign-up screen" sub="People book activity sessions by scanning their lanyard at a tablet or from a session poster." />
+      </div>
+      {!manage && <Notice tone="stop">Only event managers can set up the sign-up screen.</Notice>}
+      {signup.error && <LoadError error={signup.error} onRetry={signup.reload} />}
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
-
-      <section className="list-section no-print">
-        <h2 className="list-heading">Lanyards</h2>
-        <div className="list-pad">
-          <p>
-            Everyone's QR code is on their lanyard. Scanning your own lanyard with a phone camera opens your activities page, where you can
-            see and change your bookings.
-          </p>
-          {can('credentials.manage') && (
-            <Link to="../lanyards" relative="path" className="btn btn-small">
-              Print lanyards
-            </Link>
-          )}
-        </div>
-      </section>
 
       {manage && (
         <section className="list-section no-print">
-          <h2 className="list-heading">Activity sign-up screen</h2>
+          <h2 className="list-heading">Kiosk</h2>
           {signup.loading && !signup.data && (
             <Loading label="Loading sign-up screen">
               <Skeleton width="100%" height="15rem" radius="var(--radius)" />
@@ -69,19 +65,20 @@ export function QrCodes() {
           )}
           {signup.data && !signup.data.enabled && (
             <div className="list-pad">
-              <p>Let people book activity sessions themselves by scanning their lanyard at a tablet, or from a session poster.</p>
+              <p>Activity sign-up is switched off for this event.</p>
               {can('event.configure') && (
-                <button
+                <ActionButton
                   className="btn btn-small"
-                  onClick={() =>
-                    void act(async () => {
+                  busyLabel="Turning on…"
+                  onAction={() =>
+                    act(async () => {
                       await api(`/events/${event.id}`, { method: 'PATCH', body: { features: { selfSignup: true } } });
                       await reloadEvent();
-                    }, 'Activity sign-up is on. Choose which sessions people can book on the Activities tab.')
+                    }, 'Activity sign-up is on. Open an activity and tick "People can sign up" to list it.')
                   }
                 >
                   Turn on activity sign-up
-                </button>
+                </ActionButton>
               )}
             </div>
           )}
@@ -104,16 +101,16 @@ export function QrCodes() {
                     Open sign-up screen<span className="visually-hidden"> (opens in a new tab)</span>
                   </a>
                   <button className="btn btn-secondary btn-small" onClick={() => void navigator.clipboard?.writeText(signup.data!.link).then(() => setCopied(true))}>
-                    {copied ? 'Copied' : 'Copy link'}
+                    {copied ? 'Link copied' : 'Copy link'}
                   </button>
                   <button
-                    className="btn-link"
+                    className="btn-link push-end text-stop"
                     onClick={() => {
                       if (window.confirm('Make a new link? The current link, open sign-up screens and printed posters stop working.'))
                         void act(() => api(`/events/${event.id}/signup/new-link`, { body: {} }), 'New link made. Reprint any posters.');
                     }}
                   >
-                    New link
+                    Replace link
                   </button>
                 </div>
               </div>
@@ -134,8 +131,8 @@ export function QrCodes() {
           </div>
           {sessions.length === 0 ? (
             <p className="field-hint no-print">
-              No sessions are open for sign-up yet. On the <Link to="../activities" relative="path">Activities</Link> tab, edit a session and tick
-              "People can sign up".
+              No sessions are open for sign-up yet. Open an activity on the <Link to=".." relative="path">Activities</Link> tab, choose Edit
+              activity and tick "People can sign up".
             </p>
           ) : (
             <>
@@ -191,16 +188,6 @@ export function QrCodes() {
         </section>
       )}
 
-      <section className="list-section no-print">
-        <h2 className="list-heading">Scanning</h2>
-        <div className="list-pad">
-          <p>
-            Leaders scan from the <Link to="/scan">Scan</Link> tab on their own phone. For a shared phone or tablet that only scans one thing
-            (like the meal hall), set up a station on the <Link to="../stations" relative="path">Stations</Link> tab: it shows a pairing QR code
-            to scan on that device.
-          </p>
-        </div>
-      </section>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Loading, Notice, SkeletonList } from '../components/ui';
+import { BackLink, Loading, LoadError, PageHeader, SkeletonList } from '../components/ui';
+import { useTitle } from '../useTitle';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import type { Registration } from './Roster';
@@ -10,8 +11,9 @@ import type { Registration } from './Roster';
  * manual entries).
  */
 export function RollSheet() {
+  useTitle('Roll sheet');
   const { event } = useEvent();
-  const { data, error, loading } = useApi<{ registrations: Registration[] }>(`/events/${event.id}/registrations`);
+  const { data, error, loading, reload } = useApi<{ registrations: Registration[] }>(`/events/${event.id}/registrations`);
   const [title, setTitle] = useState('');
   const [who, setWho] = useState<'all' | 'youth' | 'adult'>('all');
   const [columns, setColumns] = useState('In, Out');
@@ -22,7 +24,7 @@ export function RollSheet() {
         <SkeletonList rows={8} lines={1} aside="none" />
       </Loading>
     );
-  if (error) return <Notice tone="stop">{error.message}</Notice>;
+  if (error) return <LoadError error={error} onRetry={reload} />;
   const people = (data?.registrations ?? [])
     .filter((r) => r.status === 'active' && (who === 'all' || r.kind === who))
     .sort((a, b) => a.groupName.localeCompare(b.groupName) || a.lastName.localeCompare(b.lastName));
@@ -35,6 +37,8 @@ export function RollSheet() {
   return (
     <>
       <div className="no-print narrow">
+        <BackLink to=".." label="People" />
+        <PageHeader title="Roll sheet" />
         <p>
           Print this before camp as a backup. If phones, cards or signal fail, tick names by hand, write the time, and enter the ticks later
           using Find by name on the scanning screen (recorded as manual entries).

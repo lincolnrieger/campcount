@@ -46,7 +46,7 @@ function TabLinks({ className, isAdmin }: { className: string; isAdmin: boolean 
     { to: '/', label: 'Home', icon: 'home' as const, active: !scanning && (pathname === '/' || pathname.startsWith('/events')) },
     { to: '/scan', label: 'Scan', icon: 'scan' as const, active: scanning },
     ...(isAdmin ? [{ to: '/admin', label: 'Admin', icon: 'admin' as const, active: pathname.startsWith('/admin') }] : []),
-    { to: '/account', label: 'You', icon: 'user' as const, active: pathname.startsWith('/account') },
+    { to: '/account', label: 'Account', icon: 'user' as const, active: pathname.startsWith('/account') },
   ];
   return (
     <nav className={className} aria-label="Main">

@@ -410,7 +410,7 @@ signupRoutes.get('/activities/:activityId/attendance', async (c) => {
   const principal = requirePermission(c, 'activity.view_roster', { eventId, activityId: activityId.data });
   const ctx = await loadContext(c.env.DB, eventId, 'activity', activityId.data);
   const [activity, people, bookings, state] = await Promise.all([
-    c.env.DB.prepare(`SELECT name, location, instructions, starts_at, ends_at, capacity, track_sign_out, signup_open, booking_required FROM activities WHERE id = ?`)
+    c.env.DB.prepare(`SELECT name, location, instructions, starts_at, ends_at, capacity, track_sign_out, signup_open, booking_required, status FROM activities WHERE id = ?`)
       .bind(activityId.data)
       .first<Record<string, string | number | null>>(),
     c.env.DB.prepare(
@@ -454,6 +454,7 @@ signupRoutes.get('/activities/:activityId/attendance', async (c) => {
       trackSignOut: activity!.track_sign_out === 1,
       signupOpen: activity!.signup_open === 1,
       bookingRequired: activity!.booking_required === 1,
+      status: activity!.status,
     },
     presentNow: state.presentNow,
     canBook: can(principal, 'activities.manage', { eventId }) || can(principal, 'activity.bookings', { eventId, activityId: activityId.data }),
