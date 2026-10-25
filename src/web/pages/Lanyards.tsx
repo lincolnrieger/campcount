@@ -1,53 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ApiFailure, api } from '../api';
 import { Icon } from '../components/Icon';
-import { QrCode } from '../components/QrCode';
-import { Loading, Notice, Skeleton } from '../components/ui';
+import { LanyardCard } from '../components/LanyardCard';
+import { ActionButton, BackLink, Loading, Notice, PageHeader, Skeleton } from '../components/ui';
+import { useToast } from '../components/Toast';
 import type { Card, CardSize } from '../lanyards/pdf';
-import { CARD_SIZES, SECTION_COLOURS, bandLabel, buildLanyardPdf, downloadPdf } from '../lanyards/pdf';
+import { CARD_SIZES, buildLanyardPdf, downloadPdf } from '../lanyards/pdf';
 import { useEvent } from './EventLayout';
+import { useTitle } from '../useTitle';
 
-/** On-screen preview of one card, drawn to the same layout as the PDF. */
-export function LanyardCard({ card, eventName, size = 'lanyard' }: { card: Card; eventName: string; size?: CardSize }) {
-  const colours = SECTION_COLOURS[card.kind === 'adult' ? 'Leaders' : card.section] ?? SECTION_COLOURS.Other!;
-  const band = { background: colours.bg, color: colours.fg };
-  if (size === 'badge') {
-    return (
-      <article className="card-preview card-badge">
-        <div className="card-band" style={band}>
-          {bandLabel(card)}
-        </div>
-        <div className="card-badge-body">
-          <div>
-            <p className="card-name">{card.name}</p>
-            <p className="card-group">{card.groupName}</p>
-            <p className="card-code">{card.shortCode}</p>
-          </div>
-          <QrCode value={card.qr} size="100%" label={`Scan code for ${card.name}`} />
-        </div>
-      </article>
-    );
-  }
-  return (
-    <article className="card-preview card-lanyard">
-      <div className="card-band" style={band}>
-        {bandLabel(card)}
-      </div>
-      <div className="card-body">
-        <p className="card-name">{card.name}</p>
-        <p className="card-group">{card.groupName}</p>
-        <div className="card-qr">
-          <QrCode value={card.qr} size="100%" label={`Scan code for ${card.name}`} />
-        </div>
-        <p className="card-code">{card.shortCode}</p>
-      </div>
-      <p className="card-foot">{eventName}. If found, please hand to a camp leader.</p>
-    </article>
-  );
-}
-
+/** People › Lanyards: issue cards and print them. */
 export function Lanyards() {
+  useTitle('Lanyards');
   const { event, can } = useEvent();
+  const toast = useToast();
   const [cards, setCards] = useState<Card[] | null>(null);
   const [missing, setMissing] = useState(0);
   const [query, setQuery] = useState('');
@@ -84,7 +50,7 @@ export function Lanyards() {
     setBusy(true);
     try {
       const { issued } = await api<{ issued: number }>(`/events/${event.id}/credentials/issue`, { body: { mode: 'missing' } });
-      setMessage({ tone: 'ok', text: `Created ${issued} new cards.` });
+      toast(`Issued ${issued} new card${issued === 1 ? '' : 's'}.`);
       await load();
     } catch (err) {
       setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
@@ -100,7 +66,7 @@ export function Lanyards() {
       const bytes = await buildLanyardPdf(selected, size, event.name);
       const slug = event.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
       downloadPdf(bytes, `${slug}-${size === 'lanyard' ? 'lanyards' : 'cards'}.pdf`);
-      setMessage({ tone: 'ok', text: `PDF ready: ${selected.length} cards. Print at 100% (actual size), not "fit to page".` });
+      toast(`PDF ready: ${selected.length} cards. Print at 100% (actual size), not "fit to page".`);
     } catch {
       setMessage({ tone: 'stop', text: 'The PDF could not be created. Try fewer cards at a time.' });
     } finally {
@@ -109,9 +75,23 @@ export function Lanyards() {
   }
 
   if (!can('credentials.manage')) return <Notice tone="stop">You do not have permission to print lanyards.</Notice>;
+  const head = (
+    <>
+      <BackLink to=".." label="People" />
+      <PageHeader title="Lanyards" sub="Each card has a QR code and a typed backup code. Scanning your own card with a phone camera opens your activities page." />
+    </>
+  );
   if (!cards)
     return message ? (
-      <Notice tone={message.tone}>{message.text}</Notice>
+      <>
+        {head}
+        <Notice tone="stop" title="The cards didn't load">
+          <p>{message.text}</p>
+          <ActionButton className="btn btn-secondary btn-small" busyLabel="Trying again…" onAction={async () => { setMessage(null); await load(); }}>
+            Try again
+          </ActionButton>
+        </Notice>
+      </>
     ) : (
       <Loading label="Loading cards">
         <Skeleton width="100%" height="7rem" radius="var(--radius)" />
@@ -133,11 +113,12 @@ export function Lanyards() {
 
   return (
     <div className="lanyards">
+      {head}
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
       {missing > 0 && (
         <Notice tone="warn" title={`${missing} people don't have a card yet`}>
           <button className="btn" disabled={busy} onClick={() => void issueMissing()}>
-            Create {missing} cards
+            {busy ? 'Issuing…' : `Issue ${missing} card${missing === 1 ? '' : 's'}`}
           </button>
         </Notice>
       )}
@@ -175,7 +156,7 @@ export function Lanyards() {
             Select all
           </button>{' '}
           <button className="btn-link" onClick={() => setExcluded(new Set(shown.map((c) => c.registrationId)))}>
-            Clear
+            Select none
           </button>
         </p>
         <button className="btn" disabled={busy || selected.length === 0} onClick={() => void makePdf()}>

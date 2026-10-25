@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { SECTIONS } from './sections';
+
+export { SECTIONS };
 
 const trimmed = (max: number) => z.string().trim().max(max);
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use the format YYYY-MM-DD');
@@ -83,12 +86,10 @@ export const createAssignmentSchema = z
   })
   .refine((v) => v.userId || v.email, { message: 'Choose a person or enter an email address.', path: ['email'] });
 
-export type CreateEventInput = z.infer<typeof createEventSchema>;
 export type EventFeatures = z.infer<typeof eventFeaturesSchema>;
 
 // ---------------------------------------------------------------- roster import
 
-export const SECTIONS = ['Joeys', 'Cubs', 'Scouts', 'Venturers', 'Rovers', 'Leaders', 'Other'] as const;
 export const DIETARY_CATEGORIES = ['allergy', 'intolerance', 'medical_diet', 'religious_cultural', 'preference'] as const;
 
 export const dietaryEntrySchema = z.strictObject({

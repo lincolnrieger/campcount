@@ -1,30 +1,21 @@
-import { useTitle } from '../useTitle';
-import { Link } from 'react-router';
+import { Navigate, NavLink, Outlet } from 'react-router';
+import { useSession } from '../session';
 
-export function Admin() {
-  useTitle('Admin');
+/** Admin: accounts, the activity log and demo camps, as tabs. Platform admins only (the server checks too). */
+export function AdminLayout() {
+  const { me } = useSession();
+  if (me?.kind !== 'user' || !me.platformPermissions.includes('platform.users.manage')) return <Navigate to="/" replace />;
   return (
     <>
       <div className="page-head">
         <h1>Admin</h1>
       </div>
-      <ul className="launch">
-        <li>
-          <Link to="/admin/users">
-            People <span>Accounts and administrators</span>
-          </Link>
-        </li>
-        <li>
-          <Link to="/admin/log">
-            Activity log <span>Every scan and change, searchable</span>
-          </Link>
-        </li>
-        <li>
-          <Link to="/admin/demo">
-            Demo mode <span>Practice camps with made-up people</span>
-          </Link>
-        </li>
-      </ul>
+      <nav className="subnav" aria-label="Admin sections">
+        <NavLink to="accounts">Accounts</NavLink>
+        <NavLink to="log">Activity log</NavLink>
+        <NavLink to="demo">Demo camps</NavLink>
+      </nav>
+      <Outlet />
     </>
   );
 }

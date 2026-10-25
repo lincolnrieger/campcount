@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { ApiFailure, api } from '../api';
-import { Icon } from '../components/Icon';
-import { Loading, Notice, SkeletonList } from '../components/ui';
+import { ActionButton, Loading, Notice, PageHeader, SkeletonList } from '../components/ui';
 import type { EventSummary } from '../types';
 import { useApi } from '../useApi';
 import { scanVerb } from './Person';
@@ -167,6 +166,7 @@ export function AdminLog() {
 
   useEffect(() => {
     setEntries(null);
+    setError(null);
     load(null).catch((err) => setError(err instanceof ApiFailure ? err.message : 'Could not load the log.'));
   }, [load]);
 
@@ -177,15 +177,7 @@ export function AdminLog() {
 
   return (
     <div className="log">
-      <Link to="/admin" className="back-link">
-        <Icon name="back" size={18} /> Admin
-      </Link>
-      <div className="page-head">
-        <div>
-          <h1>Activity log</h1>
-          <p className="lede flush">Times are Adelaide time.</p>
-        </div>
-      </div>
+      <PageHeader title={<span className="visually-hidden">Activity log</span>} sub="Times are Adelaide time." />
       <div className="segmented segmented-3" role="group" aria-label="Show">
         {(
           [
@@ -220,7 +212,21 @@ export function AdminLog() {
           </select>
         </div>
       </div>
-      {error && <Notice tone="stop">{error}</Notice>}
+      {error && (
+        <Notice tone="stop" title="This didn't load">
+          <p>{error}</p>
+          <ActionButton
+            className="btn btn-secondary btn-small"
+            busyLabel="Trying again…"
+            onAction={async () => {
+              setError(null);
+              await load(entries && entries.length ? next : null).catch(() => setError('Could not load the log. Check your signal.'));
+            }}
+          >
+            Try again
+          </ActionButton>
+        </Notice>
+      )}
       {!entries && !error && (
         <Loading label="Loading the log">
           <SkeletonList rows={6} aside="tag" heading />
@@ -238,7 +244,7 @@ export function AdminLog() {
                   {e.kind === 'scan' ? (
                     <>
                       <strong>
-                        {e.registrationId && e.eventId ? <Link to={`/events/${e.eventId}/roster/${e.registrationId}`}>{e.person}</Link> : e.person}
+                        {e.registrationId && e.eventId ? <Link to={`/events/${e.eventId}/people/${e.registrationId}`}>{e.person}</Link> : e.person}
                         <span className="log-verb"> {scanVerb(e.contextType, e.direction).toLowerCase()}</span> {e.contextType === 'meal' ? 'at' : e.contextType === 'site' ? 'at the' : e.direction === 'in' ? 'to' : 'of'}{' '}
                         {e.place}
                       </strong>

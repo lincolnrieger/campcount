@@ -1,18 +1,19 @@
 import { useTitle } from '../useTitle';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 import type { DietaryEntryInput } from '../../shared/schemas';
-import { SECTIONS } from '../../shared/schemas';
+import { SECTIONS } from '../../shared/sections';
 import { ApiFailure, api } from '../api';
 import { DietaryEditor, describeEntry } from '../components/DietaryEditor';
 import { Icon } from '../components/Icon';
-import { Field, Loading, Notice, Skeleton, SkeletonHeading, SkeletonList } from '../components/ui';
+import { ActionButton, BackLink, Field, Loading, LoadError, Notice, Skeleton, SkeletonHeading, SkeletonList } from '../components/ui';
+import { Menu } from '../components/Menu';
+import { useToast } from '../components/Toast';
+import { LanyardCard } from '../components/LanyardCard';
 import type { Card } from '../lanyards/pdf';
-import { buildLanyardPdf, downloadPdf } from '../lanyards/pdf';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
-import { LanyardCard } from './Lanyards';
 import { dayInZone, dayLabel, timeInZone, timeRange } from '../../shared/time';
 
 export interface Where {
@@ -88,6 +89,7 @@ export function Person() {
   const { event } = useEvent();
   const { registrationId } = useParams();
   const navigate = useNavigate();
+  const toast = useToast();
   const path = `/events/${event.id}/registrations/${registrationId}`;
   const { data, error, loading, reload } = useApi<PersonData>(path);
   useTitle(data ? `${data.registration.preferredName || data.registration.firstName} ${data.registration.lastName}` : 'Person');
@@ -97,15 +99,17 @@ export function Person() {
   const [message, setMessage] = useState<{ tone: 'ok' | 'stop'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function act(action: () => Promise<unknown>, ok: string) {
+  async function act(action: () => Promise<unknown>, ok: string): Promise<boolean> {
     setBusy(true);
     setMessage(null);
     try {
       await action();
-      if (ok) setMessage({ tone: 'ok', text: ok });
+      if (ok) toast(ok);
       await reload();
+      return true;
     } catch (err) {
       setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
+      return false;
     } finally {
       setBusy(false);
     }
@@ -120,12 +124,35 @@ export function Person() {
         <SkeletonList rows={4} lines={2} aside="none" heading />
       </Loading>
     );
-  if (error) return <Notice tone="stop">{error.status === 404 ? 'This person is no longer on the event.' : error.message}</Notice>;
+  if (error)
+    return (
+      <>
+        <BackLink to=".." label="People" />
+        <LoadError error={error} onRetry={reload} message={error.status === 404 ? 'This person is no longer on the event.' : undefined} />
+      </>
+    );
   if (!data) return null;
   const r = data.registration;
   const fullName = `${r.preferredName || r.firstName} ${r.lastName}`;
   const tz = event.timezone;
   const allergy = r.dietary?.some((d) => d.category === 'allergy');
+
+  async function deletePerson() {
+    const scans = data!.history.length;
+    if (
+      !window.confirm(
+        `Delete ${fullName} from ${event.name}? Their card, dietary details${scans ? ` and ${scans} scan${scans === 1 ? '' : 's'}` : ''} are deleted too. This can't be undone. To keep the records, withdraw them instead.`,
+      )
+    )
+      return;
+    try {
+      await api(path, { method: 'DELETE' });
+      navigate('..', { relative: 'path', replace: true });
+      toast(`Deleted ${fullName}.`);
+    } catch (err) {
+      setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
+    }
+  }
 
   async function showCard() {
     const res = await api<{ cards: Card[] }>(`/events/${event.id}/credentials/print`, { body: { registrationIds: [r.id] } });
@@ -141,11 +168,36 @@ export function Person() {
 
   return (
     <div className="person">
-      <Link to=".." relative="path" className="back-link">
-        <Icon name="back" size={18} /> People
-      </Link>
+      <BackLink to=".." label="People" />
       <div className="person-head">
-        <h2 className="person-name">{fullName}</h2>
+        <div className="title-row">
+          <h2 className="person-name">{fullName}</h2>
+          {data.can.edit && (
+            <Menu
+              label={`More actions for ${fullName}`}
+              items={[
+                r.status === 'active'
+                  ? {
+                      label: 'Withdraw from event',
+                      onSelect: () => {
+                        if (!window.confirm(`Withdraw ${fullName}? Their card stops scanning. Their records are kept, and you can restore them later.`)) return;
+                        void act(() => api(path, { method: 'PATCH', body: { status: 'withdrawn' } }), '').then((done) =>
+                          done &&
+                          toast(`${fullName} is withdrawn. Their card no longer scans.`, {
+                            undo: async () => {
+                              await api(path, { method: 'PATCH', body: { status: 'active' } });
+                              await reload();
+                            },
+                          }),
+                        );
+                      },
+                    }
+                  : { label: 'Restore to event', onSelect: () => void act(() => api(path, { method: 'PATCH', body: { status: 'active' } }), `${fullName} is back on the event.`) },
+                { label: 'Delete person…', danger: true, onSelect: () => void deletePerson() },
+              ]}
+            />
+          )}
+        </div>
         <p className="lede flush">
           {r.groupName}
           {r.groupName && ', '}
@@ -191,7 +243,7 @@ export function Person() {
           <h3 className="list-heading">Details</h3>
           {data.can.edit && !editing && (
             <button className="btn-link" onClick={() => setEditing(true)}>
-              Edit
+              Edit details
             </button>
           )}
         </div>
@@ -244,7 +296,7 @@ export function Person() {
             <h3 className="list-heading">Dietary needs</h3>
             {data.can.editDietary && editingDiet === null && (
               <button className="btn-link" onClick={() => setEditingDiet(r.dietary ?? [])}>
-                Edit
+                Edit dietary needs
               </button>
             )}
           </div>
@@ -262,7 +314,7 @@ export function Person() {
                     }, 'Dietary needs saved.')
                   }
                 >
-                  Save
+                  {busy ? 'Saving…' : 'Save dietary needs'}
                 </button>
                 <button className="btn btn-secondary" onClick={() => setEditingDiet(null)}>
                   Cancel
@@ -297,7 +349,7 @@ export function Person() {
                     void act(() => api(`/events/${event.id}/credentials/issue`, { body: { mode: 'missing', registrationIds: [r.id] } }), 'Card issued.')
                   }
                 >
-                  Issue a card
+                  {busy ? 'Issuing…' : 'Issue card'}
                 </button>
               )}
             </div>
@@ -307,12 +359,16 @@ export function Person() {
                 <LanyardCard card={card} eventName={event.name} />
               </div>
               <div className="actions flush-top">
-                <button
+                <ActionButton
                   className="btn btn-small"
-                  onClick={async () => downloadPdf(await buildLanyardPdf([card], 'lanyard', event.name), `${fullName.replace(/\W+/g, '-')}-lanyard.pdf`)}
+                  busyLabel="Making PDF…"
+                  onAction={async () => {
+                    const { buildLanyardPdf, downloadPdf } = await import('../lanyards/pdf');
+                    downloadPdf(await buildLanyardPdf([card], 'lanyard', event.name), `${fullName.replace(/\W+/g, '-')}-lanyard.pdf`);
+                  }}
                 >
                   <Icon name="download" size={18} /> Download PDF
-                </button>
+                </ActionButton>
                 <button
                   className="btn btn-secondary btn-small"
                   disabled={busy}
@@ -333,9 +389,13 @@ export function Person() {
               <p className="flush">
                 Card <strong>{r.shortCode}</strong>
               </p>
-              <button className="btn btn-secondary btn-small section-gap-sm" onClick={() => void showCard().catch(() => setMessage({ tone: 'stop', text: 'Could not load the card.' }))}>
-                Show lanyard
-              </button>
+              <ActionButton
+                className="btn btn-secondary btn-small section-gap-sm"
+                busyLabel="Loading card…"
+                onAction={() => showCard().catch(() => setMessage({ tone: 'stop', text: "The card didn't load. Check your signal and try again." }))}
+              >
+                Show card
+              </ActionButton>
             </div>
           )}
         </section>
@@ -375,47 +435,6 @@ export function Person() {
         )}
       </section>
 
-      {data.can.edit && (
-        <section className="list-section danger-zone">
-          <h3 className="list-heading">Remove from event</h3>
-          <div className="actions flush-top">
-            <button
-              className="btn btn-secondary btn-small"
-              disabled={busy}
-              onClick={() =>
-                void act(
-                  () => api(path, { method: 'PATCH', body: { status: r.status === 'active' ? 'withdrawn' : 'active' } }),
-                  r.status === 'active' ? `${fullName} is withdrawn. Their card no longer scans.` : `${fullName} is back on the event.`,
-                )
-              }
-            >
-              {r.status === 'active' ? 'Withdraw' : 'Restore'}
-            </button>
-            <button
-              className="btn btn-danger btn-small"
-              disabled={busy}
-              onClick={async () => {
-                const scans = data.history.length;
-                if (
-                  !window.confirm(
-                    `Delete ${fullName} from ${event.name}? Their card, dietary details${scans ? ` and ${scans} scan${scans === 1 ? '' : 's'}` : ''} are deleted too. This can't be undone. To keep the records, use Withdraw instead.`,
-                  )
-                )
-                  return;
-                try {
-                  await api(path, { method: 'DELETE' });
-                  navigate('..', { relative: 'path', replace: true });
-                } catch (err) {
-                  setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
-                }
-              }}
-            >
-              Delete
-            </button>
-          </div>
-          <p className="field-hint">Withdraw keeps their records and stops their card. Delete removes them completely.</p>
-        </section>
-      )}
     </div>
   );
 }
@@ -501,7 +520,7 @@ function DetailsForm({
       )}
       <div className="actions">
         <button className="btn" disabled={busy}>
-          Save details
+          {busy ? 'Saving…' : 'Save details'}
         </button>
         <button type="button" className="btn btn-secondary" onClick={onCancel}>
           Cancel

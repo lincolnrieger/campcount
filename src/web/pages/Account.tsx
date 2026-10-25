@@ -2,7 +2,8 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { ApiFailure, api } from '../api';
-import { Field, Notice } from '../components/ui';
+import { BackLink, Field, Notice } from '../components/ui';
+import { useToast } from '../components/Toast';
 import { useSession } from '../session';
 import { useTitle } from '../useTitle';
 
@@ -17,7 +18,7 @@ export function SetPassword() {
   const [current, setCurrent] = useState('');
   const [show, setShow] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
+  const toast = useToast();
   const [busy, setBusy] = useState(false);
 
   async function submit(e: FormEvent) {
@@ -28,7 +29,10 @@ export function SetPassword() {
       await api('/auth/password', { body: current ? { password, currentPassword: current } : { password } });
       await refresh();
       if (first) navigate('/', { replace: true });
-      else setDone(true);
+      else {
+        toast('Password saved.');
+        navigate('/account', { replace: true });
+      }
     } catch (err) {
       setError(err instanceof ApiFailure ? err.message : 'Something went wrong.');
     } finally {
@@ -38,13 +42,13 @@ export function SetPassword() {
 
   return (
     <form onSubmit={submit} noValidate className="narrow">
+      {!first && <BackLink to="/account" label="Account" />}
       <h1>{first ? 'Choose a password' : hasPassword ? 'Change password' : 'Set a password'}</h1>
       <p className="lede">
         {first
           ? "You're signed in. Choose a password so next time you can sign in without waiting for an email."
           : 'Changing your password signs you out on your other devices.'}
       </p>
-      {done && <Notice tone="ok">Password saved.</Notice>}
       {error && <Notice tone="stop">{error}</Notice>}
       <input type="email" autoComplete="username" value={me?.kind === 'user' ? me.user.email : ''} readOnly hidden />
       {hasPassword && !first && (
@@ -74,7 +78,7 @@ export function SetPassword() {
         </button>
         {first && (
           <button type="button" className="btn btn-secondary" onClick={() => navigate('/', { replace: true })}>
-            Not now
+            Skip for now
           </button>
         )}
       </div>
@@ -83,14 +87,14 @@ export function SetPassword() {
 }
 
 export function Account() {
-  useTitle('Your account');
+  useTitle('Account');
   const { me, signOut, refresh } = useSession();
   const navigate = useNavigate();
+  const toast = useToast();
   const [message, setMessage] = useState<{ tone: 'ok' | 'stop'; text: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [password, setPassword] = useState('');
   if (me?.kind !== 'user') return null;
-  const isAdmin = me.platformPermissions.includes('platform.users.manage');
 
   async function rename() {
     const name = window.prompt('Your name', me?.kind === 'user' ? me.user.displayName : '');
@@ -98,7 +102,8 @@ export function Account() {
     try {
       await api('/me', { method: 'PATCH', body: { displayName: name.trim() } });
       await refresh();
-      setMessage({ tone: 'ok', text: 'Name updated.' });
+      setMessage(null);
+      toast('Name changed.');
     } catch (err) {
       setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
     }
@@ -117,7 +122,7 @@ export function Account() {
 
   return (
     <div className="narrow">
-      <h1>Your account</h1>
+      <h1>Account</h1>
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
       <ul className="settings-list">
         <li>
@@ -126,7 +131,7 @@ export function Account() {
             <span>{me.user.displayName}</span>
           </span>
           <button className="btn-link" onClick={() => void rename()}>
-            Change
+            Change name
           </button>
         </li>
         <li>
@@ -142,18 +147,7 @@ export function Account() {
               <span>{me.user.hasPassword ? 'Set' : 'Not set yet'}</span>
             </span>
             <button className="btn-link" onClick={() => navigate('/account/password')}>
-              {me.user.hasPassword ? 'Change' : 'Set one'}
-            </button>
-          </li>
-        )}
-        {isAdmin && (
-          <li>
-            <span>
-              <strong>Admin</strong>
-              <span>People, demo mode and View as</span>
-            </span>
-            <button className="btn-link" onClick={() => navigate('/admin')}>
-              Open
+              {me.user.hasPassword ? 'Change password' : 'Set password'}
             </button>
           </li>
         )}

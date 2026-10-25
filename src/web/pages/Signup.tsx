@@ -61,7 +61,7 @@ function usePerson(onError: (text: string) => void) {
 /**
  * The sign-up screen, for a tablet at camp HQ. Before anyone scans it shows
  * what's on and how many places are left (no names). Someone scans their
- * lanyard or types its code, books, and taps Done.
+ * lanyard or types its code, books, and taps "Finish and clear screen".
  */
 export function SignupKiosk() {
   useTitle('Activity sign-up');
@@ -149,7 +149,7 @@ export function SignupKiosk() {
         {person.done && <Notice tone="ok">{person.done}</Notice>}
         <SignupPanel view={person.view} highlight={highlight} busy={person.busy} onBook={(s) => person.book(s)} onCancel={(id) => person.cancel(id)} />
         <button className="btn btn-block btn-done" onClick={reset}>
-          Done
+          Finish and clear screen
         </button>
       </Frame>
     );
@@ -192,7 +192,7 @@ export function SignupKiosk() {
                     onChange={(e) => setTyped(e.target.value.toUpperCase())}
                   />
                   <button className="btn" disabled={typed.replace(/-/g, '').length !== 8}>
-                    Go
+                    Look up code
                   </button>
                 </div>
               </Field>

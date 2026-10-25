@@ -2,7 +2,10 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiFailure, api } from '../api';
 import { QrCode } from '../components/QrCode';
-import { Field, Loading, Notice, SkeletonList } from '../components/ui';
+import { Field, Loading, LoadError, Notice, PageHeader, SkeletonList } from '../components/ui';
+import { Menu } from '../components/Menu';
+import { useToast } from '../components/Toast';
+import { useTitle } from '../useTitle';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import type { Activity } from './Activities';
@@ -27,8 +30,13 @@ const STATE_LABEL: Record<Station['state'], string> = {
   pairing_expired: 'Pairing code expired',
 };
 
+/** Settings › Stations: shared devices that scan one thing. */
 export function Stations() {
+  useTitle('Stations');
   const { event } = useEvent();
+  const toast = useToast();
+  const [adding, setAdding] = useState(false);
+  const [reopening, setReopening] = useState<string | null>(null);
   const stations = useApi<{ stations: Station[] }>(`/events/${event.id}/stations`);
   const activities = useApi<{ activities: Activity[] }>(`/events/${event.id}/activities`);
   const meals = useApi<{ meals: Meal[] }>(event.features.meals ? `/events/${event.id}/meals` : null);
@@ -38,10 +46,11 @@ export function Stations() {
   const [editing, setEditing] = useState<string | null>(null);
   const [reopenHours, setReopenHours] = useState('12');
 
-  async function act(action: () => Promise<unknown>) {
+  async function act(action: () => Promise<unknown>, done?: string) {
     try {
       await action();
       setFailure(null);
+      if (done) toast(done);
       await stations.reload();
     } catch (err) {
       setFailure(err instanceof ApiFailure ? err.message : 'Something went wrong.');
@@ -63,6 +72,9 @@ export function Stations() {
       });
       setPairing({ name: form.name, code: res.pairingCode });
       setFailure(null);
+      setAdding(false);
+      setForm({ name: '', context: '', hours: '12' });
+      window.scrollTo(0, 0);
       await stations.reload();
     } catch (err) {
       setFailure(err instanceof ApiFailure ? err.message : 'Something went wrong.');
@@ -75,10 +87,17 @@ export function Stations() {
 
   return (
     <>
-      <p className="narrow">
-        A station is a shared phone or tablet that scans one activity, meal or the gate, and nothing else. Stopping it signs it out
-        straight away.
-      </p>
+      <PageHeader
+        title={<span className="visually-hidden">Stations</span>}
+        sub="A shared phone or tablet that scans one activity, meal or the gate, and nothing else. Leaders scan from the Scan tab on their own phones."
+        actions={
+          !adding && (
+            <button className="btn" onClick={() => setAdding(true)}>
+              Set up station
+            </button>
+          )
+        }
+      />
       {pairing && (
         <div className="pairing">
           <h2>Pair "{pairing.name}"</h2>
@@ -89,7 +108,7 @@ export function Stations() {
           <QrCode value={`${location.origin}/pair#${pairing.code}`} size="12rem" label="Pairing code" />
           <p className="pairing-code">{formatShortCode(pairing.code)}</p>
           <button className="btn btn-secondary" onClick={() => setPairing(null)}>
-            Done
+            Close pairing code
           </button>
         </div>
       )}
@@ -98,6 +117,7 @@ export function Stations() {
           <SkeletonList rows={2} aside="tag" heading />
         </Loading>
       )}
+      {stations.error && <LoadError error={stations.error} onRetry={stations.reload} />}
       {failure && !pairing && <Notice tone="stop">{failure}</Notice>}
       {stations.data && stations.data.stations.length > 0 && (
         <section className="list-section">
@@ -116,9 +136,38 @@ export function Stations() {
                         void act(async () => {
                           await api(`/events/${event.id}/stations/${s.id}`, { method: 'PATCH', body });
                           setEditing(null);
-                        })
+                        }, 'Changes saved.')
                       }
                     />
+                  ) : reopening === s.id ? (
+                    <form
+                      className="list-pad-inline"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void act(async () => {
+                          const res = await api<{ pairingCode: string }>(`/events/${event.id}/stations/${s.id}/reopen`, { body: { hours: Number(reopenHours) } });
+                          setReopening(null);
+                          setPairing({ name: s.name, code: res.pairingCode });
+                          window.scrollTo(0, 0);
+                        });
+                      }}
+                    >
+                      <Field id={`reopen-${s.id}`} label={`Reopen ${s.name} for`}>
+                        <select id={`reopen-${s.id}`} className="input" value={reopenHours} onChange={(e) => setReopenHours(e.target.value)}>
+                          {[4, 12, 24, 48, 72].map((h) => (
+                            <option key={h} value={h}>
+                              {h} hours
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                      <div className="actions flush-top">
+                        <button className="btn btn-small">Reopen station</button>
+                        <button type="button" className="btn btn-secondary btn-small" onClick={() => setReopening(null)}>
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
                   ) : (
                     <div className="list-row station-row">
                       <span className="list-main">
@@ -126,46 +175,21 @@ export function Stations() {
                         <span>Scans {s.contextName}</span>
                       </span>
                       <span className={`tag ${s.state === 'active' ? 'tag-now' : s.state === 'waiting' ? 'tag-warn' : ''}`}>{STATE_LABEL[s.state]}</span>
-                      <span className="row-actions">
-                        <button className="btn-link" onClick={() => setEditing(s.id)}>
-                          Edit<span className="visually-hidden"> {s.name}</span>
-                        </button>
-                        {live ? (
-                          <button
-                            className="btn-link"
-                            onClick={() => {
-                              if (window.confirm(`Stop "${s.name}"? It will be signed out immediately. You can reopen it later.`))
-                                void act(() => api(`/events/${event.id}/stations/${s.id}`, { method: 'DELETE' }));
-                            }}
-                          >
-                            Stop<span className="visually-hidden"> {s.name}</span>
-                          </button>
-                        ) : (
-                          <span className="reopen">
-                            <button
-                              className="btn-link"
-                              onClick={() =>
-                                void act(async () => {
-                                  const res = await api<{ pairingCode: string }>(`/events/${event.id}/stations/${s.id}/reopen`, {
-                                    body: { hours: Number(reopenHours) },
-                                  });
-                                  setPairing({ name: s.name, code: res.pairingCode });
-                                  window.scrollTo(0, 0);
-                                })
+                      <Menu
+                        label={`More actions for ${s.name}`}
+                        items={[
+                          { label: 'Edit station', onSelect: () => setEditing(s.id) },
+                          live
+                            ? {
+                                label: 'Stop station',
+                                onSelect: () => {
+                                  if (window.confirm(`Stop "${s.name}"? It's signed out straight away. You can reopen it later.`))
+                                    void act(() => api(`/events/${event.id}/stations/${s.id}`, { method: 'DELETE' }), `${s.name} stopped.`);
+                                },
                               }
-                            >
-                              Reopen<span className="visually-hidden"> {s.name}</span>
-                            </button>
-                            <select className="input input-compact" aria-label={`How long ${s.name} works for`} value={reopenHours} onChange={(e) => setReopenHours(e.target.value)}>
-                              {[4, 12, 24, 48, 72].map((h) => (
-                                <option key={h} value={h}>
-                                  for {h} hours
-                                </option>
-                              ))}
-                            </select>
-                          </span>
-                        )}
-                      </span>
+                            : { label: 'Reopen station…', onSelect: () => setReopening(s.id) },
+                        ]}
+                      />
                     </div>
                   )}
                 </li>
@@ -174,8 +198,20 @@ export function Stations() {
           </ul>
         </section>
       )}
-      <form onSubmit={create} className="narrow section-gap" noValidate>
-        <h2>Set up a station</h2>
+      {stations.data && stations.data.stations.length === 0 && !adding && (
+        <div className="empty">
+          <p>
+            <strong>No stations yet.</strong>
+          </p>
+          <p className="lede">Most camps only need one, for the meal hall.</p>
+          <button className="btn" onClick={() => setAdding(true)}>
+            Set up station
+          </button>
+        </div>
+      )}
+      {adding && (
+      <form onSubmit={create} className="narrow panel" noValidate>
+        <h2>Set up station</h2>
         <Field id="st-name" label="Name" hint="For example, Meal hall tablet">
           <input id="st-name" className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </Field>
@@ -198,10 +234,16 @@ export function Stations() {
             ))}
           </select>
         </Field>
-        <button className="btn" disabled={!form.name.trim() || !form.context}>
-          Create pairing code
-        </button>
+        <div className="actions">
+          <button className="btn" disabled={!form.name.trim() || !form.context}>
+            Set up station
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => setAdding(false)}>
+            Cancel
+          </button>
+        </div>
       </form>
+      )}
     </>
   );
 }
@@ -244,7 +286,7 @@ function StationEdit({
       </Field>
       <div className="actions flush-top">
         <button className="btn btn-small" disabled={!name.trim()}>
-          Save
+          Save changes
         </button>
         <button type="button" className="btn btn-secondary btn-small" onClick={onCancel}>
           Cancel

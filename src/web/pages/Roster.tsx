@@ -3,7 +3,10 @@ import { Link } from 'react-router';
 import type { DietaryEntryInput } from '../../shared/schemas';
 import { ApiFailure, api } from '../api';
 import { Icon } from '../components/Icon';
-import { Loading, Notice, Skeleton, SkeletonList } from '../components/ui';
+import { ActionButton, Loading, LoadError, Notice, PageHeader, Skeleton, SkeletonList } from '../components/ui';
+import { Menu } from '../components/Menu';
+import { useToast } from '../components/Toast';
+import { useTitle } from '../useTitle';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import { matchesSearch } from '../../shared/search';
@@ -26,8 +29,11 @@ export interface Registration {
   dietaryFingerprint?: string | null;
 }
 
+/** People: everyone on the event's roster. */
 export function Roster() {
+  useTitle('People');
   const { event, can } = useEvent();
+  const toast = useToast();
   const { data, error, loading, reload } = useApi<{ registrations: Registration[] }>(`/events/${event.id}/registrations`);
   const [query, setQuery] = useState('');
   const [section, setSection] = useState('');
@@ -47,7 +53,8 @@ export function Roster() {
     if (!window.confirm(`Delete ${name} from ${event.name}? Their card, dietary details and scans are deleted too. This can't be undone. To keep the records, withdraw them instead (open their page).`)) return;
     try {
       await api(`/events/${event.id}/registrations/${r.id}`, { method: 'DELETE' });
-      setMessage({ tone: 'ok', text: `Deleted ${name}.` });
+      setMessage(null);
+      toast(`Deleted ${name}.`);
       await reload();
     } catch (err) {
       setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
@@ -57,56 +64,68 @@ export function Roster() {
   if (loading && !data)
     return (
       <Loading label="Loading people">
-        <Skeleton width="12rem" height="1rem" className="skeleton-gap" />
         <div className="skeleton-actions">
-          <Skeleton width="9rem" height="48px" radius="var(--radius-control)" />
+          <Skeleton width="12rem" height="1rem" />
           <Skeleton width="9rem" height="48px" radius="var(--radius-control)" />
         </div>
         <Skeleton width="100%" height="48px" radius="var(--radius-control)" className="skeleton-gap" />
         <SkeletonList rows={6} />
       </Loading>
     );
-  if (error) return <Notice tone="stop">{error.message}</Notice>;
+  if (error) return <LoadError error={error} onRetry={reload} />;
 
   return (
     <>
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
-      <div className="page-head">
-        <p className="lede flush">
-          {active.length} {active.length === 1 ? 'person' : 'people'}: {active.filter((r) => r.kind === 'youth').length} youth, {active.filter((r) => r.kind === 'adult').length}{' '}
-          adults
-          {all.length > active.length && `. ${all.length - active.length} withdrawn`}
-        </p>
-        <div className="actions flush">
-          {can('roster.edit') && (
-            <Link className="btn" to="add">
-              Add person
-            </Link>
-          )}
-          {can('roster.import') && (
-            <Link className="btn btn-secondary" to="../import">
-              Import roster
-            </Link>
-          )}
-          {active.length > 0 && (
-            <Link className="btn btn-secondary" to="../roll-sheet">
-              Paper roll sheet
-            </Link>
-          )}
-          {can('credentials.manage') && active.length > 0 && (
-            <Link className="btn btn-secondary" to="../lanyards">
-              Lanyards{withoutCard > 0 && ` (${withoutCard} to print)`}
-            </Link>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title={<span className="visually-hidden">People</span>}
+        sub={
+          all.length > 0 && (
+            <>
+              {active.length} {active.length === 1 ? 'person' : 'people'}: {active.filter((r) => r.kind === 'youth').length} youth,{' '}
+              {active.filter((r) => r.kind === 'adult').length} adults
+              {all.length > active.length && `. ${all.length - active.length} withdrawn`}
+            </>
+          )
+        }
+        actions={
+          <>
+            {can('roster.edit') && (
+              <Link className="btn" to="add">
+                Add person
+              </Link>
+            )}
+            <Menu
+              label="More people actions"
+              items={[
+                can('roster.import') && { label: 'Import from MyScout', to: 'import' },
+                can('credentials.manage') && active.length > 0 && { label: withoutCard > 0 ? `Print lanyards (${withoutCard} new)` : 'Print lanyards', to: 'lanyards' },
+                active.length > 0 && { label: 'Print roll sheet', to: 'roll-sheet' },
+                can('roster.edit') && all.length > 0 && { label: deleting ? 'Stop deleting' : 'Delete people…', onSelect: () => setDeleting(!deleting), danger: !deleting },
+              ]}
+            />
+          </>
+        }
+      />
 
       {all.length === 0 ? (
         <div className="empty">
           <p>
             <strong>No one on the roster yet.</strong>
           </p>
-          <p className="lede">Import the MyScout participant export, or add people one at a time with Add person.</p>
+          <p className="lede">Import the MyScout participant export, or add people one at a time.</p>
+          <div className="actions">
+            {can('roster.import') && (
+              <Link className="btn" to="import">
+                Import from MyScout
+              </Link>
+            )}
+            {can('roster.edit') && (
+              <Link className="btn btn-secondary" to="add">
+                Add person
+              </Link>
+            )}
+          </div>
         </div>
       ) : (
         <>
@@ -129,12 +148,26 @@ export function Roster() {
             <p className="field-hint flush" aria-live="polite">
               {shown.length !== all.length && `${shown.length} of ${all.length} people`}
             </p>
-            {can('roster.edit') && (
-              <button className="btn-link" onClick={() => setDeleting(!deleting)}>
-                {deleting ? 'Done' : 'Delete people'}
+            {deleting && (
+              <button className="btn-link" onClick={() => setDeleting(false)}>
+                Stop deleting
               </button>
             )}
           </div>
+          {shown.length === 0 && (
+            <p className="field-hint">
+              No one matches.{' '}
+              <button
+                className="btn-link"
+                onClick={() => {
+                  setQuery('');
+                  setSection('');
+                }}
+              >
+                Clear search
+              </button>
+            </p>
+          )}
           <ul className="list people-roster">
             {shown.map((r) => {
               const name = `${r.preferredName || r.firstName} ${r.lastName}`;
@@ -160,9 +193,9 @@ export function Roster() {
                       </span>
                     </Link>
                     {deleting && (
-                      <button className="btn btn-danger btn-small" onClick={() => void remove(r, name)}>
+                      <ActionButton className="btn btn-danger btn-small" busyLabel="Deleting…" onAction={() => remove(r, name)}>
                         Delete<span className="visually-hidden"> {name}</span>
-                      </button>
+                      </ActionButton>
                     )}
                   </div>
                 </li>

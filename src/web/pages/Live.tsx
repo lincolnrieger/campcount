@@ -4,7 +4,8 @@ import { Icon } from '../components/Icon';
 import { matchesSearch, searchRank } from '../../shared/search';
 import { timeInZone } from '../../shared/time';
 import type { Where } from './Person';
-import { Loading, Notice, Skeleton, SkeletonList, SkeletonTiles } from '../components/ui';
+import { Loading, LoadError, Notice, Skeleton, SkeletonList, SkeletonTiles } from '../components/ui';
+import { useTitle } from '../useTitle';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 
@@ -107,6 +108,7 @@ function groupPeople(people: WherePerson[], by: GroupBy, data: WhereData): Peopl
 }
 
 export function Live() {
+  useTitle('Live');
   const { event } = useEvent();
   const { data, error, loading, reload } = useApi<LiveData>(`/events/${event.id}/live`);
   const where = useApi<WhereData>(`/events/${event.id}/whereabouts`);
@@ -134,7 +136,15 @@ export function Live() {
         <SkeletonList rows={3} lines={2} aside="none" heading />
       </Loading>
     );
-  if (error || where.error) return <Notice tone="stop">{(error ?? where.error)!.message}</Notice>;
+  if (error || where.error)
+    return (
+      <LoadError
+        error={(error ?? where.error)!}
+        onRetry={async () => {
+          await Promise.all([reload(), reloadWhere()]);
+        }}
+      />
+    );
   if (!data || !where.data) return null;
   const tz = data.timezone;
   const at = new Date(data.generatedAt).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', timeZone: tz });
@@ -157,7 +167,7 @@ export function Live() {
       {data.openItems > 0 && (
         <Notice tone="warn">
           <p>
-            {data.openItems} scan{data.openItems === 1 ? '' : 's'} to check (unknown cards or sign-outs without a sign-in). See <a href="close-out">Close-out</a>.
+            {data.openItems} scan{data.openItems === 1 ? '' : 's'} to check (unknown cards or sign-outs without a sign-in). See <Link to="../reports" relative="path">Reports</Link>.
           </p>
         </Notice>
       )}
@@ -236,7 +246,7 @@ export function Live() {
                   const place = placeOf(p, tz);
                   return (
                     <li key={p.id}>
-                      <Link to={`../roster/${p.id}`} relative="path" className="list-row board-row">
+                      <Link to={`../people/${p.id}`} relative="path" className="list-row board-row">
                         <span className="list-main">
                           <strong>{p.fullName}</strong>
                           <span>

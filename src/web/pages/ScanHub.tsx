@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Icon } from '../components/Icon';
-import { Loading, Notice, Skeleton, SkeletonHeading, SkeletonList } from '../components/ui';
+import { Loading, LoadError, Skeleton, SkeletonHeading, SkeletonList } from '../components/ui';
 import type { ScanTarget } from '../scan/targets';
 import { canScan, isOnNow, rememberScanEvent, useLastScan, useScanEvent, useScanTargets } from '../scan/targets';
 import type { EventSummary } from '../types';
@@ -12,7 +12,7 @@ import { useTitle } from '../useTitle';
 /** The Scan tab: pick an event (if more than one), then what to scan. */
 export function ScanHub() {
   useTitle('Scan');
-  const { data, error, loading } = useApi<{ events: EventSummary[] }>('/events');
+  const { data, error, loading, reload } = useApi<{ events: EventSummary[] }>('/events');
   const [params, setParams] = useSearchParams();
   const stored = useScanEvent();
   const last = useLastScan();
@@ -33,7 +33,7 @@ export function ScanHub() {
         <SkeletonList rows={3} heading />
       </Loading>
     );
-  if (error) return <Notice tone="stop">{error.message}</Notice>;
+  if (error) return <LoadError error={error} onRetry={reload} />;
 
   if (!event) {
     return (

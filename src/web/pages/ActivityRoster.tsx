@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 import { ApiFailure, api } from '../api';
 import { Icon } from '../components/Icon';
-import { Loading, Notice, Skeleton, SkeletonHeading, SkeletonList, SkeletonTiles } from '../components/ui';
+import { Menu } from '../components/Menu';
+import { useToast } from '../components/Toast';
+import { BackLink, Loading, LoadError, Notice, Skeleton, SkeletonHeading, SkeletonList, SkeletonTiles } from '../components/ui';
+import { deleteContext } from '../confirmDelete';
+import { useTitle } from '../useTitle';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import { matchesSearch, searchRank } from '../../shared/search';
@@ -32,6 +36,7 @@ interface Attendance {
     trackSignOut: boolean;
     signupOpen: boolean;
     bookingRequired: boolean;
+    status: 'active' | 'cancelled';
   };
   presentNow: number;
   canBook: boolean;
@@ -48,10 +53,14 @@ const DEVICE_ID = `web-roster-${crypto.randomUUID().slice(0, 12)}`;
  * who's here, check people in and out with a tap, and add walk-ins.
  */
 export function ActivityRoster() {
-  const { event } = useEvent();
+  const { event, can } = useEvent();
   const { activityId } = useParams() as { activityId: string };
+  const navigate = useNavigate();
+  const toast = useToast();
   const path = `/events/${event.id}/activities/${activityId}`;
   const { data, error, loading, reload } = useApi<Attendance>(`${path}/attendance`);
+  useTitle(data?.activity.name ?? 'Activity');
+  const manage = can('activities.manage') && (event.status === 'draft' || event.status === 'open');
   const [show, setShow] = useState<'booked' | 'here' | 'all'>('booked');
   const [q, setQ] = useState('');
   const [adding, setAdding] = useState('');
@@ -99,12 +108,43 @@ export function ActivityRoster() {
     try {
       if (add) await api(`${path}/bookings`, { body: { registrationId: p.id } });
       else await api(`${path}/bookings/${p.id}`, { method: 'DELETE' });
-      setMessage({ tone: 'ok', text: add ? `Booked ${p.name}.` : `Removed ${p.name}'s booking.` });
+      toast(
+        add ? `Booked ${p.name}.` : `Removed ${p.name}'s booking.`,
+        add
+          ? {}
+          : {
+              undo: async () => {
+                await api(`${path}/bookings`, { body: { registrationId: p.id } });
+                await reload();
+              },
+            },
+      );
       await reload();
     } catch (err) {
       setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function changeStatus(status: 'active' | 'cancelled') {
+    try {
+      await api(path, { method: 'PATCH', body: { status } });
+      await reload();
+      toast(status === 'cancelled' ? 'Activity cancelled.' : 'Activity restored.', status === 'cancelled' ? { undo: () => changeStatus('active') } : {});
+    } catch (err) {
+      setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
+    }
+  }
+
+  async function remove() {
+    try {
+      if (await deleteContext(event.id, 'activities', activityId, data!.activity.name)) {
+        navigate('..', { relative: 'path', replace: true });
+        toast(`Deleted ${data!.activity.name}.`);
+      }
+    } catch (err) {
+      setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
     }
   }
 
@@ -119,7 +159,13 @@ export function ActivityRoster() {
         <SkeletonList rows={5} aside="button" />
       </Loading>
     );
-  if (error) return <Notice tone="stop">{error.status === 404 || error.status === 403 ? "You don't have access to this activity." : error.message}</Notice>;
+  if (error)
+    return (
+      <>
+        <BackLink to=".." label="Activities" />
+        <LoadError error={error} onRetry={reload} message={error.status === 404 || error.status === 403 ? "This activity has been deleted, or you don't run it." : undefined} />
+      </>
+    );
   if (!data) return null;
   const a = data.activity;
   const booked = data.people.filter((p) => p.booked);
@@ -137,10 +183,30 @@ export function ActivityRoster() {
 
   return (
     <div className="activity-roster">
-      <Link to=".." relative="path" className="back-link">
-        <Icon name="back" size={18} /> Activities
-      </Link>
-      <h2 className="person-name">{a.name}</h2>
+      <BackLink to=".." label="Activities" />
+      <div className="title-row">
+        <h2 className="person-name">{a.name}</h2>
+        {manage && (
+          <Menu
+            label={`More actions for ${a.name}`}
+            items={[
+              { label: 'Edit activity', to: 'edit' },
+              { label: 'Add another session', to: `../new?from=${a.id}` },
+              a.status === 'active'
+                ? {
+                    label: 'Cancel activity',
+                    onSelect: () => {
+                      if (!window.confirm(`Cancel ${a.name}? It stops showing on scanners and the sign-up screen. Scans and bookings are kept.`)) return;
+                      void changeStatus('cancelled');
+                    },
+                  }
+                : { label: 'Restore activity', onSelect: () => void changeStatus('active') },
+              { label: 'Delete activity…', danger: true, onSelect: () => void remove() },
+            ]}
+          />
+        )}
+      </div>
+      {a.status === 'cancelled' && <Notice tone="warn">This activity is cancelled. It doesn't show on scanners or the sign-up screen.</Notice>}
       <p className="lede flush">
         {[a.startsAt ? `${dayLabel(dayInZone(a.startsAt, tz), 'long')}, ${timeRange(a.startsAt, a.endsAt, tz)}` : 'Runs all camp', a.location || null]
           .filter(Boolean)
@@ -223,23 +289,23 @@ export function ActivityRoster() {
               {data.canCheckIn &&
                 (p.present && a.trackSignOut ? (
                   <button className="btn btn-secondary btn-small" disabled={busy === p.id} onClick={() => void checkIn(p, 'out')}>
-                    Check out
+                    Check out<span className="visually-hidden"> {p.name}</span>
                   </button>
                 ) : (
                   !(p.visits > 0 && !a.trackSignOut) && (
                     <button className="btn btn-small" disabled={busy === p.id} onClick={() => void checkIn(p, 'in')}>
-                      Check in
+                      Check in<span className="visually-hidden"> {p.name}</span>
                     </button>
                   )
                 ))}
               {data.canBook && p.booked && !p.present && (
                 <button className="btn-link text-stop" disabled={busy === p.id} onClick={() => void booking(p, false)}>
-                  Remove booking
+                  Remove booking<span className="visually-hidden"> for {p.name}</span>
                 </button>
               )}
               {data.canBook && !p.booked && (
                 <button className="btn-link" disabled={busy === p.id} onClick={() => void booking(p, true)}>
-                  Book
+                  Add booking<span className="visually-hidden"> for {p.name}</span>
                 </button>
               )}
             </span>
@@ -267,12 +333,12 @@ export function ActivityRoster() {
                   <span className="row-actions">
                     {data.canCheckIn && (
                       <button className="btn btn-small" disabled={busy === p.id} onClick={() => void checkIn(p, 'in').then(() => setAdding(''))}>
-                        Check in
+                        Check in<span className="visually-hidden"> {p.name}</span>
                       </button>
                     )}
                     {data.canBook && (
                       <button className="btn-link" disabled={busy === p.id} onClick={() => void booking(p, true).then(() => setAdding(''))}>
-                        Book
+                        Add booking<span className="visually-hidden"> for {p.name}</span>
                       </button>
                     )}
                   </span>

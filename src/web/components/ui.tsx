@@ -1,5 +1,8 @@
-import { cloneElement, isValidElement } from 'react';
-import type { ReactNode } from 'react';
+import { cloneElement, isValidElement, useState } from 'react';
+import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { Link } from 'react-router';
+import type { ApiFailure } from '../api';
+import { Icon } from './Icon';
 import type { EventStatus } from '../../shared/schemas';
 
 export function Notice({ tone = 'info', title, children }: { tone?: 'info' | 'ok' | 'warn' | 'stop'; title?: string; children?: ReactNode }) {
@@ -18,6 +21,93 @@ export function Notice({ tone = 'info', title, children }: { tone?: 'info' | 'ok
         {children}
       </div>
     </div>
+  );
+}
+
+/**
+ * A load that failed: a plain message and a way to try again. Pass `message`
+ * to explain a 403/404 better than the server can.
+ */
+export function LoadError({ error, onRetry, message }: { error: ApiFailure; onRetry?: () => unknown; message?: string }) {
+  const [busy, setBusy] = useState(false);
+  const text = message ?? (error.status === 0 ? 'No connection. Check your signal.' : error.status >= 500 ? "CampCount couldn't load this just now." : error.message);
+  return (
+    <Notice tone="stop" title="This didn't load">
+      <p>{text}</p>
+      {onRetry && error.status !== 403 && error.status !== 404 && (
+        <button
+          type="button"
+          className="btn btn-secondary btn-small"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            await onRetry();
+            setBusy(false);
+          }}
+        >
+          {busy ? 'Trying again…' : 'Try again'}
+        </button>
+      )}
+    </Notice>
+  );
+}
+
+/**
+ * A button for an async action: disabled while it runs and showing
+ * `busyLabel`, so a second tap can't send it twice.
+ */
+export function ActionButton({
+  onAction,
+  busyLabel,
+  children,
+  disabled,
+  type = 'button',
+  ...rest
+}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onClick'> & { onAction: () => Promise<unknown>; busyLabel?: string }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      {...rest}
+      type={type}
+      disabled={disabled || busy}
+      aria-busy={busy || undefined}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          await onAction();
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      {busy && busyLabel ? busyLabel : children}
+    </button>
+  );
+}
+
+/**
+ * The heading row at the top of a page or tab: title on the left, the one
+ * primary action (and an optional ⋯ menu) on the right.
+ */
+export function PageHeader({ title, level = 2, sub, actions }: { title: ReactNode; level?: 1 | 2; sub?: ReactNode; actions?: ReactNode }) {
+  const H = level === 1 ? 'h1' : 'h2';
+  return (
+    <div className="page-head">
+      <div className="page-head-text">
+        <H className="page-title">{title}</H>
+        {sub && <p className="lede flush">{sub}</p>}
+      </div>
+      {actions && <div className="page-actions">{actions}</div>}
+    </div>
+  );
+}
+
+/** The way back to a sub-page's parent; `to` is relative to the current path. */
+export function BackLink({ to, label }: { to: string; label: string }) {
+  return (
+    <Link to={to} relative="path" className="back-link">
+      <Icon name="back" size={18} /> {label}
+    </Link>
   );
 }
 

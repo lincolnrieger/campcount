@@ -1,3 +1,4 @@
+import { useTitle } from '../useTitle';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { parseDelimited } from '../../shared/csv';
@@ -6,7 +7,7 @@ import { TARGET_FIELDS, autoMap, flagDuplicates, missingRequired, normaliseDieta
 import type { DietaryEntryInput, ImportRow } from '../../shared/schemas';
 import { ApiFailure, api } from '../api';
 import { DietaryEditor } from '../components/DietaryEditor';
-import { Loading, Notice, Skeleton } from '../components/ui';
+import { BackLink, LoadError, Loading, Notice, Skeleton } from '../components/ui';
 import { readFirstSheet } from '../import/xlsx';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
@@ -51,6 +52,7 @@ function downloadCsv(filename: string, rows: string[][]) {
 }
 
 export function Import() {
+  useTitle('Import from MyScout');
   const { event } = useEvent();
   const context = useApi<ImportContext>(`/events/${event.id}/import/context`);
   const [step, setStep] = useState<Step>('file');
@@ -154,11 +156,12 @@ export function Import() {
         <Skeleton width="100%" height="9rem" radius="var(--radius)" />
       </Loading>
     );
-  if (context.error) return <Notice tone="stop">{context.error.message}</Notice>;
+  if (context.error) return <LoadError error={context.error} onRetry={context.reload} />;
   const mappedCount = Object.keys(mapping).length;
 
   return (
     <div className="import">
+      <BackLink to=".." label="People" />
       <ol className="steps" aria-label="Import steps">
         {(['file', 'map', 'check', 'dietary', 'done'] as Step[]).map((s, i) => (
           <li key={s} aria-current={step === s ? 'step' : undefined}>
@@ -170,7 +173,7 @@ export function Import() {
 
       {step === 'file' && (
         <section className="narrow">
-          <h2>Import the roster</h2>
+          <h2>Import from MyScout</h2>
           <p>
             Use the participant export from MyScout, as an Excel workbook (.xlsx) or CSV. Include adults; CampCount works out who is
             youth and who is a leader.
@@ -425,8 +428,11 @@ export function Import() {
             </p>
           </Notice>
           <div className="actions">
-            <Link className="btn" to={`/events/${event.id}/roster`}>
-              View roster
+            <Link className="btn" to={`/events/${event.id}/people`}>
+              View people
+            </Link>
+            <Link className="btn btn-secondary" to={`/events/${event.id}/people/lanyards`}>
+              Print lanyards
             </Link>
           </div>
         </section>

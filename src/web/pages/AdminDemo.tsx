@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { ApiFailure, api } from '../api';
-import { Loading, Notice, SkeletonList } from '../components/ui';
+import { Loading, LoadError, Notice, PageHeader, SkeletonList } from '../components/ui';
+import { Menu } from '../components/Menu';
 import { Icon } from '../components/Icon';
 import { ViewAsSheet } from '../components/ViewAs';
 import { useApi } from '../useApi';
@@ -16,7 +17,7 @@ interface DemoEvent {
 }
 
 export function AdminDemo() {
-  useTitle('Demo mode');
+  useTitle('Demo camps');
   const { data, error, loading, reload } = useApi<{ events: DemoEvent[] }>('/admin/demo');
   const [size, setSize] = useState('80');
   const [message, setMessage] = useState<{ tone: 'ok' | 'stop'; text: string } | null>(null);
@@ -39,12 +40,10 @@ export function AdminDemo() {
 
   return (
     <>
-      <div className="page-head">
-        <h1>Demo mode</h1>
-      </div>
-      <p className="narrow">
-        Create a practice camp filled with made-up people, then use View as to try each role. No real member data is used.
-      </p>
+      <PageHeader
+        title={<span className="visually-hidden">Demo camps</span>}
+        sub="A practice camp filled with made-up people. Use View as to try each role. No real member data is used."
+      />
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
 
       <section className="narrow">
@@ -64,7 +63,7 @@ export function AdminDemo() {
             disabled={busy}
             onClick={() => void act(() => api('/admin/demo', { body: { participants: Number(size) } }), 'Demo camp ready. You are its event manager.')}
           >
-            {busy ? 'Creating…' : 'Create'}
+            {busy ? 'Creating…' : 'Create demo camp'}
           </button>
         </div>
       </section>
@@ -74,34 +73,39 @@ export function AdminDemo() {
           <SkeletonList rows={2} aside="button" />
         </Loading>
       )}
-      {error && <Notice tone="stop">{error.message}</Notice>}
-      {data?.events.map((e) => (
-        <section key={e.id} className="section-gap demo-event">
-          <div className="page-head">
-            <div>
-              <h2 className="flush">{e.name}</h2>
-              <p className="field-hint flush">{e.people} people</p>
-            </div>
-            <div className="actions flush">
-              <Link className="btn btn-secondary" to={`/events/${e.id}`}>
-                Open
-              </Link>
-              <button
-                className="btn btn-danger"
-                disabled={busy}
-                onClick={() => {
-                  if (window.confirm(`Delete ${e.name} and all its demo data?`)) void act(() => api(`/admin/demo/${e.id}`, { method: 'DELETE' }), 'Demo camp deleted.');
-                }}
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-          <button type="button" className="btn btn-block" onClick={() => setViewing(e.id)}>
-            <Icon name="eye" /> Try it as a role
-          </button>
+      {error && <LoadError error={error} onRetry={reload} />}
+      {data && data.events.length > 0 && (
+        <section className="list-section section-gap">
+          <h2 className="list-heading">Your demo camps</h2>
+          <ul className="list">
+            {data.events.map((e) => (
+              <li key={e.id} className="list-row demo-row">
+                <span className="list-main">
+                  <strong>
+                    <Link to={`/events/${e.id}`}>{e.name}</Link>
+                  </strong>
+                  <span>{e.people} people</span>
+                </span>
+                <button type="button" className="btn btn-secondary btn-small" onClick={() => setViewing(e.id)}>
+                  <Icon name="eye" size={18} /> View as a role
+                </button>
+                <Menu
+                  label={`More actions for ${e.name}`}
+                  items={[
+                    {
+                      label: 'Delete demo camp…',
+                      danger: true,
+                      onSelect: () => {
+                        if (window.confirm(`Delete ${e.name} and all its demo data?`)) void act(() => api(`/admin/demo/${e.id}`, { method: 'DELETE' }), 'Demo camp deleted.');
+                      },
+                    },
+                  ]}
+                />
+              </li>
+            ))}
+          </ul>
         </section>
-      ))}
+      )}
       <ViewAsSheet open={viewing !== null} onClose={() => setViewing(null)} initialEventId={viewing ?? undefined} />
     </>
   );

@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiFailure, api } from '../api';
-import { Field, Loading, Notice, SkeletonList } from '../components/ui';
+import { ActionButton, Field, Loading, LoadError, Notice, PageHeader, SkeletonList } from '../components/ui';
+import { useToast } from '../components/Toast';
+import { useTitle } from '../useTitle';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import { matchesSearch, searchRank } from '../../shared/search';
@@ -25,8 +27,12 @@ interface Role {
   scope: 'event' | 'activity';
 }
 
+/** Settings › Staff: who works on the event and what they can do. */
 export function Staff() {
+  useTitle('Staff');
   const { event } = useEvent();
+  const toast = useToast();
+  const [adding, setAdding] = useState(false);
   const staff = useApi<{ staff: StaffRow[] }>(`/events/${event.id}/staff`);
   const roles = useApi<{ roles: Role[] }>('/me/roles');
   const activities = useApi<{ activities: Activity[] }>(`/events/${event.id}/activities`);
@@ -36,7 +42,7 @@ export function Staff() {
   const [picked, setPicked] = useState<Person | null>(null);
   const [form, setForm] = useState({ email: '', displayName: '', roleKey: 'scanner', activityId: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [message, setMessage] = useState<{ tone: 'ok' | 'stop'; text: string } | null>(null);
+  const [message, setMessage] = useState<{ tone: 'ok' | 'warn' | 'stop'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const selectedRole = roles.data?.roles.find((r) => r.key === form.roleKey);
 
@@ -56,13 +62,10 @@ export function Staff() {
         },
       });
       const role = selectedRole?.name ?? form.roleKey;
-      setMessage(
-        !res.created
-          ? { tone: 'ok', text: `Added ${who} as ${role}.` }
-          : res.emailed
-            ? { tone: 'ok', text: `Added ${who} as ${role}. We've emailed them a link to set their password.` }
-            : { tone: 'stop', text: `Added ${who} as ${role}, but the invite email couldn't be sent. Try "Resend invite" later, or ask an admin for a set-up link.` },
-      );
+      if (res.created && !res.emailed)
+        setMessage({ tone: 'warn', text: `Added ${who} as ${role}, but the invite email couldn't be sent. Try "Resend invite" later, or ask an admin for a set-up link.` });
+      else toast(res.created ? `Added ${who} as ${role}. We've emailed them a link to set their password.` : `Added ${who} as ${role}.`);
+      setAdding(false);
       setForm({ ...form, email: '', displayName: '' });
       setPicked(null);
       setQuery('');
@@ -93,7 +96,8 @@ export function Staff() {
         method: 'PATCH',
         body: { roleKey, activityId: activityId || null },
       });
-      setMessage({ tone: 'ok', text: `${row.user.displayName} is now ${roleOptions.find((o) => o.value === value)?.label ?? roleKey}.` });
+      setMessage(null);
+      toast(`${row.user.displayName} is now ${roleOptions.find((o) => o.value === value)?.label ?? roleKey}.`);
     } catch (err) {
       setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
     }
@@ -103,7 +107,7 @@ export function Staff() {
   async function resend(row: StaffRow) {
     try {
       await api(`/events/${event.id}/staff/${row.assignmentId}/invite`, { body: {} });
-      setMessage({ tone: 'ok', text: `Sent ${row.user.displayName} a new link to set their password.` });
+      toast(`Sent ${row.user.displayName} a new link to set their password.`);
     } catch (err) {
       setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
     }
@@ -113,7 +117,8 @@ export function Staff() {
     if (!window.confirm(`Remove ${row.user.displayName} as ${row.role.name}? They lose access straight away.`)) return;
     try {
       await api(`/events/${event.id}/staff/${row.assignmentId}`, { method: 'DELETE' });
-      setMessage({ tone: 'ok', text: `Removed ${row.user.displayName} as ${row.role.name}.` });
+      setMessage(null);
+      toast(`Removed ${row.user.displayName} as ${row.role.name}.`);
       await staff.reload();
     } catch (err) {
       setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
@@ -122,20 +127,35 @@ export function Staff() {
 
   return (
     <>
+      <PageHeader
+        title={<span className="visually-hidden">Staff</span>}
+        sub={staff.data && staff.data.staff.length > 0 && `${staff.data.staff.length} on this event`}
+        actions={
+          !adding && (
+            <button className="btn" onClick={() => setAdding(true)}>
+              Add staff
+            </button>
+          )
+        }
+      />
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
-      <h2>People on this event</h2>
       {staff.loading && !staff.data && (
         <Loading label="Loading staff">
           <SkeletonList rows={3} aside="button" />
         </Loading>
       )}
-      {staff.error && <Notice tone="stop">{staff.error.message}</Notice>}
+      {staff.error && <LoadError error={staff.error} onRetry={staff.reload} />}
       {staff.data && staff.data.staff.length === 0 && (
         <div className="empty">
           <p>
             <strong>No one is assigned yet.</strong>
           </p>
           <p className="lede">Add an event manager first. They can bring in the rest of the crew.</p>
+          {!adding && (
+            <button className="btn" onClick={() => setAdding(true)}>
+              Add staff
+            </button>
+          )}
         </div>
       )}
       {staff.data && staff.data.staff.length > 0 && (
@@ -159,9 +179,9 @@ export function Staff() {
                     {!row.user.hasPassword && (
                       <div className="field-hint">
                         Hasn't set a password yet.{' '}
-                        <button className="btn-link" onClick={() => void resend(row)}>
+                        <ActionButton className="btn-link" busyLabel="Sending…" onAction={() => resend(row)}>
                           Resend invite
-                        </button>
+                        </ActionButton>
                       </div>
                     )}
                   </td>
@@ -183,9 +203,9 @@ export function Staff() {
                     </select>
                   </td>
                   <td className="num">
-                    <button className="btn-link text-stop" onClick={() => void remove(row)}>
+                    <ActionButton className="btn-link text-stop" busyLabel="Removing…" onAction={() => remove(row)}>
                       Remove<span className="visually-hidden"> {row.user.displayName}</span>
-                    </button>
+                    </ActionButton>
                   </td>
                 </tr>
               ))}
@@ -194,8 +214,9 @@ export function Staff() {
         </div>
       )}
 
-      <form onSubmit={add} noValidate className="narrow section-gap">
-        <h2>Add someone</h2>
+      {adding && (
+      <form onSubmit={add} noValidate className="narrow panel">
+        <h2>Add staff</h2>
         <div className="segmented section-gap-sm" role="group" aria-label="Who are you adding?">
           <button type="button" aria-pressed={mode === 'existing'} onClick={() => setMode('existing')}>
             Has an account
@@ -213,7 +234,7 @@ export function Staff() {
                   <span>{picked.email}</span>
                 </span>
                 <button type="button" className="btn-link" onClick={() => setPicked(null)}>
-                  Change
+                  Choose someone else
                 </button>
               </div>
             ) : (
@@ -289,10 +310,16 @@ export function Staff() {
             </select>
           </Field>
         )}
-        <button className="btn" disabled={busy || (mode === 'existing' ? !picked : !form.email || !form.displayName)}>
-          {busy ? 'Adding…' : 'Add to event'}
-        </button>
+        <div className="actions">
+          <button className="btn" disabled={busy || (mode === 'existing' ? !picked : !form.email || !form.displayName)}>
+            {busy ? 'Adding…' : 'Add staff'}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => setAdding(false)}>
+            Cancel
+          </button>
+        </div>
       </form>
+      )}
     </>
   );
 }
