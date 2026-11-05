@@ -136,9 +136,6 @@ export function Sheet({ open, title, onClose, children }: { open: boolean; title
         e.preventDefault();
         onClose();
       }}
-      onClick={(e) => {
-        if (e.target === ref.current) onClose();
-      }}
     >
       {open && (
         <>

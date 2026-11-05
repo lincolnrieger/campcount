@@ -1,1 +1,90 @@
-/* Screens: activities. Tokens only. */
+/* Screens: activities, meals and the sign-up kiosk. Tokens only. */
+
+/* ---------- Activity page ---------- */
+.activity-counts {
+  color: var(--ink-2);
+}
+.activity-counts strong {
+  color: var(--ink);
+}
+.activity-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+.pre-line {
+  white-space: pre-line;
+}
+
+/* ---------- Meals ---------- */
+.meal-time {
+  align-self: flex-start;
+  width: 4.5rem;
+  flex: none;
+  padding-top: 1px;
+  color: var(--ink-2);
+}
+
+/* ---------- Sign-up kiosk ---------- */
+.kiosk-share {
+  display: grid;
+  gap: var(--space-5);
+  align-items: start;
+}
+.kiosk-qr {
+  width: 100%;
+  max-width: 14rem;
+}
+@media (min-width: 600px) {
+  .kiosk-share {
+    grid-template-columns: 12rem minmax(0, 1fr);
+  }
+}
+.wanted {
+  border-color: var(--brand);
+  background: var(--brand-tint);
+}
+
+/* Posters only exist on paper. */
+.session-posters {
+  display: none;
+}
+@media print {
+  .session-posters {
+    display: block;
+  }
+  .session-poster {
+    display: grid;
+    justify-items: center;
+    gap: var(--space-4);
+    min-height: 100vh;
+    padding: var(--space-7) var(--space-5);
+    text-align: center;
+    break-after: page;
+  }
+  .session-poster:last-child {
+    break-after: auto;
+  }
+  .session-poster-event {
+    font-size: var(--text-lg);
+    color: var(--ink-2);
+  }
+  .session-poster h2 {
+    font-size: calc(var(--text-display) * 1.5);
+  }
+  .session-poster-when {
+    font-size: var(--text-lg);
+  }
+  .session-poster-qr {
+    width: 60%;
+    max-width: 22rem;
+  }
+  .session-poster-cta {
+    font-size: var(--text-lg);
+    font-weight: var(--weight-bold);
+  }
+  .activity-list .row-side {
+    display: none;
+  }
+}

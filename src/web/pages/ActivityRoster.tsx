@@ -335,6 +335,8 @@ export function ActivityRoster() {
           setFind('');
         }}
       >
+        {/* The sheet opens to find someone, so the search box is where focus belongs. */}
+        {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
         <SearchField id="walkin-q" label="Anyone on camp: type a name" value={find} onChange={setFind} autoFocus />
         {find.trim() === '' ? (
           <p className="meta">{data.canCheckIn ? 'Sign in a walk-in, or book someone for this session.' : 'Book someone for this session.'}</p>

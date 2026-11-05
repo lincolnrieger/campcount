@@ -19,7 +19,7 @@ export function NotFound({ inEvent = false }: { inEvent?: boolean }) {
           </ButtonLink>
         }
       >
-        Check the address, or start again from the camp's home.
+        Check the address, or start again from the beginning.
       </EmptyState>
     </>
   );

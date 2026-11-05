@@ -44,7 +44,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-4) var(--page-pad);
+  /* Line the logo up with the content column below. */
+  padding: var(--space-4) max(var(--page-pad), calc((100% - var(--content-max)) / 2 + var(--page-pad)));
   background: var(--surface);
   border-bottom: var(--border-width) solid var(--divider);
 }

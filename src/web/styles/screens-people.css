@@ -1,1 +1,84 @@
 /* Screens: people. Tokens only. */
+
+/* ---------- Import ---------- */
+.dropzone {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1);
+  max-width: var(--form-max);
+  padding: var(--space-6) var(--space-4);
+  border: 2px dashed var(--border-control);
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-align: center;
+  cursor: pointer;
+}
+.dropzone:hover {
+  border-color: var(--brand);
+  background: var(--brand-tint);
+}
+.dropzone .icon {
+  color: var(--brand);
+  transform: rotate(180deg);
+}
+.dropzone input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.dropzone:has(input:focus-visible) {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: 2px;
+}
+.map-row {
+  flex-wrap: wrap;
+}
+.map-row .row-main {
+  flex: 1 1 14rem;
+}
+.map-select {
+  flex: 1 1 14rem;
+  width: auto;
+  max-width: 20rem;
+}
+.import-tiles-4 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (min-width: 600px) {
+  .import-tiles-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+.problem-list {
+  display: grid;
+  gap: var(--space-1);
+  padding-left: var(--space-5);
+  list-style: disc;
+}
+.import-changes {
+  margin-top: var(--space-3);
+}
+.review-list {
+  display: grid;
+  gap: var(--space-4);
+}
+.review-item {
+  display: grid;
+  gap: var(--space-3);
+}
+.review-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+.source-note {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 4px solid var(--border-control);
+  background: var(--surface-sunken);
+  color: var(--ink-2);
+  white-space: pre-line;
+}

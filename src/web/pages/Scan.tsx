@@ -480,6 +480,8 @@ function FindByName({ people, onPick, onCode }: { people: SnapshotPerson[]; onPi
   }
   return (
     <>
+      {/* The sheet opens because they tapped Find by name: put them straight in the box. */}
+      {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
       <SearchField id="name-q" label="Name or membership number" value={q} onChange={setQ} autoFocus />
       {q.trim() === '' ? (
         <p className="meta">Start typing. Even one letter works. It's saved as a hand entry.</p>

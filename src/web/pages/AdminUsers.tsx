@@ -26,6 +26,7 @@ import {
   useSort,
   useToast,
   useWide,
+  plural,
 } from '../ui';
 import type { MenuItem } from '../ui';
 
@@ -214,7 +215,7 @@ export function AdminUsers() {
       <PageHeader
         title="Accounts"
         back={{ to: '/admin', label: 'Admin' }}
-        summary={users.data && `${all.length} accounts · ${all.filter((u) => u.platformAdmin).length} admins`}
+        summary={users.data && `${all.length} accounts · ${plural(all.filter((u) => u.platformAdmin).length, 'admin')}`}
         primary={
           <Button kind="primary" onClick={() => setAdding(true)}>
             <Icon name="plus" />
@@ -232,9 +233,11 @@ export function AdminUsers() {
             <option value="disabled">Disabled</option>
             <option value="demo">Demo accounts</option>
           </select>
-          <p className="toolbar-count" aria-live="polite">
-            {list.length} of {all.length}
-          </p>
+          {users.data && (
+            <p className="toolbar-count" aria-live="polite">
+              {list.length} of {all.length}
+            </p>
+          )}
         </div>
 
         {users.loading && !users.data ? (

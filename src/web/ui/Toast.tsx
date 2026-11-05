@@ -17,7 +17,7 @@ export function useToast(): Show {
   return useContext(ToastContext);
 }
 
-/** One message at a time, read out politely. It stays while hovered or focused; Undo gets ten seconds. */
+/** One message at a time, read out politely. It stays while its buttons have focus; Undo gets ten seconds. */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<ToastItem | null>(null);
   const [held, setHeld] = useState(false);
@@ -37,7 +37,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={show}>
       {children}
-      <div className="toast-region" role="status" aria-live="polite" onMouseEnter={() => setHeld(true)} onMouseLeave={() => setHeld(false)}>
+      <div className="toast-region" role="status" aria-live="polite">
         {toast && (
           <div key={toast.id} className={`toast toast-${toast.tone}`}>
             <Icon name={toast.tone === 'ok' ? 'success' : 'error'} />

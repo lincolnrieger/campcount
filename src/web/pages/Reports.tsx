@@ -77,6 +77,8 @@ export function Reports() {
   const rec = useApi<Reconciliation>(`/events/${event.id}/reconciliation`);
   const exports = useApi<{ exports: { key: string; label: string }[] }>(`/events/${event.id}/exports`);
   const [ask, setAsk] = useState<{ title: string; label: string; defaultReason: string; submitLabel: string; run: (reason: string) => Promise<void> } | null>(null);
+  // When the page loaded, for spotting phones that haven't uploaded for a while.
+  const [loadedAt] = useState(() => Date.now());
   const correct = can('attendance.correct') && (event.status === 'open' || event.status === 'completed');
 
   const header = <PageHeader title="Reports" summary="Check everything is sorted, download records, then close the event." />;
@@ -100,7 +102,7 @@ export function Reports() {
   const items = data.items;
   const groups = [...new Set(items.map((i) => i.contextKey))];
   const time = (iso: string | null) => (iso ? new Date(iso).toLocaleString('en-AU', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: data.timezone }) : '');
-  const stale = data.devices.filter((d) => Date.now() - Date.parse(d.lastUpload) > 60 * 60_000);
+  const stale = data.devices.filter((d) => loadedAt - Date.parse(d.lastUpload) > 60 * 60_000);
   const allClear = items.length === 0 && data.pendingDietary === 0 && stale.length === 0;
 
   async function transition(to: 'completed' | 'open') {
