@@ -105,3 +105,22 @@ Defined once in `src/web/styles.css`; use the tokens, never one-off values.
   - The primary cell's `.row-link` makes the whole row clickable.
 - **Page anatomy:** breadcrumbs (desktop), then the event header (inside an event), then `PageHeader` with the title, a one-line summary, one primary button and a ⋯ menu. Content follows; `.split` makes two columns on wide screens.
 - **Feedback:** skeletons shaped like the content, `LoadError` with Try again, toasts (with Undo where reversible) and `ActionButton` busy states.
+
+## Simplified (November 2026)
+
+- **Dashboard:** Overview and Live are now one tab, Dashboard. It shows:
+  - Figures that double as filters.
+  - "Find a person".
+  - Everyone grouped by where they are, with Not arrived first.
+  - An **Arrived** or **Left** button on each person, for anyone without their card.
+  - For a draft event, the Get ready checklist instead.
+- **The old `live` address** redirects to the Dashboard.
+- **Scan tab:** "On now" comes first, then Gate, then the day strip, Meals and Activities.
+- **Scanner:**
+  - The camera starts by itself once it has been allowed.
+  - Beep on or off is a button in the header.
+  - Gate and meal scanners show a progress bar.
+  - The last five scans stay on screen.
+- **Person page:** has Mark as arrived and Mark as left camp buttons.
+- **Settings › Copy event:** starts a new event from this one. The activities and meals move to the new dates, and you become its event manager.
+- **Activity page:** the ⋯ menu has Print this list.

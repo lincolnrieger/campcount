@@ -123,15 +123,20 @@ export function ScanTargetPicker({
     onPick?.();
     navigate(t.to, { replace: Boolean(currentKey) });
   };
+  // Whatever is happening right now goes first, so starting is one tap.
+  const onNow = targets.filter((t) => t.type !== 'site' && isOnNow(t)).sort((a, b) => (a.startsAt ?? '').localeCompare(b.startsAt ?? ''));
+  const now = new Set(onNow.map((t) => t.key));
   const gate = targets.filter((t) => t.type === 'site');
-  const meals = targets.filter((t) => t.type === 'meal' && (usedDays.length < 2 || t.day === shownDay || t.day === null));
+  const meals = targets.filter((t) => t.type === 'meal' && !now.has(t.key) && (usedDays.length < 2 || t.day === shownDay || t.day === null));
   const activities = targets
-    .filter((t) => t.type === 'activity' && (t.day === null || usedDays.length < 2 || t.day === shownDay))
+    .filter((t) => t.type === 'activity' && !now.has(t.key) && (t.day === null || usedDays.length < 2 || t.day === shownDay))
     .sort((a, b) => (a.startsAt ?? '').localeCompare(b.startsAt ?? '') || a.label.localeCompare(b.label));
 
   return (
     <>
       {offline && <p className="field-hint">No signal: showing the list saved on this phone.</p>}
+      <TargetList title="On now" items={onNow} currentKey={currentKey} onGo={go} />
+      <TargetList title="Gate" items={gate} currentKey={currentKey} onGo={go} />
       {usedDays.length > 1 && (
         <div className="day-strip" role="group" aria-label="Day">
           {usedDays.map((d) => (
@@ -143,7 +148,6 @@ export function ScanTargetPicker({
           ))}
         </div>
       )}
-      <TargetList title="Gate" items={gate} currentKey={currentKey} onGo={go} />
       <TargetList title="Meals" items={meals} currentKey={currentKey} onGo={go} />
       <TargetList title="Activities" items={activities} currentKey={currentKey} onGo={go} />
     </>

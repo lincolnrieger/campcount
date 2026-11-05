@@ -19,6 +19,8 @@ const SAME_CODE_COOLDOWN_MS = 3000;
 
 /** Set when switching what to scan, so the next scanner starts its camera straight away. */
 let resumeCamera = false;
+/** Beep on scan: remembered for this visit, across scanners. */
+let soundOn = true;
 
 let audio: AudioContext | null = null;
 function signal(tone: Feedback['tone'], sound: boolean) {
@@ -115,7 +117,11 @@ export function Scan() {
   const [direction, setDirection] = useState<Direction>('in');
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [camera, setCamera] = useState<'off' | 'starting' | 'on' | 'denied' | 'unavailable'>('off');
-  const [sound, setSound] = useState(true);
+  const [sound, setSoundState] = useState(soundOn);
+  const setSound = (v: boolean) => {
+    soundOn = v;
+    setSoundState(v);
+  };
   const [panel, setPanel] = useState<'none' | 'code' | 'name' | 'eaten'>('none');
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -201,7 +207,15 @@ export function Scan() {
     if (resumeCamera) {
       resumeCamera = false;
       void startRef.current();
+      return;
     }
+    // Camera already allowed on this phone: start scanning without a tap.
+    navigator.permissions
+      ?.query({ name: 'camera' as PermissionName })
+      .then((p) => {
+        if (p.state === 'granted') void startRef.current();
+      })
+      .catch(() => undefined);
   }, []);
   const contextName = session.snapshot?.context.name;
   useEffect(() => {
@@ -273,7 +287,19 @@ export function Scan() {
             <h1 className="scan-title">{ctx.name}</h1>
           </div>
         )}
-        <SyncChip />
+        <div className="scan-head-side">
+          <SyncChip />
+          <button
+            type="button"
+            className="icon-button"
+            aria-pressed={sound}
+            aria-label={sound ? 'Beep on scan: on' : 'Beep on scan: off'}
+            title={sound ? 'Beep is on' : 'Beep is off'}
+            onClick={() => setSound(!sound)}
+          >
+            <Icon name={sound ? 'sound' : 'mute'} size={20} />
+          </button>
+        </div>
       </header>
       {event && (
         <ScanSwitcher
@@ -344,11 +370,16 @@ export function Scan() {
               </p>
             )}
             <p>
-              <strong>{counts.people}</strong> {ctx.type === 'site' ? 'arrived' : 'people so far'}
+              <strong>{counts.people}</strong> {ctx.type === 'site' ? `of ${counts.total} arrived` : 'people so far'}
             </p>
           </>
         )}
       </div>
+      {counts.total > 0 && ctx.type !== 'activity' && (
+        <div className="scan-progress" aria-hidden="true">
+          <span style={{ width: `${Math.min(100, Math.round(((ctx.type === 'meal' ? counts.present : counts.people) / counts.total) * 100))}%` }} />
+        </div>
+      )}
 
       <div className="scan-tools">
         <button type="button" className="tool" aria-expanded={panel === 'code'} onClick={() => setPanel(panel === 'code' ? 'none' : 'code')}>
@@ -383,34 +414,32 @@ export function Scan() {
         />
       )}
 
-      <details className="section-gap">
-        <summary>This phone's recent scans</summary>
-        <ol className="recent">
-          {[...session.entries]
-            .reverse()
-            .slice(0, 15)
-            .map((e) => {
-              const person = e.registrationId ? session.snapshot!.people.find((p) => p.id === e.registrationId) : null;
-              const result = e.server ?? e.local;
-              return (
-                <li key={e.id}>
-                  <span>{new Date(e.createdAt).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Adelaide' })}</span>
-                  <strong>{person?.name ?? 'Unknown card'}</strong>
-                  <span>{result.outcome === 'accepted' ? result.message : result.message}</span>
-                  <span className="field-hint">{e.synced ? 'Uploaded' : 'Waiting'}</span>
-                </li>
-              );
-            })}
-        </ol>
-      </details>
-
-      <label className="check">
-        <input type="checkbox" checked={sound} onChange={(e) => setSound(e.target.checked)} />
-        <div>
-          <strong>Beep on scan</strong>
-          <span>Different tones for OK, check and problem. The phone also vibrates.</span>
-        </div>
-      </label>
+      {session.entries.length > 0 && (
+        <section className="section-gap" aria-labelledby="recent-heading">
+          <h2 id="recent-heading" className="list-heading">
+            Last scans on this phone
+          </h2>
+          <ol className="recent">
+            {[...session.entries]
+              .reverse()
+              .slice(0, 5)
+              .map((e) => {
+                const person = e.registrationId ? session.snapshot!.people.find((p) => p.id === e.registrationId) : null;
+                const result = e.server ?? e.local;
+                return (
+                  <li key={e.id} className={result.outcome === 'accepted' ? undefined : 'is-problem'}>
+                    <span>{new Date(e.createdAt).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Adelaide' })}</span>
+                    <strong>{person?.fullName ?? person?.name ?? 'Unknown card'}</strong>
+                    <span className="field-hint">
+                      {result.message}
+                      {e.synced ? '' : ' · waiting to upload'}
+                    </span>
+                  </li>
+                );
+              })}
+          </ol>
+        </section>
+      )}
     </div>
   );
 }

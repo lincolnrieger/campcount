@@ -3794,3 +3794,34 @@ button.tile:hover {
   content: ' (viewing now)';
   font-weight: 500;
 }
+.person-link {
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+.person-link:hover {
+  text-decoration: underline;
+}
+.board-row .btn {
+  flex: none;
+}
+.scan-head-side {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+.scan-progress {
+  height: 6px;
+  margin: calc(-1 * var(--space-2)) 0 var(--space-4);
+  border-radius: 3px;
+  background: var(--skeleton);
+  overflow: hidden;
+}
+.scan-progress span {
+  display: block;
+  height: 100%;
+  background: var(--success-solid);
+}
+.recent li.is-problem strong {
+  color: var(--error-fg);
+}

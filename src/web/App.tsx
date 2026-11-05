@@ -24,10 +24,10 @@ import { Meals } from './pages/Meals';
 import { Pair } from './pages/Pair';
 import { ScanHub } from './pages/ScanHub';
 import { Stations } from './pages/Stations';
-import { Live } from './pages/Live';
 import { Reports } from './pages/Reports';
 import { RollSheet } from './pages/RollSheet';
 import { EventSettings, SettingsLayout } from './pages/Settings';
+import { CopyEvent } from './pages/CopyEvent';
 import { NotFound } from './pages/NotFound';
 import { useSession } from './session';
 
@@ -112,7 +112,7 @@ export function App() {
           <Route path="events/new" element={<NewEvent />} />
           <Route path="events/:eventId" element={<EventLayout />}>
             <Route index element={<EventOverview />} />
-            <Route path="live" element={<Live />} />
+            <Route path="live" element={<Moved to="" />} />
             <Route path="people" element={<Roster />} />
             <Route path="people/add" element={<AddPerson />} />
             <Route path="people/import" element={<Import />} />
@@ -130,6 +130,7 @@ export function App() {
               <Route index element={<EventSettings />} />
               <Route path="staff" element={<Staff />} />
               <Route path="stations" element={<Stations />} />
+              <Route path="copy" element={<CopyEvent />} />
             </Route>
             <Route path="roster/*" element={<Moved to="people" />} />
             <Route path="import" element={<Moved to="people/import" />} />

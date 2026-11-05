@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { Navigate, NavLink, Outlet, useLocation } from 'react-router';
+import { Link, Navigate, NavLink, Outlet, useLocation } from 'react-router';
+import { useSession } from '../session';
 import { ApiFailure, api } from '../api';
 import { ActionButton, EventStatusBadge, Field, Notice } from '../components/ui';
 import { useToast } from '../components/Toast';
@@ -104,6 +105,8 @@ export function StatusActions({ only }: { only?: EventStatus[] }) {
 export function EventSettings() {
   useTitle('Event settings');
   const { event, can, reload } = useEvent();
+  const { me } = useSession();
+  const isAdmin = me?.kind === 'user' && me.platformPermissions.includes('platform.events.create');
   const toast = useToast();
   const editable = can('event.configure') && (event.status === 'draft' || event.status === 'open');
   const initial = { name: event.name, location: event.location, startsOn: event.startsOn, endsOn: event.endsOn, description: event.description };
@@ -196,6 +199,20 @@ export function EventSettings() {
           </div>
         )}
       </form>
+
+      {isAdmin && (
+        <section aria-labelledby="copy-heading" className="settings-section">
+          <header>
+            <h2 id="copy-heading">Copy event</h2>
+            <p>Start next year's camp from this one, with its activities and meals moved to the new dates.</p>
+          </header>
+          <div className="settings-body">
+            <Link to="copy" className="btn btn-secondary">
+              Copy this event…
+            </Link>
+          </div>
+        </section>
+      )}
 
       {(can('event.configure') || can('event.close')) && EVENT_TRANSITIONS[event.status].some((s) => s !== 'archived') && (
         <section aria-labelledby="status-heading" className="settings-section">
