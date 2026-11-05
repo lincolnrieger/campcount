@@ -8,7 +8,7 @@ import { LinkShare } from '../components/LinkShare';
 import { useSession } from '../session';
 import { useApi } from '../useApi';
 import { matchesSearch } from '../../shared/search';
-import { minutesAgo } from './Live';
+import { minutesAgo } from '../model';
 import { useTitle } from '../shell';
 
 interface UserRow {

@@ -1,26 +1,29 @@
 import { useEffect, useSyncExternalStore } from 'react';
+import type { EventStatus } from '../shared/schemas';
 
 /**
- * What the app shell needs to know about the current page: its title (for
- * the phone top bar and the last breadcrumb) and, inside an event, the
- * event and the sections this person can open (for the sidebar).
+ * What the app frame needs to know about the current page: inside an event,
+ * the event and the sections this person can open (sidebar on computers,
+ * tab row on phones, and the browser tab title).
  */
 export interface ShellEvent {
   id: string;
   name: string;
-  meta: string;
+  status: EventStatus;
+  isDemo: boolean;
   sections: { to: string; label: string }[];
 }
 interface ShellState {
-  title: string | null;
   event: ShellEvent | null;
 }
 
-let state: ShellState = { title: null, event: null };
+let state: ShellState = { event: null };
+let pageTitle: string | null = null;
 const listeners = new Set<() => void>();
 function set(patch: Partial<ShellState>) {
   state = { ...state, ...patch };
   for (const l of listeners) l();
+  applyTitle();
 }
 function subscribe(l: () => void) {
   listeners.add(l);
@@ -28,21 +31,25 @@ function subscribe(l: () => void) {
     listeners.delete(l);
   };
 }
+function applyTitle() {
+  const parts = [pageTitle, state.event && state.event.name !== pageTitle ? state.event.name : null, 'CampCount'].filter(Boolean);
+  document.title = parts.join(' · ');
+}
 
 export function useShell(): ShellState {
   return useSyncExternalStore(subscribe, () => state);
 }
 
-/** Name the page: the browser tab, what screen readers announce, the phone top bar and the last breadcrumb. */
+/** Name the page for the browser tab: "People · Summer Camp · CampCount". */
 export function useTitle(title: string | null | undefined) {
   useEffect(() => {
     if (!title) return;
-    document.title = `${title} · CampCount`;
-    set({ title });
+    pageTitle = title;
+    applyTitle();
   }, [title]);
 }
 
-/** Inside an event: tell the sidebar which event and sections to show. */
+/** Inside an event: tell the frame which event and sections to show. */
 export function useShellEvent(event: ShellEvent | null) {
   const key = event ? JSON.stringify(event) : null;
   useEffect(() => {

@@ -4,7 +4,7 @@ import { ApiFailure, api } from '../api';
 import { ActionButton, Loading, Notice, PageHeader, SkeletonTable } from '../components/ui';
 import type { EventSummary } from '../types';
 import { useApi } from '../useApi';
-import { scanVerb } from './Person';
+import { scanVerb } from '../model';
 import { useTitle } from '../shell';
 
 interface ScanEntry {

@@ -32,3 +32,4 @@ export function AdminLayout() {
     </>
   );
 }
+export function AdminIndex() { return null; } // TODO(rebuild)

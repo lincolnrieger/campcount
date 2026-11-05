@@ -1,20 +1,20 @@
-import { Navigate, Route, Routes, useLocation, useParams } from 'react-router';
+import { Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router';
 import { Suspense, lazy } from 'react';
 import type { ReactNode } from 'react';
-import { Layout } from './components/Layout';
-import { Loading, SkeletonHeading, SkeletonList } from './components/ui';
-import { AdminLayout } from './pages/Admin';
+import { AppShell } from './ui/AppShell';
+import { Loading, SkeletonHeader, SkeletonRows } from './ui';
+import { AdminIndex } from './pages/Admin';
 import { AdminUsers } from './pages/AdminUsers';
 import { AdminDemo } from './pages/AdminDemo';
 import { AdminLog } from './pages/AdminLog';
-import { Account, SetPassword } from './pages/Account';
+import { Account, SetPassword, ViewAsPage } from './pages/Account';
 import { EventLayout } from './pages/EventLayout';
-import { EventOverview } from './pages/EventOverview';
+import { EventHome } from './pages/EventHome';
 import { Events, NewEvent } from './pages/Events';
 import { PasswordLink, SignIn, VerifyLink } from './pages/SignIn';
-import { Staff } from './pages/Staff';
+import { AddStaff, Staff } from './pages/Staff';
 import { Roster } from './pages/Roster';
-import { Person } from './pages/Person';
+import { Person, PersonEdit } from './pages/Person';
 import { AddPerson } from './pages/AddPerson';
 import { SignupScreen } from './pages/SignupScreen';
 import { ActivityRoster } from './pages/ActivityRoster';
@@ -26,7 +26,7 @@ import { ScanHub } from './pages/ScanHub';
 import { Stations } from './pages/Stations';
 import { Reports } from './pages/Reports';
 import { RollSheet } from './pages/RollSheet';
-import { EventSettings, SettingsLayout } from './pages/Settings';
+import { EventDetails, SettingsIndex } from './pages/Settings';
 import { CopyEvent } from './pages/CopyEvent';
 import { NotFound } from './pages/NotFound';
 import { useSession } from './session';
@@ -40,22 +40,19 @@ const MyActivities = lazy(() => import('./pages/Signup').then((m) => ({ default:
 
 function PageLoading() {
   return (
-    <Loading>
-      <SkeletonHeading />
-      <SkeletonList rows={3} />
-    </Loading>
+    <div className="page">
+      <Loading what="page">
+        <SkeletonHeader />
+        <SkeletonRows rows={3} />
+      </Loading>
+    </div>
   );
 }
 
 function RequireSignIn({ children }: { children: ReactNode }) {
   const { me, loading } = useSession();
   const location = useLocation();
-  if (loading)
-    return (
-      <div className="page">
-        <PageLoading />
-      </div>
-    );
+  if (loading) return <PageLoading />;
   if (!me) return <Navigate to="/sign-in" replace state={{ from: location.pathname }} />;
   return <>{children}</>;
 }
@@ -84,13 +81,7 @@ function Moved({ to }: { to: string }) {
 
 export function App() {
   return (
-    <Suspense
-      fallback={
-        <div className="page">
-          <PageLoading />
-        </div>
-      }
-    >
+    <Suspense fallback={<PageLoading />}>
       <Routes>
         <Route path="/sign-in" element={<SignIn />} />
         <Route path="/sign-up" element={<SignIn />} />
@@ -99,26 +90,34 @@ export function App() {
         <Route path="/pair" element={<Pair />} />
         <Route path="/signup/:code" element={<SignupKiosk />} />
         <Route path="/c" element={<MyActivities />} />
+        {/* The scanner is full screen: no sidebar or tab bar. */}
+        <Route
+          path="/events/:eventId/scan/:type/:contextId?"
+          element={
+            <RequireSignIn>
+              <ScanRoute />
+            </RequireSignIn>
+          }
+        />
         <Route
           element={
             <RequireSignIn>
-              <Layout />
+              <AppShell />
             </RequireSignIn>
           }
         >
           <Route index element={<Home />} />
           <Route path="scan" element={<ScanHub />} />
-          <Route path="events/:eventId/scan/:type/:contextId?" element={<ScanRoute />} />
           <Route path="events/new" element={<NewEvent />} />
           <Route path="events/:eventId" element={<EventLayout />}>
-            <Route index element={<EventOverview />} />
-            <Route path="live" element={<Moved to="" />} />
+            <Route index element={<EventHome />} />
             <Route path="people" element={<Roster />} />
             <Route path="people/add" element={<AddPerson />} />
             <Route path="people/import" element={<Import />} />
             <Route path="people/lanyards" element={<Lanyards />} />
             <Route path="people/roll-sheet" element={<RollSheet />} />
             <Route path="people/:registrationId" element={<Person />} />
+            <Route path="people/:registrationId/edit" element={<PersonEdit />} />
             <Route path="activities" element={<Activities />} />
             <Route path="activities/new" element={<ActivityEdit />} />
             <Route path="activities/signup" element={<SignupScreen />} />
@@ -126,12 +125,16 @@ export function App() {
             <Route path="activities/:activityId/edit" element={<ActivityEdit />} />
             <Route path="meals" element={<Meals />} />
             <Route path="reports" element={<Reports />} />
-            <Route path="settings" element={<SettingsLayout />}>
-              <Route index element={<EventSettings />} />
+            <Route path="settings" element={<Outlet />}>
+              <Route index element={<SettingsIndex />} />
+              <Route path="event" element={<EventDetails />} />
               <Route path="staff" element={<Staff />} />
+              <Route path="staff/add" element={<AddStaff />} />
               <Route path="stations" element={<Stations />} />
               <Route path="copy" element={<CopyEvent />} />
             </Route>
+            {/* Old addresses */}
+            <Route path="live" element={<Moved to="" />} />
             <Route path="roster/*" element={<Moved to="people" />} />
             <Route path="import" element={<Moved to="people/import" />} />
             <Route path="lanyards" element={<Moved to="people/lanyards" />} />
@@ -142,15 +145,14 @@ export function App() {
             <Route path="stations" element={<Moved to="settings/stations" />} />
             <Route path="*" element={<NotFound inEvent />} />
           </Route>
-          <Route path="admin" element={<AdminLayout />}>
-            <Route index element={<Navigate to="accounts" replace />} />
-            <Route path="accounts" element={<AdminUsers />} />
-            <Route path="log" element={<AdminLog />} />
-            <Route path="demo" element={<AdminDemo />} />
-          </Route>
+          <Route path="admin" element={<AdminIndex />} />
+          <Route path="admin/accounts" element={<AdminUsers />} />
+          <Route path="admin/log" element={<AdminLog />} />
+          <Route path="admin/demo" element={<AdminDemo />} />
           <Route path="admin/users" element={<Navigate to="/admin/accounts" replace />} />
           <Route path="account" element={<Account />} />
           <Route path="account/password" element={<SetPassword />} />
+          <Route path="account/view-as" element={<ViewAsPage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

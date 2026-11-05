@@ -1,0 +1,113 @@
+/*
+ * CampCount design tokens (rebuild).
+ * The ONLY source of sizes, spacing and colours. Components use var(--…), never raw values.
+ * Contrast ratios are measured against --surface (#FFFFFF) unless noted.
+ * Light theme only for v1: outdoor, sunlit use reads best on light.
+ */
+:root {
+  /* ---------- Type ---------- */
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --text-sm: 0.8125rem;   /* 13px: meta, labels, table headers. Never smaller. */
+  --text-base: 1rem;      /* 16px: body, inputs, buttons. Everywhere, every screen size. */
+  --text-lg: 1.125rem;    /* 18px: section headings (h2) */
+  --text-xl: 1.375rem;    /* 22px: page titles (h1) */
+  --text-display: 2rem;   /* 32px: big counts, scanner result name */
+
+  --leading-tight: 1.25;  /* headings, counts */
+  --leading: 1.5;         /* body */
+
+  --weight-regular: 400;
+  --weight-bold: 600;
+
+  /* ---------- Spacing (only these) ---------- */
+  --space-1: 0.25rem;  /*  4px */
+  --space-2: 0.5rem;   /*  8px */
+  --space-3: 0.75rem;  /* 12px */
+  --space-4: 1rem;     /* 16px: phone page padding, gap inside sections */
+  --space-5: 1.5rem;   /* 24px: between sections (phone), desktop page padding */
+  --space-6: 2rem;     /* 32px: between sections (desktop) */
+  --space-7: 3rem;     /* 48px: empty states, page bottom */
+
+  /* ---------- Sizes ---------- */
+  --control: 2.75rem;        /* 44px: every button, input, select, tab, row action */
+  --control-lg: 3.5rem;      /* 56px: kiosk buttons, scanner primary, tab bar */
+  --row-min: 3.5rem;         /* 56px: list row minimum height */
+  --row-large: 4rem;         /* 64px: Scan "On now" rows, Events rows */
+  --icon: 1.25rem;           /* 20px */
+  --icon-lg: 1.5rem;         /* 24px: tab bar, scanner result */
+
+  --sidebar: 15rem;          /* 240px */
+  --content-max: 70rem;      /* 1120px */
+  --form-max: 40rem;         /* 640px: forms and reading text */
+  --auth-max: 25rem;         /* 400px: sign-in card */
+
+  /* ---------- Shape ---------- */
+  --radius: 6px;             /* one radius for everything */
+  --border-width: 1px;
+  --focus-width: 3px;
+  --shadow-overlay: 0 8px 24px rgb(0 0 0 / 0.16); /* menus, dialogs, sheets ONLY */
+
+  /* ---------- Neutrals ---------- */
+  --canvas: #F5F6F5;         /* page background */
+  --surface: #FFFFFF;        /* panels, rows, inputs */
+  --surface-sunken: #EEF0EE; /* table header, segmented control track */
+  --ink: #1B201D;            /* body text: 16.5:1 */
+  --ink-2: #495350;          /* secondary text: 8.0:1 */
+  --ink-3: #5C6662;          /* meta text: 5.9:1 (5.5:1 on canvas) */
+  --divider: #DDE2DF;        /* hairlines between rows (decorative) */
+  --border-control: #7C8682; /* input/button outlines: 3.8:1 (UI component 3:1) */
+
+  /* ---------- Brand (eucalypt) ---------- */
+  --brand: #1F5C46;          /* primary buttons, current location: white text 7.8:1 */
+  --brand-hover: #16473A;
+  --brand-tint: #E6F0EB;     /* selected row / active tab background: brand text 6.7:1 */
+  --on-brand: #FFFFFF;
+
+  /* ---------- Semantic (each: fg on bg ≥ 4.5, solid with white ≥ 4.5, border ≥ 3) ---------- */
+  --success-fg: #1B6B3A;  --success-bg: #E7F4EC;  --success-border: #4A956A;  --success-solid: #1E7A43;
+  --warning-fg: #7A4A00;  --warning-bg: #FDF2DE;  --warning-border: #B07812;  --warning-solid: #9A5B00;
+  --error-fg:   #A8231A;  --error-bg:   #FCEBE9;  --error-border:   #D9655C;  --error-solid:   #B3261E;
+  --info-fg:    #1A5596;  --info-bg:    #E8F1FB;  --info-border:    #5B8FCB;  --info-solid:    #1F5FA8;
+
+  --focus: #1F5FA8;          /* focus ring: 6.4:1 on white */
+
+  /* ---------- Scanner (dark, full-screen) ---------- */
+  --scan-bg: #0E1210;
+  --scan-ink: #FFFFFF;
+  --scan-ink-2: #C9D1CD;     /* 12:1 on --scan-bg */
+
+  /* ---------- Motion ---------- */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --duration: 150ms;
+
+  /* ---------- Layers ---------- */
+  --z-sticky: 10;
+  --z-nav: 20;
+  --z-overlay: 30;
+  --z-toast: 40;
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --page-pad: var(--space-6);
+    --section-gap: var(--space-6);
+  }
+}
+@media (max-width: 1023.98px) {
+  :root {
+    --page-pad: var(--space-4);
+    --section-gap: var(--space-5);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --duration: 0ms; }
+}
+
+/* Breakpoints (use these three only; custom properties can't be used in media queries):
+ *   phone   < 600px
+ *   tablet  600–1023px  (phone layout, wider content, 2-column forms allowed)
+ *   desktop ≥ 1024px    (sidebar, tables, two-column pages)
+ */

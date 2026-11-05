@@ -347,3 +347,4 @@ function PersonResults({ people, query, onPick }: { people: Person[]; query: str
     </ul>
   );
 }
+export function AddStaff() { return null; } // TODO(rebuild)

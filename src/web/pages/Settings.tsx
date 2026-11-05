@@ -239,3 +239,5 @@ export function EventSettings() {
     </div>
   );
 }
+export function EventDetails() { return null; } // TODO(rebuild)
+export function SettingsIndex() { return null; } // TODO(rebuild)

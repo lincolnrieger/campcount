@@ -6,7 +6,7 @@ import { useToast } from '../components/Toast';
 import { useTitle } from '../shell';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
-import { minutesAgo } from './Live';
+import { minutesAgo } from '../model';
 
 interface Item {
   kind: 'still_present' | 'review' | 'unknown_card';

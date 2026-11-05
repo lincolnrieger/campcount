@@ -1,0 +1,71 @@
+/** Shapes the API returns, shared between screens. */
+import type { DietaryEntryInput } from '../shared/schemas';
+
+export interface Activity {
+  id: string;
+  name: string;
+  description: string;
+  location: string;
+  instructions: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  capacity: number | null;
+  capacityPolicy: 'warn' | 'block';
+  trackSignOut: boolean;
+  allowRepeat: boolean;
+  bookingRequired: boolean;
+  signupOpen: boolean;
+  booked: number;
+  status: 'active' | 'cancelled';
+}
+
+export interface Meal {
+  id: string;
+  name: string;
+  location: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  status: 'active' | 'cancelled';
+}
+
+export interface Registration {
+  id: string;
+  memberNumber: string;
+  firstName: string;
+  preferredName: string;
+  lastName: string;
+  displayName: string;
+  kind: 'youth' | 'adult';
+  section: string;
+  groupName: string;
+  position: string;
+  status: 'active' | 'withdrawn';
+  shortCode: string | null;
+  photoConsent?: 'yes' | 'no' | 'unknown';
+  dietary?: DietaryEntryInput[];
+  dietaryFingerprint?: string | null;
+}
+
+/** Where someone is right now. */
+export interface Where {
+  site: 'on' | 'off' | 'never' | null;
+  siteSince: string | null;
+  activities: { key: string; name: string; since: string | null }[];
+  lastSeen: { contextName: string; type: 'activity' | 'meal' | 'site'; direction: 'in' | 'out'; at: string } | null;
+}
+
+/** "Arrived", "Signed out", "Served"… */
+export function scanVerb(type: 'activity' | 'meal' | 'site', direction: 'in' | 'out'): string {
+  if (type === 'meal') return 'Served';
+  if (type === 'site') return direction === 'in' ? 'Arrived' : 'Left';
+  return direction === 'in' ? 'Signed in' : 'Signed out';
+}
+
+/** "just now", "12 min ago", "3 h 5 min ago". */
+export function minutesAgo(iso: string): string {
+  const m = Math.round((Date.now() - Date.parse(iso)) / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m} min ago`;
+  const h = Math.floor(m / 60);
+  return h < 24 ? `${h} h ${m % 60} min ago` : `${Math.floor(h / 24)} days ago`;
+}

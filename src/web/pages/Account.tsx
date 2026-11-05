@@ -177,3 +177,4 @@ export function Account() {
     </div>
   );
 }
+export function ViewAsPage() { return null; } // TODO(rebuild)

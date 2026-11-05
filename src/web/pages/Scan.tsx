@@ -1,21 +1,22 @@
-import { useTitle } from '../shell';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Link, useLocation, useParams } from 'react-router';
+import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import type { ContextType, Direction } from '../../shared/scanRules';
-import { Icon } from '../components/Icon';
-import { Loading, Notice, Skeleton, SkeletonList } from '../components/ui';
-import { useSession } from '../session';
-import { rememberLastScan, useEventSummary } from '../scan/targets';
-import { ScanSwitcher } from './ScanHub';
-import { api } from '../api';
 import { matchesSearch, searchRank } from '../../shared/search';
+import { api } from '../api';
 import { useSyncStatus } from '../offline/sync';
 import { createDetector } from '../scan/decoder';
+import { rememberLastScan, useEventSummary } from '../scan/targets';
 import type { Feedback, ScanInput, SnapshotPerson } from '../scan/useScanSession';
 import { useScanSession } from '../scan/useScanSession';
+import { useSession } from '../session';
+import { useTitle } from '../shell';
+import { Button, Icon, IconButton, Loading, Menu, Notice, Progress, SearchField, Segmented, Sheet, Skeleton, SkeletonRows, useConfirm } from '../ui';
+import { ScanSwitcher } from './ScanHub';
 
 const SAME_CODE_COOLDOWN_MS = 3000;
+const TZ = 'Australia/Adelaide';
+const clock = (iso: string) => new Date(iso).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', timeZone: TZ });
 
 /** Set when switching what to scan, so the next scanner starts its camera straight away. */
 let resumeCamera = false;
@@ -40,80 +41,99 @@ function signal(tone: Feedback['tone'], sound: boolean) {
   }
 }
 
+/** Upload state for this phone: synced, waiting, offline or blocked. */
 function SyncChip() {
   const s = useSyncStatus();
-  const time = s.lastSyncAt ? new Date(s.lastSyncAt).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Adelaide' }) : null;
   let text: string;
-  let cls = 'sync-ok';
+  let tone: 'ok' | 'warn' | 'stop' = 'ok';
+  let icon: 'sync' | 'offline' | 'warning' = 'sync';
   if (s.state === 'blocked') {
     text = s.message ?? 'Upload blocked';
-    cls = 'sync-stop';
+    tone = 'stop';
+    icon = 'warning';
   } else if (s.pending > 0) {
-    text = `${s.pending} waiting to upload${s.state === 'offline' ? ', no signal' : ''}`;
-    cls = 'sync-warn';
+    text = `${s.pending} waiting to upload${s.state === 'offline' ? ' · no signal' : ''}`;
+    tone = 'warn';
+    icon = s.state === 'offline' ? 'offline' : 'sync';
   } else if (s.state === 'offline') {
-    text = 'No signal. Scans are saved on this phone';
-    cls = 'sync-warn';
+    text = 'No signal · scans are saved on this phone';
+    tone = 'warn';
+    icon = 'offline';
   } else {
-    text = time ? `All uploaded ${time}` : 'All uploaded';
+    text = s.lastSyncAt ? `All uploaded ${clock(s.lastSyncAt)}` : 'All uploaded';
   }
   return (
-    <p className={`sync-chip ${cls}`} role="status" aria-live="polite">
-      <span aria-hidden="true" className="sync-dot" />
+    <p className={`sync-chip sync-${tone}`} role="status">
+      <Icon name={icon} size={16} />
       {text}
     </p>
   );
 }
 
-function ResultPanel({ feedback, contextType }: { feedback: Feedback | null; contextType: ContextType }) {
+const RESULT_ICON = { ok: 'check', warn: 'warning', stop: 'cross' } as const;
+
+/** The big answer after each scan: icon, word and name. Announced to screen readers. */
+function ScanResult({ feedback, contextType }: { feedback: Feedback | null; contextType: ContextType }) {
   if (!feedback) {
     return (
-      <div className="result result-idle" aria-live="assertive">
-        <p className="result-title">Ready to scan</p>
-        <p className="result-meta">Hold a lanyard QR code inside the frame.</p>
+      <div className="scan-result scan-result-idle" role="status">
+        <p className="scan-result-word">Ready</p>
+        <p className="scan-result-meta">Hold a lanyard's QR code inside the square.</p>
       </div>
     );
   }
   const p = feedback.person;
-  const icon = { ok: '✓', warn: '!', stop: '×' }[feedback.tone];
   return (
-    <div className={`result result-${feedback.tone}`} aria-live="assertive" aria-atomic="true">
-      <div className="result-head">
-        <span className="result-icon" aria-hidden="true">
-          {icon}
-        </span>
-        <p className="result-title">{feedback.title}</p>
-      </div>
-      {p && <p className="result-name">{p.fullName ?? p.name}</p>}
-      {p && (
-        <p className="result-meta">
-          {p.group}, member {p.memberNumber}
-        </p>
-      )}
-      {feedback.message && <p className="result-message">{feedback.message}</p>}
-      {feedback.warning && <p className="result-message">{feedback.warning}</p>}
-      {p?.noPhotos && <p className="flag flag-photo">No photos</p>}
-      {contextType === 'meal' && p?.dietaryAlert && (
-        <div className={`flag ${/allergy/i.test(p.dietaryAlert) ? 'flag-allergy' : 'flag-diet'}`}>
-          <strong>Dietary:</strong> {p.dietaryAlert}
-          <span className="flag-note">Check the meal yourself. A scan does not confirm the food is safe.</span>
+    <div className={`scan-result scan-result-${feedback.tone}`} role={feedback.tone === 'stop' ? 'alert' : 'status'} aria-atomic="true">
+      <p className="scan-result-word">
+        <Icon name={RESULT_ICON[feedback.tone]} size={24} />
+        {feedback.title}
+      </p>
+      {p && <p className="scan-result-name">{p.fullName ?? p.name}</p>}
+      {p && <p className="scan-result-meta">{[p.group, p.section].filter(Boolean).join(' · ')}</p>}
+      {feedback.message && <p>{feedback.message}</p>}
+      {feedback.warning && <p>{feedback.warning}</p>}
+      {(p?.noPhotos || (contextType === 'meal' && p?.dietaryAlert)) && (
+        <div className="scan-flags">
+          {p?.noPhotos && (
+            <p className="scan-flag">
+              <Icon name="eye" size={16} />
+              No photos
+            </p>
+          )}
+          {contextType === 'meal' && p?.dietaryAlert && (
+            <p className={/allergy/i.test(p.dietaryAlert) ? 'scan-flag scan-flag-allergy' : 'scan-flag'}>
+              <Icon name="warning" size={16} />
+              <span>
+                <strong>{/allergy/i.test(p.dietaryAlert) ? 'Allergy: ' : 'Dietary: '}</strong>
+                {p.dietaryAlert.replace(/^allergy:\s*/i, '')}
+                <span className="scan-flag-note"> Check the food yourself.</span>
+              </span>
+            </p>
+          )}
         </div>
       )}
     </div>
   );
 }
 
+/**
+ * The scanner: full screen, camera first, a huge result after each scan.
+ * Works offline: scans queue on the phone and upload when there's signal.
+ */
 export function Scan() {
   const { eventId, type, contextId } = useParams() as { eventId: string; type: ContextType; contextId?: string };
   const session = useScanSession(eventId, type, contextId ?? null);
-  useTitle(session.snapshot ? `Scan: ${session.snapshot.context.name}` : 'Scan');
-  const { me } = useSession();
+  const { me, signOut } = useSession();
   const location = useLocation();
+  const navigate = useNavigate();
+  const confirm = useConfirm();
   const event = useEventSummary(me?.kind === 'user' ? eventId : null);
+  const station = me?.kind === 'station';
+  useTitle(session.snapshot ? `Scan: ${session.snapshot.context.type === 'site' ? 'Gate' : session.snapshot.context.name}` : 'Scan');
+
   const [switching, setSwitching] = useState(false);
-  const currentKey = type === 'site' ? 'site' : `${type}:${contextId}`;
-  const rules = session.snapshot?.context.rules;
-  const twoWay = rules?.type === 'site' || (rules?.type === 'activity' && rules.trackSignOut);
+  const [sheet, setSheet] = useState<'none' | 'name' | 'eaten'>('none');
   const [direction, setDirection] = useState<Direction>('in');
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [camera, setCamera] = useState<'off' | 'starting' | 'on' | 'denied' | 'unavailable'>('off');
@@ -122,11 +142,14 @@ export function Scan() {
     soundOn = v;
     setSoundState(v);
   };
-  const [panel, setPanel] = useState<'none' | 'code' | 'name' | 'eaten'>('none');
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const lastCode = useRef<{ value: string; at: number } | null>(null);
   const recordRef = useRef<(input: ScanInput) => Promise<void>>(async () => undefined);
+
+  const currentKey = type === 'site' ? 'site' : `${type}:${contextId}`;
+  const rules = session.snapshot?.context.rules;
+  const twoWay = rules?.type === 'site' || (rules?.type === 'activity' && rules.trackSignOut);
 
   const record = useCallback(
     async (input: ScanInput) => {
@@ -200,8 +223,7 @@ export function Scan() {
   }, [camera]);
 
   useEffect(() => stopCamera, [stopCamera]);
-  // Coming from the switcher with the camera on: keep scanning without another tap.
-  // startCamera only touches refs and state setters, so the first render's copy is fine.
+  // Start the camera without a tap when it's already allowed, or when switching from another scanner.
   const startRef = useRef(startCamera);
   useEffect(() => {
     if (resumeCamera) {
@@ -209,7 +231,6 @@ export function Scan() {
       void startRef.current();
       return;
     }
-    // Camera already allowed on this phone: start scanning without a tap.
     navigator.permissions
       ?.query({ name: 'camera' as PermissionName })
       .then((p) => {
@@ -235,284 +256,278 @@ export function Scan() {
     };
   }, [session.states, session.snapshot]);
 
+  const close = () => {
+    stopCamera();
+    if (window.history.length > 1 && location.key !== 'default') navigate(-1);
+    else navigate(`/scan?event=${eventId}`);
+  };
+
   if (session.loadError) {
     return (
-      <div className="scan">
-        <Notice tone="stop">{session.loadError}</Notice>
-        <Link to={`/events/${eventId}`}>Back to event</Link>
+      <div className="scanner">
+        <div className="scanner-inner">
+          <Notice tone="error" title="Couldn't load this scanner">
+            <p>{session.loadError}</p>
+            <Link to={`/scan?event=${eventId}`}>Back to Scan</Link>
+          </Notice>
+        </div>
       </div>
     );
   }
   if (!session.snapshot)
     return (
-      <div className="scan">
-        <Loading label="Downloading the list for this phone">
-          <div className="scan-head">
-            <div>
-              <Skeleton width="8rem" height="0.9rem" />
-              <Skeleton width="12rem" height="1.8rem" radius="6px" className="skeleton-gap-sm" />
-            </div>
-            <Skeleton width="6.5rem" height="1rem" />
-          </div>
-          <Skeleton width="100%" height="min(46dvh, 100vw)" radius="18px" className="skeleton-gap" />
-          <Skeleton width="100%" height="5.5rem" radius="18px" className="skeleton-gap" />
-          <div className="scan-tools">
-            {[0, 1, 2].map((i) => (
-              <Skeleton key={i} width="100%" height="68px" radius="var(--radius)" />
-            ))}
-          </div>
-        </Loading>
+      <div className="scanner">
+        <div className="scanner-inner">
+          <Loading what="the list for this phone">
+            <Skeleton width="12rem" height="var(--text-xl)" className="" />
+            <Skeleton width="100%" height="min(60vh, 100vw)" className="" />
+            <SkeletonRows rows={2} />
+          </Loading>
+        </div>
       </div>
     );
+
   const ctx = session.snapshot.context;
+  const progressValue = ctx.type === 'meal' ? counts.present : counts.people;
+  const progressText =
+    ctx.type === 'meal'
+      ? `${counts.present} of ${counts.total} served`
+      : ctx.type === 'site'
+        ? `${counts.present} on site · ${counts.people} of ${counts.total} arrived`
+        : `${counts.people} ${counts.people === 1 ? 'person' : 'people'} so far${twoWay ? ` · ${counts.present} here now` : ''}`;
 
   return (
-    <div className="scan">
-      <header className="scan-head">
-        {event ? (
-          <h1 className="scan-heading">
-            <button type="button" className="scan-switch" onClick={() => setSwitching(true)} aria-haspopup="dialog">
-              <span className="scan-kicker">{session.snapshot.event.name}</span>
-              <span className="scan-title">
-                {ctx.name}
-                <span className="scan-switch-hint">
-                  <Icon name="swap" size={16} /> Switch
-                </span>
-              </span>
-            </button>
-          </h1>
-        ) : (
-          <div>
-            <p className="scan-kicker">{session.snapshot.event.name}</p>
-            <h1 className="scan-title">{ctx.name}</h1>
+    <div className="scanner">
+      <div className="scanner-inner">
+        <header className="scanner-head">
+          {!station && (
+            <IconButton label="Close scanner" onClick={close}>
+              <Icon name="close" size={24} />
+            </IconButton>
+          )}
+          <div className="scanner-title">
+            <p className="scanner-event">{session.snapshot.event.name}</p>
+            <h1>{ctx.type === 'site' ? 'Gate' : ctx.name}</h1>
           </div>
-        )}
-        <div className="scan-head-side">
-          <SyncChip />
-          <button
-            type="button"
-            className="icon-button"
-            aria-pressed={sound}
-            aria-label={sound ? 'Beep on scan: on' : 'Beep on scan: off'}
-            title={sound ? 'Beep is on' : 'Beep is off'}
-            onClick={() => setSound(!sound)}
-          >
-            <Icon name={sound ? 'sound' : 'mute'} size={20} />
-          </button>
-        </div>
-      </header>
-      {event && (
-        <ScanSwitcher
-          event={event}
-          currentKey={currentKey}
-          open={switching}
-          onClose={() => setSwitching(false)}
-          onSwitch={() => {
-            resumeCamera = camera === 'on';
-          }}
-        />
-      )}
-      {session.fromCache && (
-        <Notice tone="warn">
-          <p>Using the list saved on this phone. Scans made on other phones will show up once you have signal.</p>
-        </Notice>
-      )}
+          <IconButton label={sound ? 'Beep on' : 'Beep off'} aria-pressed={sound} onClick={() => setSound(!sound)}>
+            <Icon name={sound ? 'sound' : 'mute'} size={24} />
+          </IconButton>
+          {!station && event && (
+            <Button small onClick={() => setSwitching(true)} aria-haspopup="dialog">
+              Switch
+            </Button>
+          )}
+        </header>
+        <SyncChip />
+        {event && <ScanSwitcher event={event} currentKey={currentKey} open={switching} onClose={() => setSwitching(false)} onSwitch={() => (resumeCamera = camera === 'on')} />}
 
-      {twoWay && (
-        <div className="direction" role="group" aria-label="Scan direction">
-          {(['in', 'out'] as Direction[]).map((d) => (
-            <button
-              key={d}
-              type="button"
-              aria-pressed={direction === d}
-              className={direction === d ? 'is-on' : undefined}
-              onClick={() => setDirection(d)}
-            >
-              {ctx.type === 'site' ? (d === 'in' ? 'Arriving' : 'Leaving') : d === 'in' ? 'Signing in' : 'Signing out'}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className={`viewfinder ${camera === 'on' ? 'is-live' : ''}`}>
-        <video ref={videoRef} playsInline muted aria-hidden="true" />
-        {camera !== 'on' && (
-          <div className="viewfinder-cover">
-            {camera === 'denied' ? (
-              <p>
-                Camera access is blocked. Allow the camera for this site in your browser settings, or type the code from the lanyard below.
-              </p>
-            ) : camera === 'unavailable' ? (
-              <p>This browser can't use the camera. Type the code from the lanyard below.</p>
-            ) : (
-              <button className="btn btn-light" onClick={() => void startCamera()} disabled={camera === 'starting'}>
-                <Icon name="camera" />
-                {camera === 'starting' ? 'Starting camera…' : 'Start camera'}
-              </button>
-            )}
-          </div>
-        )}
-        {camera === 'on' && <span className="viewfinder-guide" aria-hidden="true" />}
-      </div>
-
-      <ResultPanel feedback={feedback} contextType={ctx.type} />
-
-      <div className="scan-counts" aria-live="polite">
-        {ctx.type === 'meal' ? (
-          <p>
-            <strong>{counts.present}</strong> served of {counts.total}
-          </p>
-        ) : (
-          <>
+        <div className="scanner-body">
+          <div className="scanner-camera">
             {twoWay && (
-              <p>
-                <strong>{counts.present}</strong> {ctx.type === 'site' ? 'on site now' : 'signed in now'}
-              </p>
+              <Segmented
+                block
+                label="Scan direction"
+                value={direction}
+                onChange={setDirection}
+                options={[
+                  { value: 'in', label: ctx.type === 'site' ? 'Arriving' : 'Signing in' },
+                  { value: 'out', label: ctx.type === 'site' ? 'Leaving' : 'Signing out' },
+                ]}
+              />
             )}
-            <p>
-              <strong>{counts.people}</strong> {ctx.type === 'site' ? `of ${counts.total} arrived` : 'people so far'}
-            </p>
-          </>
-        )}
-      </div>
-      {counts.total > 0 && ctx.type !== 'activity' && (
-        <div className="scan-progress" aria-hidden="true">
-          <span style={{ width: `${Math.min(100, Math.round(((ctx.type === 'meal' ? counts.present : counts.people) / counts.total) * 100))}%` }} />
-        </div>
-      )}
+            <div className={camera === 'on' ? 'viewfinder is-live' : 'viewfinder'}>
+              <video ref={videoRef} playsInline muted aria-hidden="true" />
+              {camera !== 'on' && (
+                <div className="viewfinder-cover">
+                  {camera === 'denied' ? (
+                    <p>The camera is blocked. Allow it for this site in your browser's settings, or use Find by name.</p>
+                  ) : camera === 'unavailable' ? (
+                    <p>This browser can't use the camera. Use Find by name instead.</p>
+                  ) : (
+                    <Button kind="primary" onClick={() => void startCamera()} busy={camera === 'starting'} busyLabel="Starting camera…">
+                      <Icon name="camera" />
+                      Start camera
+                    </Button>
+                  )}
+                </div>
+              )}
+              {camera === 'on' && <span className="viewfinder-guide" aria-hidden="true" />}
+            </div>
+            {session.fromCache && <p className="scanner-note">Using the list saved on this phone. Scans from other phones show up once you have signal.</p>}
+          </div>
 
-      <div className="scan-tools">
-        <button type="button" className="tool" aria-expanded={panel === 'code'} onClick={() => setPanel(panel === 'code' ? 'none' : 'code')}>
-          <Icon name="keyboard" size={22} />
-          Type code
-        </button>
-        <button type="button" className="tool" aria-expanded={panel === 'name'} onClick={() => setPanel(panel === 'name' ? 'none' : 'name')}>
-          <Icon name="search" size={22} />
-          Find name
-        </button>
-        {ctx.type === 'meal' && (
-          <button type="button" className="tool" aria-expanded={panel === 'eaten'} onClick={() => setPanel(panel === 'eaten' ? 'none' : 'eaten')}>
-            <Icon name="list" size={22} />
-            Who's eaten
-          </button>
-        )}
-        {camera === 'on' && (
-          <button type="button" className="tool" onClick={stopCamera}>
-            <Icon name="camera" size={22} />
-            Stop camera
-          </button>
-        )}
+          <div className="scanner-side">
+            <ScanResult feedback={feedback} contextType={ctx.type} />
+            <div className="scanner-progress">
+              <p className="num">{progressText}</p>
+              {counts.total > 0 && ctx.type !== 'activity' && <Progress value={progressValue} max={counts.total} />}
+            </div>
+            <div className="scanner-actions">
+              <Button block onClick={() => setSheet('name')}>
+                <Icon name="search" />
+                Find by name
+              </Button>
+              {ctx.type === 'meal' && (
+                <Button block onClick={() => setSheet('eaten')}>
+                  Who hasn't eaten
+                </Button>
+              )}
+              {camera === 'on' && (
+                <Button block kind="ghost" onClick={stopCamera}>
+                  Stop camera
+                </Button>
+              )}
+            </div>
+            {session.entries.length > 0 && (
+              <section className="scanner-recent" aria-labelledby="recent-heading">
+                <h2 id="recent-heading">Last scans</h2>
+                <ol>
+                  {[...session.entries]
+                    .reverse()
+                    .slice(0, 5)
+                    .map((e) => {
+                      const person = e.registrationId ? session.snapshot!.people.find((p) => p.id === e.registrationId) : null;
+                      const result = e.server ?? e.local;
+                      return (
+                        <li key={e.id} className={result.outcome === 'accepted' ? undefined : 'is-problem'}>
+                          <span className="num">{clock(e.createdAt)}</span>
+                          <strong>{person?.fullName ?? person?.name ?? 'Unknown card'}</strong>
+                          <span>
+                            {result.outcome === 'accepted' ? '' : <Icon name="warning" size={16} />}
+                            {result.message}
+                            {e.synced ? '' : ' · waiting'}
+                          </span>
+                        </li>
+                      );
+                    })}
+                </ol>
+              </section>
+            )}
+            {station && (
+              <div className="scanner-station">
+                <Menu label="Station options" items={[{ label: 'Unpair this device', onSelect: () => void signOut(), danger: true }]} />
+              </div>
+            )}
+          </div>
+        </div>
       </div>
-      {panel === 'code' && <CodeEntry onSubmit={(code) => void record({ kind: 'code', code })} />}
-      {panel === 'eaten' && ctx.type === 'meal' && ctx.id && <WhoHasEaten eventId={eventId} mealId={ctx.id} refreshKey={session.entries.length} />}
-      {panel === 'name' && (
-        <NameSearch
+
+      <Sheet open={sheet === 'name'} title="Find by name" onClose={() => setSheet('none')}>
+        <FindByName
           people={session.snapshot.people}
-          onPick={(p) => {
-            if (window.confirm(`Record ${p.fullName ?? p.name} (${p.group}) without their card?`)) void record({ kind: 'manual', registrationId: p.id });
+          onCode={(code) => {
+            setSheet('none');
+            void record({ kind: 'code', code });
+          }}
+          onPick={async (p) => {
+            const name = p.fullName ?? p.name;
+            setSheet('none');
+            const ok = await confirm({
+              title: `Record ${name}?`,
+              body: <p>{p.group}. This is saved as a hand entry, without their card.</p>,
+              confirm: 'Record',
+            });
+            if (ok) void record({ kind: 'manual', registrationId: p.id });
           }}
         />
-      )}
-
-      {session.entries.length > 0 && (
-        <section className="section-gap" aria-labelledby="recent-heading">
-          <h2 id="recent-heading" className="list-heading">
-            Last scans on this phone
-          </h2>
-          <ol className="recent">
-            {[...session.entries]
-              .reverse()
-              .slice(0, 5)
-              .map((e) => {
-                const person = e.registrationId ? session.snapshot!.people.find((p) => p.id === e.registrationId) : null;
-                const result = e.server ?? e.local;
-                return (
-                  <li key={e.id} className={result.outcome === 'accepted' ? undefined : 'is-problem'}>
-                    <span>{new Date(e.createdAt).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Adelaide' })}</span>
-                    <strong>{person?.fullName ?? person?.name ?? 'Unknown card'}</strong>
-                    <span className="field-hint">
-                      {result.message}
-                      {e.synced ? '' : ' · waiting to upload'}
-                    </span>
-                  </li>
-                );
-              })}
-          </ol>
-        </section>
+      </Sheet>
+      {ctx.type === 'meal' && ctx.id && (
+        <Sheet open={sheet === 'eaten'} title="Who hasn't eaten" onClose={() => setSheet('none')}>
+          <WhoHasEaten eventId={eventId} mealId={ctx.id} refreshKey={session.entries.length} />
+        </Sheet>
       )}
     </div>
   );
 }
 
-function CodeEntry({ onSubmit }: { onSubmit: (code: string) => void }) {
-  const [code, setCode] = useState('');
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    onSubmit(code);
-    setCode('');
-  }
-  return (
-    <form className="scan-panel" onSubmit={submit}>
-      <label htmlFor="typed-code">Code printed under the QR</label>
-      <div className="inline-form">
-        <input
-          id="typed-code"
-          className="input input-code"
-          autoCapitalize="characters"
-          autoComplete="off"
-          spellCheck={false}
-          maxLength={9}
-          value={code}
-          onChange={(e) => setCode(e.target.value.toUpperCase())}
-          placeholder="K7QM-3XRP"
-        />
-        <button className="btn" disabled={code.replace(/-/g, '').length !== 8}>
-          Record
-        </button>
-      </div>
-    </form>
-  );
-}
-
-function NameSearch({ people, onPick }: { people: SnapshotPerson[]; onPick: (p: SnapshotPerson) => void }) {
+/** Search the list saved on this phone (works offline), or type the code printed on the card. */
+function FindByName({ people, onPick, onCode }: { people: SnapshotPerson[]; onPick: (p: SnapshotPerson) => void; onCode: (code: string) => void }) {
   const [q, setQ] = useState('');
-  // The panel opens because the person tapped "Find name", so move them into the field they asked for.
-  const input = useRef<HTMLInputElement>(null);
-  useEffect(() => input.current?.focus(), []);
+  const [typing, setTyping] = useState(false);
+  const [code, setCode] = useState('');
   const matches = q.trim()
     ? people
         .filter((p) => matchesSearch(q, p.fullName ?? p.name, p.memberNumber))
         .sort((a, b) => searchRank(q, a.fullName ?? a.name) - searchRank(q, b.fullName ?? b.name) || (a.fullName ?? a.name).localeCompare(b.fullName ?? b.name))
         .slice(0, 30)
     : [];
+  if (typing) {
+    const submit = (e: FormEvent) => {
+      e.preventDefault();
+      onCode(code);
+    };
+    return (
+      <form className="form" onSubmit={submit}>
+        <div className="field">
+          <label htmlFor="typed-code" className="field-label">
+            Code printed under the QR
+          </label>
+          <input
+            id="typed-code"
+            className="input input-code"
+            autoCapitalize="characters"
+            autoComplete="off"
+            spellCheck={false}
+            maxLength={9}
+            value={code}
+            // eslint-disable-next-line jsx-a11y/no-autofocus
+            autoFocus
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            placeholder="K7QM-3XRP"
+          />
+        </div>
+        <div className="btn-row">
+          <Button type="submit" kind="primary" disabled={code.replace(/-/g, '').length !== 8}>
+            Record
+          </Button>
+          <Button kind="ghost" onClick={() => setTyping(false)}>
+            Search by name instead
+          </Button>
+        </div>
+      </form>
+    );
+  }
   return (
-    <div className="scan-panel">
-      <label htmlFor="name-q">Name or membership number</label>
-      <input id="name-q" ref={input} className="input" type="search" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Start typing, even one letter" />
-      <p className="field-hint">Saved as a hand-entered scan.</p>
-      <ul className="name-results">
-        {matches.map((p) => (
-          <li key={p.id}>
-            <button type="button" className="name-result" onClick={() => onPick(p)}>
-              <strong>{p.fullName ?? p.name}</strong>
-              <span>{p.group}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
-      {q.trim() && matches.length === 0 && <p className="field-hint">No one on this list matches "{q}".</p>}
-    </div>
+    <>
+      <SearchField id="name-q" label="Name or membership number" value={q} onChange={setQ} autoFocus />
+      {q.trim() === '' ? (
+        <p className="meta">Start typing. Even one letter works. It's saved as a hand entry.</p>
+      ) : matches.length === 0 ? (
+        <p className="meta">No one on this list matches "{q}".</p>
+      ) : (
+        <ul className="list">
+          {matches.map((p) => (
+            <li key={p.id}>
+              <button type="button" className="row row-button" onClick={() => onPick(p)}>
+                <span className="row-main">
+                  <span className="row-title">{p.fullName ?? p.name}</span>
+                  <span className="row-meta">{p.group}</span>
+                </span>
+                <Icon name="chevron" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div>
+        <Button kind="ghost" onClick={() => setTyping(true)}>
+          <Icon name="keyboard" />
+          Type the card code instead
+        </Button>
+      </div>
+    </>
   );
 }
 
-/** For the meal team: who has and hasn't eaten yet at this meal. */
+/** For the meal team: who has and hasn't eaten at this meal. Needs signal. */
 function WhoHasEaten({ eventId, mealId, refreshKey }: { eventId: string; mealId: string; refreshKey: number }) {
-  const [data, setData] = useState<{ people: { id: string; name: string; group: string; servedAt: string | null }[] } | null>(null);
+  type Row = { id: string; name: string; group: string; servedAt: string | null };
+  const [data, setData] = useState<{ people: Row[] } | null>(null);
   const [show, setShow] = useState<'not' | 'eaten'>('not');
   const [q, setQ] = useState('');
   const [offline, setOffline] = useState(false);
   useEffect(() => {
-    api<{ people: { id: string; name: string; group: string; servedAt: string | null }[] }>(`/events/${eventId}/meals/${mealId}/served`)
+    api<{ people: Row[] }>(`/events/${eventId}/meals/${mealId}/served`)
       .then((d) => {
         setData(d);
         setOffline(false);
@@ -521,45 +536,44 @@ function WhoHasEaten({ eventId, mealId, refreshKey }: { eventId: string; mealId:
   }, [eventId, mealId, refreshKey]);
   if (!data)
     return offline ? (
-      <p className="field-hint">Needs signal to load the list.</p>
+      <Notice tone="warning">
+        <p>This list needs signal. Scanning still works without it.</p>
+      </Notice>
     ) : (
-      <div className="scan-panel">
-        <Loading label="Loading who has eaten">
-          <Skeleton width="100%" height="48px" radius="12px" />
-          <SkeletonList rows={5} lines={1} aside="none" />
-        </Loading>
-      </div>
+      <Loading what="who has eaten" rows={5} />
     );
   const eaten = data.people.filter((p) => p.servedAt);
   const notYet = data.people.filter((p) => !p.servedAt);
   const list = (show === 'eaten' ? eaten : notYet).filter((p) => matchesSearch(q, p.name));
   return (
-    <div className="scan-panel">
-      <div className="segmented" role="group" aria-label="Show">
-        <button type="button" aria-pressed={show === 'not'} onClick={() => setShow('not')}>
-          Not yet <span>{notYet.length}</span>
-        </button>
-        <button type="button" aria-pressed={show === 'eaten'} onClick={() => setShow('eaten')}>
-          Eaten <span>{eaten.length}</span>
-        </button>
-      </div>
-      <input className="input section-gap-sm" type="search" aria-label="Search names" placeholder="Search names" value={q} onChange={(e) => setQ(e.target.value)} />
-      {offline && <p className="field-hint">No signal: showing the last list loaded.</p>}
-      <ul className="eaten-list">
-        {list.map((p) => (
-          <li key={p.id}>
-            <span>
-              <strong>{p.name}</strong>
-              <span className="field-hint"> {p.group}</span>
-            </span>
-            {p.servedAt && (
-              <span className="field-hint">
-                {new Date(p.servedAt).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Adelaide' })}
+    <>
+      <Segmented
+        block
+        label="Show"
+        value={show}
+        onChange={setShow}
+        options={[
+          { value: 'not', label: `Not yet (${notYet.length})` },
+          { value: 'eaten', label: `Eaten (${eaten.length})` },
+        ]}
+      />
+      <SearchField id="eaten-q" label="Search names" value={q} onChange={setQ} />
+      {offline && <p className="meta">No signal: showing the last list loaded.</p>}
+      {list.length === 0 ? (
+        <p className="meta">{show === 'not' ? 'Everyone has eaten.' : 'No one yet.'}</p>
+      ) : (
+        <ul className="list">
+          {list.map((p) => (
+            <li key={p.id} className="row">
+              <span className="row-main">
+                <span className="row-title">{p.name}</span>
+                <span className="row-meta">{p.group}</span>
               </span>
-            )}
-          </li>
-        ))}
-      </ul>
-    </div>
+              {p.servedAt && <span className="meta num">{clock(p.servedAt)}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 }
