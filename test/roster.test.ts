@@ -41,6 +41,31 @@ describe('roster import', () => {
     }
   });
 
+  it('keeps extra columns the manager chose, merging them on re-import', async () => {
+    const { eventId, director } = await setup();
+    const commit = async (rows: unknown[]) => json(await api(`/events/${eventId}/import/commit`, { cookie: director.cookie, body: { rows } }));
+    await commit([row('2001', { extra: { 'Bus': '2', 'Tent': 'B4' } })]);
+    const { registrations } = await json(await api(`/events/${eventId}/registrations`, { cookie: director.cookie }));
+    const path = `/events/${eventId}/registrations/${registrations[0].id}`;
+    expect((await json(await api(path, { cookie: director.cookie }))).registration.extra).toEqual({ Bus: '2', Tent: 'B4' });
+
+    // A later import with one changed column reports it, keeps the others, and an empty value removes one.
+    const preview = await json(await api(`/events/${eventId}/import/preview`, { cookie: director.cookie, body: { rows: [row('2001', { extra: { Bus: '3' } })] } }));
+    expect(preview.plan.rows[0]).toMatchObject({ action: 'update', changes: ['Bus'] });
+    await commit([row('2001', { extra: { Bus: '3', Tent: '' } })]);
+    expect((await json(await api(path, { cookie: director.cookie }))).registration.extra).toEqual({ Bus: '3' });
+
+    // An import that keeps no extra columns leaves them alone.
+    await commit([row('2001')]);
+    expect((await json(await api(path, { cookie: director.cookie }))).registration.extra).toEqual({ Bus: '3' });
+
+    // Editing a person replaces them; too many columns are refused.
+    await api(path, { method: 'PATCH', cookie: director.cookie, body: { extra: { Patrol: 'Kookaburra' } } });
+    expect((await json(await api(path, { cookie: director.cookie }))).registration.extra).toEqual({ Patrol: 'Kookaburra' });
+    const tooMany = Object.fromEntries(Array.from({ length: 13 }, (_, i) => [`Col ${i}`, 'x']));
+    expect((await api(`/events/${eventId}/import/preview`, { cookie: director.cookie, body: { rows: [row('2001', { extra: tooMany })] } })).status).toBe(400);
+  });
+
   it('previews without writing, then commits exactly what was previewed', async () => {
     const { eventId, director } = await setup();
     const rows = [row('1001'), row('1002', { kind: 'adult', section: 'Leaders' })];

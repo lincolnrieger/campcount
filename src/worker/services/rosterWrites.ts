@@ -68,6 +68,15 @@ export function rowStatements(
         dietaryPending ? 1 : 0,
       ),
   ];
+  if (row.extra && Object.keys(row.extra).length > 0) {
+    // Merge the chosen columns into what's there; an empty value removes that field (json_patch drops nulls).
+    const patch = JSON.stringify(Object.fromEntries(Object.entries(row.extra).map(([k, v]) => [k, v === '' ? null : v])));
+    statements.push(
+      db
+        .prepare(`UPDATE registrations SET extra_fields = json_patch(extra_fields, ?) WHERE event_id = ? AND person_id = ${personRef}`)
+        .bind(patch, eventId, row.memberNumber),
+    );
+  }
   if (row.dietary !== undefined) {
     const regRef = `(SELECT r.id FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.event_id = ? AND p.member_number = ?)`;
     statements.push(db.prepare(`DELETE FROM dietary_entries WHERE registration_id = ${regRef}`).bind(eventId, row.memberNumber));

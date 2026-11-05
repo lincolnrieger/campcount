@@ -11,7 +11,7 @@ import { nowIso } from '../lib/time';
 import { auditStatement } from '../services/audit';
 import { decryptToken, issueStatements } from '../services/credentials';
 import type { ExistingRegistration } from '../services/import';
-import { duplicateMemberNumbers, planImport } from '../services/import';
+import { duplicateMemberNumbers, parseExtra, planImport, storeExtra } from '../services/import';
 import { can } from '../services/principal';
 import { getEventRow } from './events';
 import { loadEventModel, whereabouts } from '../services/reports';
@@ -107,7 +107,7 @@ rosterRoutes.get('/registrations/:registrationId', async (c) => {
   if (!event) throw notFound();
   const r = await c.env.DB.prepare(
     `SELECT r.id, p.member_number, p.first_name, p.preferred_name, p.last_name, r.kind, r.section, r.group_name, r.position,
-            r.role_label, r.team, r.photo_consent, r.status, r.created_at, r.updated_at,
+            r.role_label, r.team, r.photo_consent, r.status, r.created_at, r.updated_at, r.extra_fields,
             (SELECT short_code FROM credentials cr WHERE cr.registration_id = r.id AND cr.status = 'active') AS short_code
        FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.id = ? AND r.event_id = ?`,
   )
@@ -157,6 +157,7 @@ rosterRoutes.get('/registrations/:registrationId', async (c) => {
       position: r.position,
       roleLabel: r.role_label,
       team: r.team,
+      extra: parseExtra(r.extra_fields),
       status: r.status,
       shortCode: r.short_code ? formatShortCode(r.short_code) : null,
       ...(withPhoto ? { photoConsent: r.photo_consent } : {}),
@@ -201,7 +202,7 @@ rosterRoutes.patch('/registrations/:registrationId', async (c) => {
   const set = (cols: Record<string, string>) => Object.keys(input).filter((k) => k in cols && input[k as keyof typeof input] !== undefined);
   const pKeys = set(personCols);
   const rKeys = set(regCols);
-  if (pKeys.length + rKeys.length === 0) return c.json({ ok: true });
+  if (pKeys.length + rKeys.length === 0 && input.extra === undefined) return c.json({ ok: true });
   const now = nowIso();
   const statements: D1PreparedStatement[] = [];
   if (pKeys.length) {
@@ -222,6 +223,9 @@ rosterRoutes.patch('/registrations/:registrationId', async (c) => {
       ),
     );
   }
+  if (input.extra !== undefined) {
+    statements.push(c.env.DB.prepare(`UPDATE registrations SET extra_fields = ?, updated_at = ? WHERE id = ?`).bind(storeExtra(input.extra), now, id));
+  }
   statements.push(
     auditStatement(c.env.DB, {
       actor: { type: 'user', id: user.userId },
@@ -229,7 +233,7 @@ rosterRoutes.patch('/registrations/:registrationId', async (c) => {
       eventId,
       targetType: 'registration',
       targetId: id,
-      detail: { fields: [...pKeys, ...rKeys].join(',') },
+      detail: { fields: [...pKeys, ...rKeys, ...(input.extra !== undefined ? ['extra'] : [])].join(',') },
     }),
   );
   try {
@@ -356,7 +360,8 @@ async function loadExisting(db: D1Database, eventId: string): Promise<ExistingRe
   const { results } = await db
     .prepare(
       `SELECT r.id AS registration_id, p.member_number, p.first_name, p.preferred_name, p.last_name, r.kind, r.section,
-              r.group_name, r.position, r.role_label, r.team, r.source_status, r.photo_consent, r.status, r.dietary_source_hash
+              r.group_name, r.position, r.role_label, r.team, r.source_status, r.photo_consent, r.status, r.dietary_source_hash,
+              r.extra_fields
          FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.event_id = ?`,
     )
     .bind(eventId)

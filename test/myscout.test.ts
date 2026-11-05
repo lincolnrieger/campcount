@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseDelimited } from '../src/shared/csv';
-import { autoMap, deriveKind, flagDuplicates, missingRequired, prepareRows } from '../src/shared/myscout';
+import { autoMap, deriveKind, flagDuplicates, missingRequired, prepareRows, saysNothing } from '../src/shared/myscout';
 
 // Invented data shaped like a MyScout export. Never use real member data in tests.
 const HEADER =
@@ -99,5 +99,34 @@ describe('name search', async () => {
     expect(matchesSearch('sam lee', 'Sam Lee')).toBe(true);
     expect(matchesSearch('800012', 'Sam Lee', '800012')).toBe(true);
     expect(matchesSearch('k7qm', 'Sam Lee', null, 'K7QM-3XRP')).toBe(true);
+  });
+});
+
+
+describe('notes that say there is nothing to record', () => {
+  it('matches whole "nothing" answers, ignoring case, spaces and punctuation', () => {
+    for (const t of ['Nil', 'NIL.', ' none ', 'None!', 'Null', 'N/A', 'n/a', 'NA', 'No', '-', 'Nil known', 'No allergies', 'No known allergies.', '(none)', '"Nil"']) {
+      expect(saysNothing(t), t).toBe(true);
+    }
+  });
+
+  it('never matches a note with anything else in it', () => {
+    for (const t of [
+      '',
+      'None, but vegetarian',
+      'Nil except peanuts',
+      'No nuts',
+      'No dairy',
+      'Nil - asthma',
+      'NKDA',
+      'None known, but check with parent',
+      'Vegetarian',
+      'Not sure',
+      'No pork',
+      'n/a halal',
+      'none (coeliac)',
+    ]) {
+      expect(saysNothing(t), t).toBe(false);
+    }
   });
 });

@@ -16,6 +16,7 @@ export interface ExistingRegistration {
   photo_consent: string;
   status: 'active' | 'withdrawn';
   dietary_source_hash: string | null;
+  extra_fields: string;
 }
 
 export type RowAction = 'create' | 'update' | 'unchanged';
@@ -49,6 +50,21 @@ const COMPARED: [keyof ImportRow, keyof ExistingRegistration, string][] = [
   ['photoConsent', 'photo_consent', 'Photo consent'],
 ];
 
+/** Stored extra fields, tolerating anything unexpected. */
+export function parseExtra(json: string | null | undefined): Record<string, string> {
+  try {
+    const v = JSON.parse(json || '{}') as unknown;
+    return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Extra fields as stored: keys in order, empty values left out. */
+export function storeExtra(extra: Record<string, string>): string {
+  return JSON.stringify(Object.fromEntries(Object.entries(extra).filter(([, v]) => v !== '').sort(([a], [b]) => a.localeCompare(b))));
+}
+
 /** Find membership numbers that appear more than once in the file. */
 export function duplicateMemberNumbers(rows: ImportRow[]): string[] {
   const seen = new Set<string>();
@@ -72,6 +88,10 @@ export function planImport(rows: ImportRow[], existing: ExistingRegistration[], 
       return { index, memberNumber: row.memberNumber, action: 'create', changes: [], dietaryPending };
     }
     const changes = COMPARED.filter(([a, b]) => String(row[a] ?? '') !== String(current[b] ?? '')).map(([, , label]) => label);
+    if (row.extra) {
+      const before = parseExtra(current.extra_fields);
+      for (const [k, v] of Object.entries(row.extra)) if ((before[k] ?? '') !== v) changes.push(k);
+    }
     if (current.status === 'withdrawn') changes.push('Rejoined');
     if (row.dietary !== undefined) changes.push('Dietary requirements');
     return {

@@ -55,6 +55,13 @@ The import is an **allowlist**. The file is parsed **in the browser**. Only
 the columns below are ever sent to the server. The raw file is never
 uploaded or stored.
 
+**Extra columns (added November 2026).** The event manager can also tick up
+to 12 other columns to keep on each person's profile, such as a team, patrol,
+bus, tent or a MyScout custom field. These are stored under the column's own
+name. Columns whose names suggest contact, medical or identity details
+(email, phone, address, medical, allergy, birth, parent, emergency and
+similar) are never offered, and stay on the manager's computer.
+
 | MyScout column | Stored as | Purpose |
 |---|---|---|
 | `member_number` | person.member_number (unique) | Matching, annual report |
