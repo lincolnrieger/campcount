@@ -6,6 +6,7 @@ import {
   activityPatchSchema,
   mealInputSchema,
   mealPatchSchema,
+  programImportSchema,
   stationInputSchema,
   stationPatchSchema,
   stationReopenSchema,
@@ -108,6 +109,51 @@ operationsRoutes.post('/activities', async (c) => {
     auditStatement(c.env.DB, { actor: { type: 'user', id: user.userId }, action: 'activity.create', eventId, targetType: 'activity', targetId: id }),
   ]);
   return c.json({ id }, 201);
+});
+
+/**
+ * Import a programme: many activities (and meals) in one go. Everything is
+ * validated first and written in one batch, so a bad row never leaves half
+ * a programme behind.
+ */
+operationsRoutes.post('/program/import', async (c) => {
+  const eventId = c.req.param('eventId')!;
+  const input = await parseBody(c, programImportSchema);
+  if (input.activities.length) requirePermission(c, 'activities.manage', { eventId });
+  if (input.meals.length) requirePermission(c, 'meals.manage', { eventId });
+  const user = requireUser(c);
+  await requireEditable(c, eventId);
+  for (const [i, a] of input.activities.entries()) {
+    if (a.startsAt && a.endsAt && a.endsAt <= a.startsAt) throw badRequest(`Row ${i + 1} (${a.name}) ends before it starts.`);
+  }
+  const now = nowIso();
+  const statements: D1PreparedStatement[] = [];
+  for (const a of input.activities) {
+    const cols = Object.keys(ACTIVITY_COLUMNS).filter((k) => k !== 'status' && k in a);
+    statements.push(
+      c.env.DB.prepare(
+        `INSERT INTO activities (id, event_id, ${cols.map((k) => ACTIVITY_COLUMNS[k]).join(', ')}, created_at, updated_at)
+         VALUES (?, ?, ${cols.map(() => '?').join(', ')}, ?, ?)`,
+      ).bind(crypto.randomUUID(), eventId, ...cols.map((k) => toDb(a[k as keyof typeof a])), now, now),
+    );
+  }
+  for (const m of input.meals) {
+    statements.push(
+      c.env.DB.prepare(
+        `INSERT INTO meal_services (id, event_id, name, location, starts_at, ends_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(crypto.randomUUID(), eventId, m.name, m.location, m.startsAt, m.endsAt, now, now),
+    );
+  }
+  statements.push(
+    auditStatement(c.env.DB, {
+      actor: { type: 'user', id: user.userId },
+      action: 'program.import',
+      eventId,
+      detail: { activities: input.activities.length, meals: input.meals.length },
+    }),
+  );
+  await c.env.DB.batch(statements);
+  return c.json({ activities: input.activities.length, meals: input.meals.length }, 201);
 });
 
 operationsRoutes.patch('/activities/:activityId', async (c) => {

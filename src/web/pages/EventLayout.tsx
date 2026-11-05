@@ -40,6 +40,11 @@ export function eventSections(event: EventSummary, onSite = false) {
     { to: 'scan', label: 'Scan', show: onSite && scans },
     { to: 'people', label: 'People', show: can('roster.view') },
     { to: 'activities', label: 'Activities', show: event.features.activities && (can('activities.manage') || can('activity.view_roster')) },
+    {
+      to: 'schedule',
+      label: 'Schedule',
+      show: (event.features.activities && can('activities.manage')) || (event.features.meals && can('meals.manage')),
+    },
     { to: 'meals', label: 'Meals', show: event.features.meals && can('meals.manage') },
     { to: 'reports', label: 'Reports', show: can('reports.view') && event.status !== 'draft' },
     { to: 'settings', label: 'Settings', show: can('event.configure') || can('staff.manage') || can('stations.manage') },
