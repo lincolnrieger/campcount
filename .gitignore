@@ -12,3 +12,4 @@ coverage/
 /imports/
 *.csv
 !test/fixtures/*.csv
+screenshots/

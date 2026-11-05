@@ -9,6 +9,7 @@ import { nowIso } from '../lib/time';
 import { auditStatement } from '../services/audit';
 import { loadEventModel, openItems } from '../services/reports';
 import { can, eventPermissions } from '../services/principal';
+import { resolveSite } from '../services/site';
 
 export interface EventRow {
   id: string;
@@ -30,6 +31,10 @@ export interface EventRow {
   updated_at: string;
   closed_at: string | null;
   is_demo: number;
+  subdomain: string | null;
+  brand_color: string | null;
+  /** From event_logos, when the query includes it. */
+  logo_updated_at?: string | null;
 }
 
 const FEATURE_COLUMNS: Record<keyof EventFeatures, keyof EventRow> = {
@@ -57,11 +62,17 @@ export function eventDto(row: EventRow) {
     ) as EventFeatures,
     closedAt: row.closed_at,
     isDemo: row.is_demo === 1,
+    subdomain: row.subdomain,
+    brandColor: row.brand_color,
+    logoUrl: row.logo_updated_at ? `/api/events/${row.id}/logo?v=${encodeURIComponent(row.logo_updated_at)}` : null,
   };
 }
 
 export async function getEventRow(db: D1Database, eventId: string): Promise<EventRow | null> {
-  return db.prepare(`SELECT * FROM events WHERE id = ?`).bind(eventId).first<EventRow>();
+  return db
+    .prepare(`SELECT e.*, (SELECT updated_at FROM event_logos WHERE event_id = e.id) AS logo_updated_at FROM events e WHERE e.id = ?`)
+    .bind(eventId)
+    .first<EventRow>();
 }
 
 function slugify(name: string, startsOn: string): string {
@@ -74,17 +85,26 @@ function slugify(name: string, startsOn: string): string {
   return `${base || 'event'}-${startsOn.slice(0, 4)}-${crypto.randomUUID().slice(0, 4)}`;
 }
 
+async function assertSubdomainFree(db: D1Database, subdomain: string, eventId: string | null) {
+  const taken = await db.prepare(`SELECT id FROM events WHERE subdomain = ?`).bind(subdomain).first<{ id: string }>();
+  if (taken && taken.id !== eventId) {
+    throw badRequest('Another event already uses that address.', [{ path: 'subdomain', message: 'Another event already uses that address' }]);
+  }
+}
+
 export const eventRoutes = new Hono<AppEnv>();
 
 /** Events the caller can see. Never lists events they have no grant for. */
 eventRoutes.get('/', async (c) => {
   const principal = requirePrincipal(c);
   const { results } = await c.env.DB.prepare(
-    `SELECT * FROM events WHERE status <> 'archived' OR ? = 1 ORDER BY starts_on DESC`,
+    `SELECT e.*, (SELECT updated_at FROM event_logos WHERE event_id = e.id) AS logo_updated_at FROM events e
+      WHERE e.status <> 'archived' OR ? = 1 ORDER BY e.starts_on DESC`,
   )
     .bind(can(principal, 'platform.events.oversee') ? 1 : 0)
     .all<EventRow>();
-  const visible = results.filter((e) => can(principal, 'event.view', { eventId: e.id }));
+  const site = await resolveSite(c);
+  const visible = results.filter((e) => can(principal, 'event.view', { eventId: e.id }) && (site.kind !== 'event' || e.id === site.event.id));
   return c.json({
     events: visible.map((e) => ({ ...eventDto(e), permissions: eventPermissions(principal, e.id) })),
   });
@@ -97,12 +117,13 @@ eventRoutes.post('/', async (c) => {
   const now = nowIso();
   const id = crypto.randomUUID();
   const f = input.features;
+  if (input.subdomain) await assertSubdomainFree(c.env.DB, input.subdomain, null);
   await c.env.DB.batch([
     c.env.DB.prepare(
       `INSERT INTO events (id, slug, name, description, location, starts_on, ends_on,
          feature_activities, feature_meals, feature_site, feature_dietary, feature_photo, feature_self_signup,
-         created_by, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         created_by, created_at, updated_at, subdomain, brand_color)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       id,
       slugify(input.name, input.startsOn),
@@ -120,6 +141,8 @@ eventRoutes.post('/', async (c) => {
       user.userId,
       now,
       now,
+      input.subdomain ?? null,
+      input.brandColor ?? null,
     ),
     auditStatement(c.env.DB, {
       actor: { type: 'user', id: user.userId },
@@ -143,8 +166,12 @@ eventRoutes.get('/:eventId', async (c) => {
 
 eventRoutes.patch('/:eventId', async (c) => {
   const eventId = c.req.param('eventId');
-  const principal = requirePermission(c, 'event.configure', { eventId });
   const input = await parseBody(c, updateEventSchema);
+  // Platform admins set an event's name, address and branding from the main site;
+  // everything else about the event is its managers' job.
+  const principal = requirePrincipal(c);
+  const brandingOnly = Object.keys(input).every((k) => k === 'name' || k === 'subdomain' || k === 'brandColor');
+  if (!(brandingOnly && can(principal, 'platform.events.create'))) requirePermission(c, 'event.configure', { eventId });
   const row = await getEventRow(c.env.DB, eventId);
   if (!row) throw notFound();
   if (row.status !== 'draft' && row.status !== 'open') {
@@ -162,6 +189,13 @@ eventRoutes.patch('/:eventId', async (c) => {
   if (input.location !== undefined) set('location', input.location);
   if (input.startsOn !== undefined) set('starts_on', input.startsOn);
   if (input.endsOn !== undefined) set('ends_on', input.endsOn);
+  if (input.brandColor !== undefined) set('brand_color', input.brandColor);
+  if (input.subdomain !== undefined) {
+    // An event's address is a platform decision: changing it moves everyone's bookmarks.
+    requirePermission(c, 'platform.events.create');
+    await assertSubdomainFree(c.env.DB, input.subdomain, eventId);
+    set('subdomain', input.subdomain);
+  }
   for (const [key, value] of Object.entries(input.features ?? {})) {
     if (value !== undefined) set(FEATURE_COLUMNS[key as keyof EventFeatures], value ? 1 : 0);
   }

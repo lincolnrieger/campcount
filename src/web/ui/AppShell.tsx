@@ -6,6 +6,14 @@ import { Badge } from './Feedback';
 import { stopPreview } from '../components/ViewAs';
 import { useSession } from '../session';
 import { useShell } from '../shell';
+import { useSite } from '../site';
+
+/** True when event addresses work here (on campcount.com, not workers.dev): the main site is then just the admin console. */
+function useConsoleOnly(): boolean {
+  const site = useSite();
+  const host = window.location.hostname;
+  return !!site.rootDomain && (host === site.rootDomain || host.endsWith(`.${site.rootDomain}`));
+}
 
 /** The CampCount mark: a tent in a rounded square, as on the favicon. */
 export function BrandMark({ size = 28 }: { size?: number }) {
@@ -32,7 +40,7 @@ function useArea() {
   const scanning = pathname === '/scan' || /^\/events\/[^/]+\/scan\//.test(pathname);
   return {
     scanning,
-    events: !scanning && (pathname === '/' || pathname.startsWith('/events')),
+    events: !scanning && (pathname === '/' || pathname.startsWith('/events') || pathname.startsWith('/camps')),
     admin: pathname.startsWith('/admin'),
     account: pathname.startsWith('/account'),
   };
@@ -50,6 +58,7 @@ function Sidebar({ isAdmin }: { isAdmin: boolean }) {
   const { me } = useSession();
   const { event } = useShell();
   const area = useArea();
+  const consoleOnly = useConsoleOnly();
   if (me?.kind !== 'user') return null;
   const status = event ? STATUS[event.status] : undefined;
   return (
@@ -63,15 +72,17 @@ function Sidebar({ isAdmin }: { isAdmin: boolean }) {
           <li>
             <Link to="/" aria-current={area.events && !event ? 'page' : undefined}>
               <Icon name="events" />
-              Events
+              {isAdmin ? 'Camps' : 'Events'}
             </Link>
           </li>
-          <li>
-            <Link to="/scan" aria-current={area.scanning ? 'page' : undefined}>
-              <Icon name="scan" />
-              Scan
-            </Link>
-          </li>
+          {!consoleOnly && (
+            <li>
+              <Link to="/scan" aria-current={area.scanning ? 'page' : undefined}>
+                <Icon name="scan" />
+                Scan
+              </Link>
+            </li>
+          )}
         </ul>
         {event && (
           <div className="sidebar-event">
@@ -87,7 +98,7 @@ function Sidebar({ isAdmin }: { isAdmin: boolean }) {
             <ul aria-label={`${event.name} sections`}>
               {event.sections.map((s) => (
                 <li key={s.to}>
-                  <NavLink to={`/events/${event.id}${s.to ? `/${s.to}` : ''}`} end={s.to === ''}>
+                  <NavLink to={`${event.base}/${s.to}`} end={s.to === ''}>
                     {s.label}
                   </NavLink>
                 </li>
@@ -129,10 +140,12 @@ function Sidebar({ isAdmin }: { isAdmin: boolean }) {
 
 /** Phones and tablets: a thumb-reach tab bar. */
 function TabBar({ isAdmin }: { isAdmin: boolean }) {
+  const location = useLocation();
   const area = useArea();
+  const consoleOnly = useConsoleOnly();
   const tabs: { to: string; label: string; icon: IconName; active: boolean }[] = [
-    { to: '/', label: 'Events', icon: 'events', active: area.events },
-    { to: '/scan', label: 'Scan', icon: 'scan', active: area.scanning },
+    { to: '/', label: isAdmin ? 'Camps' : 'Events', icon: 'events', active: area.events || location.pathname.startsWith('/camps') },
+    ...(consoleOnly ? [] : [{ to: '/scan', label: 'Scan', icon: 'scan' as const, active: area.scanning }]),
     ...(isAdmin ? [{ to: '/admin', label: 'Admin', icon: 'admin' as const, active: area.admin }] : []),
     { to: '/account', label: 'Account', icon: 'user', active: area.account },
   ];
@@ -227,7 +240,7 @@ export function AppShell() {
 }
 
 /** Event sections on phones: one scrollable row of tabs under the top bar. */
-export function EventTabs({ eventId, sections }: { eventId: string; sections: { to: string; label: string }[] }) {
+export function EventTabs({ base, sections }: { base: string; sections: { to: string; label: string }[] }) {
   const ref = useRef<HTMLElement>(null);
   const { pathname } = useLocation();
   useEffect(() => {
@@ -237,7 +250,7 @@ export function EventTabs({ eventId, sections }: { eventId: string; sections: { 
   return (
     <nav className="tabs event-tabs only-phone" aria-label="Event sections" ref={ref}>
       {sections.map((s) => (
-        <NavLink key={s.to} to={`/events/${eventId}${s.to ? `/${s.to}` : ''}`} end={s.to === ''}>
+        <NavLink key={s.to} to={`${base}/${s.to}`} end={s.to === ''}>
           {s.label}
         </NavLink>
       ))}

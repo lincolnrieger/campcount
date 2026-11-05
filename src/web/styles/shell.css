@@ -330,3 +330,14 @@
     max-width: none;
   }
 }
+
+/* ---------- Event's own site ---------- */
+.site-logo {
+  flex: none;
+  object-fit: contain;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.sidebar-status {
+  padding: 0 var(--space-3);
+}

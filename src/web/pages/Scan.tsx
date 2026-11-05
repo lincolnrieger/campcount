@@ -6,19 +6,18 @@ import { matchesSearch, searchRank } from '../../shared/search';
 import { api } from '../api';
 import { useSyncStatus } from '../offline/sync';
 import { createDetector } from '../scan/decoder';
-import { rememberLastScan, useEventSummary } from '../scan/targets';
+import { rememberLastScan } from '../scan/targets';
 import type { Feedback, ScanInput, SnapshotPerson } from '../scan/useScanSession';
 import { useScanSession } from '../scan/useScanSession';
 import { useSession } from '../session';
 import { useTitle } from '../shell';
 import { Button, Icon, IconButton, Loading, Menu, Notice, Progress, SearchField, Segmented, Sheet, Skeleton, SkeletonRows, useConfirm } from '../ui';
-import { ScanSwitcher } from './ScanHub';
 
 const SAME_CODE_COOLDOWN_MS = 3000;
 const TZ = 'Australia/Adelaide';
 const clock = (iso: string) => new Date(iso).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', timeZone: TZ });
 
-/** Set when switching what to scan, so the next scanner starts its camera straight away. */
+/** Set while a camera was running, so the next scanner opened from the menu starts its camera straight away. */
 let resumeCamera = false;
 /** Beep on scan: remembered for this visit, across scanners. */
 let soundOn = true;
@@ -128,11 +127,9 @@ export function Scan() {
   const location = useLocation();
   const navigate = useNavigate();
   const confirm = useConfirm();
-  const event = useEventSummary(me?.kind === 'user' ? eventId : null);
   const station = me?.kind === 'station';
   useTitle(session.snapshot ? `Scan: ${session.snapshot.context.type === 'site' ? 'Gate' : session.snapshot.context.name}` : 'Scan');
 
-  const [switching, setSwitching] = useState(false);
   const [sheet, setSheet] = useState<'none' | 'name' | 'eaten'>('none');
   const [direction, setDirection] = useState<Direction>('in');
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -147,7 +144,6 @@ export function Scan() {
   const lastCode = useRef<{ value: string; at: number } | null>(null);
   const recordRef = useRef<(input: ScanInput) => Promise<void>>(async () => undefined);
 
-  const currentKey = type === 'site' ? 'site' : `${type}:${contextId}`;
   const rules = session.snapshot?.context.rules;
   const twoWay = rules?.type === 'site' || (rules?.type === 'activity' && rules.trackSignOut);
 
@@ -257,6 +253,7 @@ export function Scan() {
   }, [session.states, session.snapshot]);
 
   const close = () => {
+    resumeCamera = camera === 'on';
     stopCamera();
     if (window.history.length > 1 && location.key !== 'default') navigate(-1);
     else navigate(`/scan?event=${eventId}`);
@@ -312,14 +309,8 @@ export function Scan() {
           <IconButton label={sound ? 'Beep on' : 'Beep off'} aria-pressed={sound} onClick={() => setSound(!sound)}>
             <Icon name={sound ? 'sound' : 'mute'} size={24} />
           </IconButton>
-          {!station && event && (
-            <Button small onClick={() => setSwitching(true)} aria-haspopup="dialog">
-              Switch
-            </Button>
-          )}
         </header>
         <SyncChip />
-        {event && <ScanSwitcher event={event} currentKey={currentKey} open={switching} onClose={() => setSwitching(false)} onSwitch={() => (resumeCamera = camera === 'on')} />}
 
         <div className="scanner-body">
           <div className="scanner-camera">

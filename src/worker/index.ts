@@ -14,6 +14,9 @@ import { pairingRoutes, scanRoutes } from './routes/scans';
 import { reportRoutes } from './routes/reports';
 import { staffRoutes } from './routes/staff';
 import { publicSignupRoutes, signupRoutes } from './routes/signup';
+import { logoRoutes, siteRoutes } from './routes/site';
+import { resolveSite } from './services/site';
+import { notFound } from './lib/errors';
 import { runMaintenance } from './services/maintenance';
 
 export const app = new Hono<AppEnv>().basePath('/api');
@@ -29,13 +32,32 @@ app.use('*', async (c, next) => {
 });
 app.use('*', sameOriginWrites);
 app.use('*', sessionMiddleware);
+/**
+ * The wall between sites. An event's own address only ever serves that
+ * event: other events' data, creating events and the admin area are not
+ * there (they answer 404, so nothing about them leaks).
+ */
+app.use('*', async (c, next) => {
+  const site = await resolveSite(c);
+  const path = new URL(c.req.url).pathname;
+  if (site.kind === 'unknown' && !/^\/api\/(site|health)(\/|$)/.test(path)) throw notFound();
+  if (site.kind === 'event') {
+    if (path.startsWith('/api/admin') && !path.startsWith('/api/admin/preview')) throw notFound();
+    if (path === '/api/events' && c.req.method !== 'GET') throw notFound();
+    const m = /^\/api\/events\/([^/]+)/.exec(path);
+    if (m && m[1] !== site.event.id) throw notFound();
+  }
+  await next();
+});
 
 app.get('/health', (c) => c.json({ ok: true }));
+app.route('/site', siteRoutes);
 app.route('/auth', authRoutes);
 app.route('/me', meRoutes);
 app.route('/admin', adminRoutes);
 app.route('/events', eventRoutes);
 app.route('/events/:eventId/staff', staffRoutes);
+app.route('/events/:eventId/logo', logoRoutes);
 app.route('/events/:eventId', rosterRoutes);
 app.route('/events/:eventId', operationsRoutes);
 app.route('/events/:eventId', scanRoutes);

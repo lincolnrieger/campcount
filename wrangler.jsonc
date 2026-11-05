@@ -13,6 +13,7 @@
   "observability": { "enabled": true },
   "vars": {
     "ENVIRONMENT": "production",
+    "ROOT_DOMAIN": "campcount.com",
     "EMAIL_FROM": "CampCount <no-reply@campcount.com>"
   },
   "d1_databases": [
@@ -33,6 +34,7 @@
     "dev": {
       "vars": {
         "ENVIRONMENT": "development",
+        "ROOT_DOMAIN": "localhost",
         "EMAIL_FROM": "CampCount Dev <no-reply@campcount.com>"
       },
       "d1_databases": [

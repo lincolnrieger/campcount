@@ -43,7 +43,7 @@ export function ScanHub() {
 
   return (
     <>
-      <PageHeader title="Scan" summary={events.length === 1 ? event.name : undefined} />
+      <PageHeader title="Scan" summary="Tap what you're scanning for. The camera opens straight away." />
       <div className="sections">
         {events.length > 1 && (
           <div className="field scan-event-pick">
@@ -121,8 +121,8 @@ export function ScanTargetPicker({ event, currentKey, onPick, onDismiss }: { eve
   return (
     <>
       {offline && <p className="meta">No signal: showing the list saved on this phone.</p>}
-      <TargetList title="On now" items={onNow} currentKey={currentKey} onGo={go} large />
-      <TargetList title="Gate" items={gate} currentKey={currentKey} onGo={go} large />
+      <TargetList title="On now" items={onNow} currentKey={currentKey} onGo={go} now />
+      <TargetList title="Gate" items={gate} currentKey={currentKey} onGo={go} />
       {usedDays.length > 1 && (
         <FilterTabs
           label="Day"
@@ -137,20 +137,22 @@ export function ScanTargetPicker({ event, currentKey, onPick, onDismiss }: { eve
   );
 }
 
-function TargetList({ title, items, currentKey, onGo, large }: { title: string; items: ScanTarget[]; currentKey?: string; onGo: (t: ScanTarget) => void; large?: boolean }) {
+const KIND: Record<ScanTarget['type'], string> = { site: 'Gate', meal: 'Meal', activity: 'Activity' };
+
+/** Big buttons: one tap opens the camera for that place. */
+function TargetList({ title, items, currentKey, onGo, now }: { title: string; items: ScanTarget[]; currentKey?: string; onGo: (t: ScanTarget) => void; now?: boolean }) {
   if (items.length === 0) return null;
   return (
     <Section title={title} id={`scan-${title.toLowerCase().replace(/\W+/g, '-')}`}>
-      <ul className="list">
+      <ul className="scan-tiles">
         {items.map((t) => (
           <li key={t.key}>
-            <button type="button" className={large ? 'row row-button row-large' : 'row row-button'} aria-current={t.key === currentKey ? 'true' : undefined} onClick={() => onGo(t)}>
-              <span className="row-main">
-                <span className="row-title">{t.label}</span>
-                <span className="row-meta">{t.hint}</span>
-              </span>
-              {t.key === currentKey ? <Badge tone="brand">Scanning</Badge> : isOnNow(t) && title !== 'On now' ? <Badge tone="success">On now</Badge> : null}
-              <Icon name="chevron" />
+            <button type="button" className={now ? 'scan-tile is-now' : 'scan-tile'} aria-current={t.key === currentKey ? 'true' : undefined} onClick={() => onGo(t)}>
+              {now && <span className="scan-tile-kind">{KIND[t.type]}</span>}
+              <span className="scan-tile-title">{t.type === 'site' ? 'Arrivals and departures' : t.label}</span>
+              {t.hint && t.hint !== KIND[t.type] && t.type !== 'site' && <span className="scan-tile-hint">{t.hint}</span>}
+              {t.key === currentKey && <Badge tone="brand">Scanning</Badge>}
+              <Icon name="scan" size={24} />
             </button>
           </li>
         ))}

@@ -12,6 +12,8 @@ export interface ShellEvent {
   status: EventStatus;
   isDemo: boolean;
   sections: { to: string; label: string }[];
+  /** '' on the event's own site, '/events/<id>' on the main site. */
+  base: string;
 }
 interface ShellState {
   event: ShellEvent | null;

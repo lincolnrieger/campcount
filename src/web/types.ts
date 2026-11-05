@@ -14,6 +14,10 @@ export interface EventSummary {
   features: EventFeatures;
   closedAt: string | null;
   isDemo: boolean;
+  /** The event's own address: <subdomain>.campcount.com (null until an admin sets one). */
+  subdomain: string | null;
+  brandColor: string | null;
+  logoUrl: string | null;
   permissions: Permission[];
 }
 

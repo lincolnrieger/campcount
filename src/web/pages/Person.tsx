@@ -81,7 +81,7 @@ function RightNow({ where, tz }: { where: Where; tz: string }) {
 
 /** One person on the event: where they are now, their needs, their activities and their history. */
 export function Person() {
-  const { event, can } = useEvent();
+  const { event, can, base } = useEvent();
   const { registrationId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -91,7 +91,7 @@ export function Person() {
   const { data, error, loading, reload } = useApi<PersonData>(path);
   const [editingDiet, setEditingDiet] = useState<DietaryEntryInput[] | null>(null);
   const fromHome = (location.state as { from?: string } | null)?.from === 'home';
-  const back = fromHome ? { to: `/events/${event.id}`, label: 'Home' } : { to: `/events/${event.id}/people`, label: 'People' };
+  const back = fromHome ? { to: base || '/', label: 'Home' } : { to: `${base}/people`, label: 'People' };
 
   const fail = (err: unknown) => toast(err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.', { tone: 'error' });
 
@@ -232,7 +232,7 @@ export function Person() {
         try {
           await api(path, { method: 'DELETE' });
           toast(`Deleted ${fullName}`);
-          navigate(`/events/${event.id}/people`, { replace: true });
+          navigate(`${base}/people`, { replace: true });
         } catch (err) {
           fail(err);
         }
@@ -469,13 +469,13 @@ export function Person() {
 
 /** People › person › Edit details. */
 export function PersonEdit() {
-  const { event } = useEvent();
+  const { event, base } = useEvent();
   const { registrationId } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
   const path = `/events/${event.id}/registrations/${registrationId}`;
   const { data, error, loading, reload } = useApi<PersonData>(path);
-  const back = { to: `/events/${event.id}/people/${registrationId}`, label: 'Back' };
+  const back = { to: `${base}/people/${registrationId}`, label: 'Back' };
   if (loading && !data)
     return (
       <Loading what="this person">
