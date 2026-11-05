@@ -43,9 +43,10 @@ Problems found:
 
 ## Structure after
 
-Main navigation (bottom bar on phones, header on wide screens), at most four items:
+Main navigation, at most four items: **Events · Scan · Administration** (platform admins only) **· Account**.
 
-**Home · Scan · Admin** (platform admins only) **· Account**
+- **Computers (1024px and up):** a left sidebar. It lists Events and Scan, then the current event (its name, dates and its sections), then Administration. Your name sits at the bottom and opens Account, with **View as a role** for admins. Breadcrumbs above each page show where you are, and every level is a link.
+- **Phones and tablets:** a top bar with the CampCount mark, and a bottom tab bar (Events, Scan, Admin, Account). An event's sections and the Administration sections are a scrollable tab row under the page header. Sub-pages have a back link.
 
 Event navigation, at most seven items. A tab only appears when the person's role can use it, and the server checks the same permissions.
 
@@ -75,3 +76,32 @@ Old addresses redirect to the new ones, so bookmarks keep working: `roster/*` go
   - A failed load shows a plain message with **Try again**.
   - Buttons say what they are doing ("Saving…") and are disabled while working.
 - **Back links:** every sub-page starts with a back link to its parent, and the browser tab title names the page.
+
+## Design system (November 2026)
+
+Defined once in `src/web/styles.css`; use the tokens, never one-off values.
+
+- **Type:** the system UI font. Six sizes:
+  - 12px: table headers and labels.
+  - 13px: meta text and hints.
+  - 14px: body text (15px on phones).
+  - 16px: section headings.
+  - 20px: page titles.
+  - 28px: the scanner and codes only.
+- **Spacing:** 4, 8, 12, 16, 24, 32 or 48px.
+- **Colour:**
+  - **Neutrals:** a grey ramp. All text pairs are at least 4.5:1, and control borders are 3.5:1.
+  - **Brand:** eucalypt green, for primary actions and the current place.
+  - **Status:** semantic colours (success, warning, error, info), each always shown with a word or a shape.
+  - **Hi-vis yellow:** only for the scanner's "you are here" marks and the Demo marker.
+- **Shape:**
+  - Corners are 4px on controls and 6px on surfaces.
+  - Hairline borders, no drop shadows on content (menus and dialogs only), no pills.
+  - Controls are 36px tall with a mouse and 44px on touch screens.
+- **Data:** lists people scan, sort or act on are tables (`.table` inside `.table-wrap`):
+  - Sortable headers (`SortHeader`, `useSort`, `sortRows` in `components/Table.tsx`).
+  - A toolbar above with search, filters and a count.
+  - On phones, secondary columns hide (`.hide-sm`, `.hide-md`) and fold into the primary cell's sub-line (`.show-sm`).
+  - The primary cell's `.row-link` makes the whole row clickable.
+- **Page anatomy:** breadcrumbs (desktop), then the event header (inside an event), then `PageHeader` with the title, a one-line summary, one primary button and a ⋯ menu. Content follows; `.split` makes two columns on wide screens.
+- **Feedback:** skeletons shaped like the content, `LoadError` with Try again, toasts (with Undo where reversible) and `ActionButton` busy states.

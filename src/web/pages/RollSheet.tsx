@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { BackLink, Loading, LoadError, PageHeader, SkeletonList } from '../components/ui';
-import { useTitle } from '../useTitle';
+import { useTitle } from '../shell';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import type { Registration } from './Roster';

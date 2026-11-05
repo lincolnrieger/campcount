@@ -7,7 +7,7 @@ import { canScan, isOnNow, rememberScanEvent, useLastScan, useScanEvent, useScan
 import type { EventSummary } from '../types';
 import { useApi } from '../useApi';
 import { dayLabel, eventDays, todayInZone } from '../../shared/time';
-import { useTitle } from '../useTitle';
+import { useTitle } from '../shell';
 
 /** The Scan tab: pick an event (if more than one), then what to scan. */
 export function ScanHub() {

@@ -86,16 +86,30 @@ export function ActionButton({
 }
 
 /**
- * The heading row at the top of a page or tab: title on the left, the one
- * primary action (and an optional ⋯ menu) on the right.
+ * The heading row of a page or section: title and summary on the left, the
+ * one primary action (and an optional ⋯ menu) on the right. `titleOn:
+ * 'desktop'` hides the title visually on phones, where the tab row above
+ * already names the page (screen readers still get it).
  */
-export function PageHeader({ title, level = 2, sub, actions }: { title: ReactNode; level?: 1 | 2; sub?: ReactNode; actions?: ReactNode }) {
+export function PageHeader({
+  title,
+  level = 2,
+  sub,
+  actions,
+  titleOn = 'always',
+}: {
+  title: string;
+  level?: 1 | 2;
+  sub?: ReactNode;
+  actions?: ReactNode;
+  titleOn?: 'always' | 'desktop';
+}) {
   const H = level === 1 ? 'h1' : 'h2';
   return (
     <div className="page-head">
       <div className="page-head-text">
-        <H className="page-title">{title}</H>
-        {sub && <p className="lede flush">{sub}</p>}
+        <H className={titleOn === 'desktop' ? 'page-title title-desktop' : 'page-title'}>{title}</H>
+        {sub && <p className="lede">{sub}</p>}
       </div>
       {actions && <div className="page-actions">{actions}</div>}
     </div>
@@ -200,6 +214,36 @@ export function SkeletonList({ rows = 5, lines = 2, aside = 'chevron', heading =
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/** A data table's shape: a header row and ruled rows. */
+export function SkeletonTable({ rows = 5, cols = 3 }: { rows?: number; cols?: number }) {
+  return (
+    <div className="table-wrap" aria-hidden="true">
+      <table className="table">
+        <thead>
+          <tr>
+            {Array.from({ length: cols }, (_, i) => (
+              <th key={i} className={i > 1 ? 'hide-sm' : undefined}>
+                <Skeleton width={i === 0 ? '5rem' : '3.5rem'} height="0.75rem" />
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {Array.from({ length: rows }, (_, r) => (
+            <tr key={r}>
+              {Array.from({ length: cols }, (_, i) => (
+                <td key={i} className={i > 1 ? 'hide-sm' : undefined}>
+                  <Skeleton width={i === 0 ? (r % 2 ? '60%' : '75%') : '50%'} height="0.875rem" />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

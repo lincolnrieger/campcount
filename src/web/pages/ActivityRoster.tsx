@@ -6,7 +6,7 @@ import { Menu } from '../components/Menu';
 import { useToast } from '../components/Toast';
 import { BackLink, Loading, LoadError, Notice, Skeleton, SkeletonHeading, SkeletonList, SkeletonTiles } from '../components/ui';
 import { deleteContext } from '../confirmDelete';
-import { useTitle } from '../useTitle';
+import { useTitle } from '../shell';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import { matchesSearch, searchRank } from '../../shared/search';
@@ -186,6 +186,12 @@ export function ActivityRoster() {
       <BackLink to=".." label="Activities" />
       <div className="title-row">
         <h2 className="person-name">{a.name}</h2>
+        <div className="page-actions">
+        {data.canCheckIn && (
+          <Link to={`/events/${event.id}/scan/activity/${a.id}`} className="btn hide-sm">
+            <Icon name="scan" size={18} /> Open scanner
+          </Link>
+        )}
         {manage && (
           <Menu
             label={`More actions for ${a.name}`}
@@ -205,6 +211,7 @@ export function ActivityRoster() {
             ]}
           />
         )}
+        </div>
       </div>
       {a.status === 'cancelled' && <Notice tone="warn">This activity is cancelled. It doesn't show on scanners or the sign-up screen.</Notice>}
       <p className="lede flush">
@@ -233,7 +240,7 @@ export function ActivityRoster() {
       </div>
 
       {data.canCheckIn && (
-        <Link to={`/events/${event.id}/scan/activity/${a.id}`} className="scan-cta">
+        <Link to={`/events/${event.id}/scan/activity/${a.id}`} className="scan-cta show-sm">
           <Icon name="scan" size={26} />
           <span>
             <strong>Open scanner</strong>
@@ -245,22 +252,31 @@ export function ActivityRoster() {
 
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
 
-      <div className="segmented segmented-3" role="group" aria-label="Show">
-        {(
-          [
-            ['booked', `Booked ${booked.length}`],
-            ['here', `${a.trackSignOut ? 'Here' : 'Checked in'} ${a.trackSignOut ? data.presentNow : data.people.filter((p) => p.visits > 0).length}`],
-            ['all', `Everyone ${data.people.length}`],
-          ] as const
-        ).map(([k, label]) => (
-          <button key={k} type="button" aria-pressed={show === k} onClick={() => setShow(k)}>
-            {label}
-          </button>
-        ))}
+      <div className="toolbar">
+        <input
+          className="input input-search toolbar-search"
+          type="search"
+          aria-label="Search this list"
+          placeholder="Search names"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        <div className="segmented" role="group" aria-label="Show">
+          {(
+            [
+              ['booked', `Booked ${booked.length}`],
+              ['here', `${a.trackSignOut ? 'Here' : 'Checked in'} ${a.trackSignOut ? data.presentNow : data.people.filter((p) => p.visits > 0).length}`],
+              ['all', `Everyone ${data.people.length}`],
+            ] as const
+          ).map(([k, label]) => (
+            <button key={k} type="button" aria-pressed={show === k} onClick={() => setShow(k)}>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
-      <input className="input section-gap-sm" type="search" aria-label="Search this list" placeholder="Search names, even one letter" value={q} onChange={(e) => setQ(e.target.value)} />
 
-      <ul className="list section-gap-sm">
+      <ul className="list">
         {list.map((p) => (
           <li key={p.id} className="list-row roster-person">
             <span className="list-main">

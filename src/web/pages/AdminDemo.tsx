@@ -6,7 +6,7 @@ import { Menu } from '../components/Menu';
 import { Icon } from '../components/Icon';
 import { ViewAsSheet } from '../components/ViewAs';
 import { useApi } from '../useApi';
-import { useTitle } from '../useTitle';
+import { useTitle } from '../shell';
 
 interface DemoEvent {
   id: string;
@@ -40,8 +40,8 @@ export function AdminDemo() {
 
   return (
     <>
-      <PageHeader
-        title={<span className="visually-hidden">Demo camps</span>}
+      <PageHeader level={1}
+        title="Demo camps" titleOn="desktop"
         sub="A practice camp filled with made-up people. Use View as to try each role. No real member data is used."
       />
       {message && <Notice tone={message.tone}>{message.text}</Notice>}

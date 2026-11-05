@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiFailure, api } from '../api';
-import { Field, Loading, LoadError, Notice, PageHeader, SkeletonList } from '../components/ui';
+import { Field, Loading, LoadError, Notice, PageHeader, Skeleton, SkeletonTable } from '../components/ui';
 import { Menu } from '../components/Menu';
 import { useToast } from '../components/Toast';
-import { useTitle } from '../useTitle';
+import { useTitle } from '../shell';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import { deleteContext } from '../confirmDelete';
@@ -59,8 +59,11 @@ export function Meals() {
   if (loading && !data)
     return (
       <Loading label="Loading meals">
-        <SkeletonList rows={3} aside="chevron" heading />
-        <SkeletonList rows={3} aside="chevron" heading />
+        <div className="skeleton-actions">
+          <Skeleton width="6rem" height="1rem" />
+          <Skeleton width="7rem" height="var(--control)" radius="var(--radius-control)" />
+        </div>
+        <SkeletonTable rows={6} cols={3} />
       </Loading>
     );
   if (error) return <LoadError error={error} onRetry={reload} />;
@@ -78,7 +81,7 @@ export function Meals() {
   return (
     <>
       <PageHeader
-        title={<span className="visually-hidden">Meals</span>}
+        title="Meals" titleOn="desktop"
         sub={meals.length > 0 && `${meals.filter((m) => m.status === 'active').length} meals`}
         actions={
           manage &&
@@ -114,69 +117,97 @@ export function Meals() {
           )}
         </div>
       ) : (
-        groups.map((g) => (
-          <section key={g.day ?? 'none'} className="list-section">
-            <h2 className="list-heading">{g.day ? dayLabel(g.day, 'long') : 'No day set'}</h2>
-            <ul className="list">
-              {g.meals.map((m) =>
-                editing === m.id ? (
-                  <li key={m.id}>
-                    <EditMeal
-                      meal={m}
-                      day={mealDay(m)}
-                      onCancel={() => setEditing(null)}
-                      onSave={async (body) => {
-                        if (await patch(m.id, body)) {
-                          setEditing(null);
-                          toast('Changes saved.');
-                        }
-                      }}
-                    />
-                  </li>
-                ) : (
-                  <li key={m.id} className={m.status === 'cancelled' ? 'list-row is-muted' : 'list-row'}>
-                    <span className="list-main">
-                      <strong>{m.name}</strong>
-                      <span>{m.startsAt ? timeInZone(m.startsAt, tz) : mealDay(m) ? 'No time set' : 'Pick a day so scanners can find it'}</span>
-                    </span>
-                    {m.status === 'cancelled' && <span className="tag">Cancelled</span>}
-                    {manage && (
-                      <Menu
-                        label={`More actions for ${m.name}`}
-                        items={[
-                          { label: 'Edit meal', onSelect: () => setEditing(m.id) },
-                          m.status === 'active'
-                            ? {
-                                label: 'Cancel meal',
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th scope="col" className="nowrap">
+                  Time
+                </th>
+                <th scope="col">Meal</th>
+                <th scope="col" className="hide-sm">
+                  Status
+                </th>
+                {manage && (
+                  <th scope="col" className="col-actions">
+                    <span className="visually-hidden">Actions</span>
+                  </th>
+                )}
+              </tr>
+            </thead>
+            {groups.map((g) => (
+              <tbody key={g.day ?? 'none'}>
+                <tr className="group-row">
+                  <th scope="colgroup" colSpan={manage ? 4 : 3}>
+                    {g.day ? dayLabel(g.day, 'long') : 'No day set'}
+                  </th>
+                </tr>
+                {g.meals.map((m) =>
+                  editing === m.id ? (
+                    <tr key={m.id}>
+                      <td colSpan={manage ? 4 : 3}>
+                        <EditMeal
+                          meal={m}
+                          day={mealDay(m)}
+                          onCancel={() => setEditing(null)}
+                          onSave={async (body) => {
+                            if (await patch(m.id, body)) {
+                              setEditing(null);
+                              toast('Changes saved.');
+                            }
+                          }}
+                        />
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr key={m.id} className={m.status === 'cancelled' ? 'is-muted' : undefined}>
+                      <td className="nowrap meta">{m.startsAt ? timeInZone(m.startsAt, tz) : '—'}</td>
+                      <td>
+                        <strong>{m.name}</strong> {m.status === 'cancelled' && <span className="tag show-sm-inline">Cancelled</span>}
+                        {!m.startsAt && !mealDay(m) && <span className="cell-sub">Pick a day so scanners can find it</span>}
+                      </td>
+                      <td className="hide-sm">{m.status === 'cancelled' ? <span className="tag">Cancelled</span> : <span className="status status-open">Scheduled</span>}</td>
+                      {manage && (
+                        <td className="col-actions">
+                          <Menu
+                            quiet
+                            label={`More actions for ${m.name}`}
+                            items={[
+                              { label: 'Edit meal', onSelect: () => setEditing(m.id) },
+                              m.status === 'active'
+                                ? {
+                                    label: 'Cancel meal',
+                                    onSelect: async () => {
+                                      if (await patch(m.id, { status: 'cancelled' }))
+                                        toast(`${m.name} cancelled. Scanners no longer show it.`, { undo: () => patch(m.id, { status: 'active' }) });
+                                    },
+                                  }
+                                : { label: 'Restore meal', onSelect: async () => void ((await patch(m.id, { status: 'active' })) && toast(`${m.name} restored.`)) },
+                              {
+                                label: 'Delete meal…',
+                                danger: true,
                                 onSelect: async () => {
-                                  if (await patch(m.id, { status: 'cancelled' }))
-                                    toast(`${m.name} cancelled. Scanners no longer show it.`, { undo: () => patch(m.id, { status: 'active' }) });
+                                  try {
+                                    if (await deleteContext(event.id, 'meals', m.id, m.name)) {
+                                      toast(`Deleted ${m.name}.`);
+                                      await reload();
+                                    }
+                                  } catch (err) {
+                                    setFailure(err instanceof ApiFailure ? err.message : 'Something went wrong.');
+                                  }
                                 },
-                              }
-                            : { label: 'Restore meal', onSelect: async () => void ((await patch(m.id, { status: 'active' })) && toast(`${m.name} restored.`)) },
-                          {
-                            label: 'Delete meal…',
-                            danger: true,
-                            onSelect: async () => {
-                              try {
-                                if (await deleteContext(event.id, 'meals', m.id, m.name)) {
-                                  toast(`Deleted ${m.name}.`);
-                                  await reload();
-                                }
-                              } catch (err) {
-                                setFailure(err instanceof ApiFailure ? err.message : 'Something went wrong.');
-                              }
-                            },
-                          },
-                        ]}
-                      />
-                    )}
-                  </li>
-                ),
-              )}
-            </ul>
-          </section>
-        ))
+                              },
+                            ]}
+                          />
+                        </td>
+                      )}
+                    </tr>
+                  ),
+                )}
+              </tbody>
+            ))}
+          </table>
+        </div>
       )}
     </>
   );

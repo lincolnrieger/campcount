@@ -4,8 +4,8 @@ import { Icon } from '../components/Icon';
 import { matchesSearch, searchRank } from '../../shared/search';
 import { timeInZone } from '../../shared/time';
 import type { Where } from './Person';
-import { Loading, LoadError, Notice, Skeleton, SkeletonList, SkeletonTiles } from '../components/ui';
-import { useTitle } from '../useTitle';
+import { Loading, LoadError, Notice, PageHeader, Skeleton, SkeletonList, SkeletonTiles } from '../components/ui';
+import { useTitle } from '../shell';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 
@@ -161,9 +161,7 @@ export function Live() {
 
   return (
     <div className="board">
-      <p className="field-hint">
-        Updated {at}. Phones without signal upload when they reconnect.
-      </p>
+      <PageHeader title="Live" titleOn="desktop" sub={`Updated ${at}. Phones without signal upload when they reconnect.`} />
       {data.openItems > 0 && (
         <Notice tone="warn">
           <p>
@@ -189,13 +187,21 @@ export function Live() {
         </div>
       )}
 
-      <section className="list-section">
-        <div className="segmented segmented-3" role="group" aria-label="Group people by">
+      <div className="toolbar">
+        <input
+          className="input input-search toolbar-search"
+          type="search"
+          aria-label="Search people"
+          placeholder="Search names or groups"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        <div className="segmented" role="group" aria-label="Group people by">
           {(
             [
-              ['where', 'Where'],
-              ['group', 'Scout group'],
-              ['section', 'Section'],
+              ['where', 'By place'],
+              ['group', 'By Scout group'],
+              ['section', 'By section'],
             ] as const
           ).map(([k, label]) => (
             <button key={k} type="button" aria-pressed={groupBy === k} onClick={() => setGroupBy(k)}>
@@ -203,18 +209,21 @@ export function Live() {
             </button>
           ))}
         </div>
-        <div className="board-search">
-          <input className="input" type="search" aria-label="Search people" placeholder="Search names or groups, even one letter" value={query} onChange={(e) => setQuery(e.target.value)} />
-          {filter.kind !== 'all' && (
-            <button className="filter-chip" onClick={() => setFilter({ kind: 'all' })}>
-              {filter.value === 'on' ? 'On site' : filter.value === 'off' ? 'Left camp' : 'Not arrived'}
-              <Icon name="close" size={14} />
-            </button>
-          )}
-        </div>
-      </section>
+        {filter.kind !== 'all' && (
+          <button className="filter-chip" onClick={() => setFilter({ kind: 'all' })}>
+            {filter.value === 'on' ? 'On site' : filter.value === 'off' ? 'Left camp' : 'Not arrived'}
+            <Icon name="close" size={14} />
+            <span className="visually-hidden">Clear filter</span>
+          </button>
+        )}
+      </div>
 
-      {groups.length === 0 && <p className="field-hint">No one matches.</p>}
+      {groups.length === 0 && (
+        <div className="empty">
+          <p className="flush">No one matches.</p>
+        </div>
+      )}
+      <div className="board-groups">
       {groups.map((g) => {
         const closed = collapsed.has(g.key) && !query;
         return (
@@ -265,9 +274,10 @@ export function Live() {
           </section>
         );
       })}
+      </div>
 
       {meals.length > 0 && (
-        <section className="list-section">
+        <section className="list-section section-gap">
           <h2 className="list-heading">Meals</h2>
           <ul className="stat-rows">
             {meals.map((m) => (

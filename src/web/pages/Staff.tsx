@@ -3,7 +3,7 @@ import type { FormEvent } from 'react';
 import { ApiFailure, api } from '../api';
 import { ActionButton, Field, Loading, LoadError, Notice, PageHeader, SkeletonList } from '../components/ui';
 import { useToast } from '../components/Toast';
-import { useTitle } from '../useTitle';
+import { useTitle } from '../shell';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import { matchesSearch, searchRank } from '../../shared/search';
@@ -128,7 +128,7 @@ export function Staff() {
   return (
     <>
       <PageHeader
-        title={<span className="visually-hidden">Staff</span>}
+        title="Staff" titleOn="desktop"
         sub={staff.data && staff.data.staff.length > 0 && `${staff.data.staff.length} on this event`}
         actions={
           !adding && (
@@ -159,8 +159,8 @@ export function Staff() {
         </div>
       )}
       {staff.data && staff.data.staff.length > 0 && (
-        <div className="sheet-wrap">
-          <table className="sheet sheet-stack">
+        <div className="table-wrap">
+          <table className="table table-stack">
             <thead>
               <tr>
                 <th scope="col">Name</th>
@@ -202,7 +202,7 @@ export function Staff() {
                       ))}
                     </select>
                   </td>
-                  <td className="num">
+                  <td className="col-actions">
                     <ActionButton className="btn-link text-stop" busyLabel="Removing…" onAction={() => remove(row)}>
                       Remove<span className="visually-hidden"> {row.user.displayName}</span>
                     </ActionButton>

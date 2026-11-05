@@ -1,5 +1,5 @@
 import { Link, useParams } from 'react-router';
-import { useTitle } from '../useTitle';
+import { useTitle } from '../shell';
 
 /** A wrong address: say so plainly and offer the ways back. */
 export function NotFound({ inEvent = false }: { inEvent?: boolean }) {

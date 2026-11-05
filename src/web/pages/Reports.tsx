@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { ApiFailure, api } from '../api';
-import { ActionButton, Loading, LoadError, Notice, SkeletonList } from '../components/ui';
+import { ActionButton, Loading, LoadError, Notice, PageHeader, SkeletonList } from '../components/ui';
+import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toast';
-import { useTitle } from '../useTitle';
+import { useTitle } from '../shell';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import { minutesAgo } from './Live';
@@ -31,16 +32,35 @@ export function Exports() {
   return (
     <section aria-labelledby="exports-heading" className="section-gap">
       <h2 id="exports-heading">Downloads</h2>
-      <p className="field-hint narrow">CSV files that open in Excel. Every download is recorded. Store them securely and delete them when no longer needed.</p>
-      <ul className="launch">
-        {data.exports.map((e) => (
-          <li key={e.key}>
-            <a href={`/api/events/${event.id}/exports/${e.key}.csv`} download>
-              {e.label} <span>CSV</span>
-            </a>
-          </li>
-        ))}
-      </ul>
+      <p className="field-hint">Every download is recorded in the activity log. Store files securely and delete them when no longer needed.</p>
+      <div className="table-wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th scope="col">Report</th>
+              <th scope="col" className="hide-sm">
+                Format
+              </th>
+              <th scope="col" className="col-actions">
+                <span className="visually-hidden">Download</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.exports.map((e) => (
+              <tr key={e.key}>
+                <td>{e.label.replace(/ CSV$/, '')}</td>
+                <td className="hide-sm meta">CSV (opens in Excel)</td>
+                <td className="col-actions">
+                  <a className="btn btn-secondary btn-small" href={`/api/events/${event.id}/exports/${e.key}.csv`} download>
+                    <Icon name="download" size={16} /> Download<span className="visually-hidden"> {e.label}</span>
+                  </a>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
@@ -82,6 +102,7 @@ export function Reports() {
   return (
     <>
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
+      <PageHeader title="Reports" titleOn="desktop" />
       <h2>Before you close</h2>
       <p className="narrow field-hint">
         Check every phone has uploaded, then sort out the records below. Scan records are not proof of where someone is and don't replace a

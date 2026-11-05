@@ -7,7 +7,7 @@ import { useToast } from '../components/Toast';
 import type { Card, CardSize } from '../lanyards/pdf';
 import { CARD_SIZES, buildLanyardPdf, downloadPdf } from '../lanyards/pdf';
 import { useEvent } from './EventLayout';
-import { useTitle } from '../useTitle';
+import { useTitle } from '../shell';
 
 /** People › Lanyards: issue cards and print them. */
 export function Lanyards() {

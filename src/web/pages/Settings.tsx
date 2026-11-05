@@ -2,13 +2,13 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Navigate, NavLink, Outlet, useLocation } from 'react-router';
 import { ApiFailure, api } from '../api';
-import { ActionButton, Field, Notice } from '../components/ui';
+import { ActionButton, EventStatusBadge, Field, Notice } from '../components/ui';
 import { useToast } from '../components/Toast';
 import type { EventFeatures, EventStatus } from '../../shared/schemas';
 import { EVENT_TRANSITIONS } from '../../shared/lifecycle';
 import { FeatureChecklist } from './Events';
 import { useEvent } from './EventLayout';
-import { useTitle } from '../useTitle';
+import { useTitle } from '../shell';
 
 /** Settings: the event itself, its staff and its stations, each shown only to roles that can change it. */
 export function SettingsLayout() {
@@ -25,7 +25,7 @@ export function SettingsLayout() {
   return (
     <>
       {tabs.length > 1 && (
-        <nav className="pillnav" aria-label="Settings">
+        <nav className="subnav" aria-label="Settings sections">
           {tabs.map((t) => (
             <NavLink key={t.to} to={t.to} end>
               {t.label}
@@ -135,33 +135,46 @@ export function EventSettings() {
   }
 
   return (
-    <div className="narrow">
+    <div className="settings">
       {!editable && <Notice title={`This event is ${event.status}`}>Settings are locked. Reopen the event to change them.</Notice>}
       <form onSubmit={save} noValidate>
-        <h2 className="visually-hidden">Event details</h2>
         {failure && <Notice tone="stop">{failure}</Notice>}
-        <fieldset className="fieldset-plain" disabled={!editable || busy}>
-          <Field id="ev-name" label="Event name" error={errors.name}>
-            <input id="ev-name" className="input" value={form.name} onChange={set('name')} />
-          </Field>
-          <Field id="ev-location" label="Location" error={errors.location}>
-            <input id="ev-location" className="input" value={form.location} onChange={set('location')} />
-          </Field>
-          <div className="row">
-            <Field id="ev-start" label="First day" error={errors.startsOn}>
-              <input id="ev-start" className="input" type="date" value={form.startsOn} onChange={set('startsOn')} />
+        <section className="settings-section" aria-labelledby="details-heading">
+          <header>
+            <h2 id="details-heading">Event details</h2>
+            <p>Shown to staff on the event's pages and on lanyards.</p>
+          </header>
+          <fieldset className="fieldset-plain settings-body" disabled={!editable || busy}>
+            <Field id="ev-name" label="Event name" error={errors.name}>
+              <input id="ev-name" className="input" value={form.name} onChange={set('name')} />
             </Field>
-            <Field id="ev-end" label="Last day" error={errors.endsOn}>
-              <input id="ev-end" className="input" type="date" value={form.endsOn} onChange={set('endsOn')} />
+            <Field id="ev-location" label="Location" error={errors.location}>
+              <input id="ev-location" className="input" value={form.location} onChange={set('location')} />
             </Field>
-          </div>
-          <Field id="ev-notes" label="Notes for staff" hint="Shown on the event's Overview to everyone assigned." error={errors.description}>
-            <textarea id="ev-notes" className="input" rows={3} value={form.description} onChange={set('description')} />
-          </Field>
-          <FeatureChecklist value={features} onChange={setFeatures} />
-        </fieldset>
+            <div className="row">
+              <Field id="ev-start" label="First day" error={errors.startsOn}>
+                <input id="ev-start" className="input" type="date" value={form.startsOn} onChange={set('startsOn')} />
+              </Field>
+              <Field id="ev-end" label="Last day" error={errors.endsOn}>
+                <input id="ev-end" className="input" type="date" value={form.endsOn} onChange={set('endsOn')} />
+              </Field>
+            </div>
+            <Field id="ev-notes" label="Notes for staff" hint="Shown on the event's Overview to everyone assigned." error={errors.description}>
+              <textarea id="ev-notes" className="input" rows={3} value={form.description} onChange={set('description')} />
+            </Field>
+          </fieldset>
+        </section>
+        <section className="settings-section" aria-labelledby="features-heading">
+          <header>
+            <h2 id="features-heading">Features</h2>
+            <p>Switch on only what this event uses. Scanners and tabs follow these settings.</p>
+          </header>
+          <fieldset className="fieldset-plain settings-body" disabled={!editable || busy}>
+            <FeatureChecklist value={features} onChange={setFeatures} hideLegend />
+          </fieldset>
+        </section>
         {editable && (
-          <div className="actions">
+          <div className="actions sticky-actions settings-save">
             <button className="btn" disabled={!dirty || busy}>
               {busy ? 'Saving…' : 'Save changes'}
             </button>
@@ -179,14 +192,16 @@ export function EventSettings() {
                 Discard changes
               </button>
             )}
+            {dirty && <span className="field-hint">You have unsaved changes.</span>}
           </div>
         )}
       </form>
 
       {(can('event.configure') || can('event.close')) && EVENT_TRANSITIONS[event.status].some((s) => s !== 'archived') && (
-        <section aria-labelledby="status-heading" className="section-gap danger-zone">
-          <h2 id="status-heading">Event status</h2>
-          <p className="field-hint">
+        <section aria-labelledby="status-heading" className="settings-section">
+          <header>
+            <h2 id="status-heading">Event status</h2>
+            <p>
             {event.status === 'draft'
               ? 'Nobody can scan until the event is open.'
               : event.status === 'open'
@@ -194,8 +209,14 @@ export function EventSettings() {
                 : event.status === 'completed'
                   ? 'Reopen the event to make late corrections.'
                   : 'A cancelled event can go back to draft.'}
-          </p>
-          <StatusActions />
+            </p>
+          </header>
+          <div className="settings-body">
+            <p className="flush">
+              This event is <EventStatusBadge status={event.status} />
+            </p>
+            <StatusActions />
+          </div>
         </section>
       )}
     </div>
