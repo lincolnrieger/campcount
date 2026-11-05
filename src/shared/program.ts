@@ -6,13 +6,14 @@ import { dayLabel, weekdayName } from './time';
 
 export const PROGRAM_FIELDS = {
   name: { label: 'Name', required: true, aliases: ['name', 'activity', 'session', 'title', 'event', 'what', 'program', 'programme', 'item'] },
-  type: { label: 'Activity or meal', required: false, aliases: ['type', 'kind', 'category'] },
+  type: { label: 'Type (activity, meal or programme)', required: false, aliases: ['type', 'kind', 'category'] },
   day: { label: 'Day or date', required: false, aliases: ['day', 'date', 'when'] },
   start: { label: 'Start time', required: false, aliases: ['start', 'start time', 'starts', 'from', 'begins', 'time'] },
   end: { label: 'End time', required: false, aliases: ['end', 'end time', 'ends', 'finish', 'finishes', 'to', 'until'] },
   duration: { label: 'Length (minutes)', required: false, aliases: ['duration', 'length', 'mins', 'minutes'] },
   location: { label: 'Place', required: false, aliases: ['location', 'place', 'venue', 'where', 'area', 'site'] },
   capacity: { label: 'Places (capacity)', required: false, aliases: ['capacity', 'max', 'places', 'limit', 'spots', 'max people'] },
+  booking: { label: 'Booking required', required: false, aliases: ['booking', 'booking required', 'rego', 'registration', 'register', 'book'] },
   description: { label: 'Description', required: false, aliases: ['description', 'details', 'notes', 'info'] },
   instructions: { label: 'Instructions for leaders', required: false, aliases: ['instructions', 'leader notes', 'leader instructions', 'staff notes'] },
 } as const;
@@ -112,6 +113,16 @@ export function parseTime(value: string): string | null {
 
 const MEAL_NAME = /^(breakfast|brekkie|brunch|lunch|dinner|tea|morning tea|afternoon tea|supper|smoko|bbq dinner|bbq lunch)\b/i;
 
+/** A programme item (Welcome, Movies…): on the schedule, never booked or scanned. */
+export function isProgramType(type: string): boolean {
+  return /program|schedule|info|general|event/.test(type.trim().toLowerCase());
+}
+
+/** "Yes", "Required", "Rego", "Y", "true", "x" mean booking is needed. */
+export function needsBooking(value: string): boolean {
+  return /^(y|yes|true|x|1|required|rego|registration|book|booking|needed|must book)/.test(value.trim().toLowerCase());
+}
+
 /** Is this row a meal? Uses the type column when there is one, otherwise the name. */
 export function isMealRow(type: string, name: string): boolean {
   const t = type.trim().toLowerCase();
@@ -122,7 +133,8 @@ export function isMealRow(type: string, name: string): boolean {
 export interface ProgramRow {
   /** Line in the file (the header is line 1). */
   line: number;
-  kind: 'activity' | 'meal';
+  kind: 'activity' | 'meal' | 'program';
+  bookingRequired: boolean;
   name: string;
   day: string | null;
   start: string | null;
@@ -182,10 +194,13 @@ export function prepareProgram(rows: string[][], mapping: ProgramMapping, days: 
       const cap = Number.parseInt(capText, 10);
       const capacity = capText && Number.isFinite(cap) && cap > 0 ? Math.min(cap, 10000) : null;
       if (capText && capacity === null) notes.push(`Places "${capText}" ignored`);
-      const kind = isMealRow(get(r, 'type'), name) && (mapping.type !== undefined || opts.mealsByName) ? 'meal' : 'activity';
+      const type = get(r, 'type');
+      const kind: ProgramRow['kind'] = isProgramType(type) ? 'program' : isMealRow(type, name) && (mapping.type !== undefined || opts.mealsByName) ? 'meal' : 'activity';
+      const bookingRequired = kind === 'activity' && needsBooking(get(r, 'booking'));
       return {
         line,
         kind,
+        bookingRequired,
         name,
         day,
         start,

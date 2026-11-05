@@ -21,6 +21,17 @@ export interface SignupView {
   open: boolean;
   sessions: SignupSession[];
   bookings: { activityId: string; name: string; location: string; startsAt: string | null; endsAt: string | null; canCancel: boolean }[];
+  /** The whole camp programme (activities, meals and programme items). */
+  programme?: ProgrammeItem[];
+}
+
+export interface ProgrammeItem {
+  name: string;
+  location: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  kind: 'activity' | 'meal' | 'program';
+  bookingRequired: boolean;
 }
 
 export function placesLeft(s: SignupSession): string {

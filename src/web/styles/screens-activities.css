@@ -317,3 +317,8 @@
     break-inside: avoid;
   }
 }
+.schedule-program,
+.schedule-swatch.schedule-program {
+  border-color: var(--border-control);
+  background: var(--surface-sunken);
+}

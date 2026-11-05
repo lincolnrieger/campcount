@@ -16,6 +16,8 @@ export interface Activity {
   bookingRequired: boolean;
   signupOpen: boolean;
   booked: number;
+  /** 'program': on the schedule only, never booked or scanned. */
+  kind: 'activity' | 'program';
   status: 'active' | 'cancelled';
 }
 

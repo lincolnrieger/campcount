@@ -15,11 +15,12 @@ const STEPS: Step[] = ['file', 'map', 'check', 'done'];
 const STEP_LABEL: Record<Step, string> = { file: 'Choose file', map: 'Match columns', check: 'Check', done: 'Done' };
 
 const TEMPLATE = [
-  'Name,Type,Day,Start,End,Place,Places,Description',
-  'Kayaking,Activity,Saturday,9:00,10:30,Lake,12,Bring a change of clothes',
-  'Archery,Activity,Saturday,9:00,10:30,Range,10,',
-  'Saturday lunch,Meal,Saturday,12:00,13:00,Hall,,',
-  'Campfire,Activity,Saturday,19:30,21:00,Fire circle,,',
+  'Name,Type,Day,Start,End,Place,Places,Booking,Description',
+  'Welcome,Programme,Saturday,8:30,9:00,Main arena,,,',
+  'Kayaking,Activity,Saturday,9:00,10:30,Lake,12,Required,Bring a change of clothes',
+  'Archery,Activity,Saturday,9:00,10:30,Range,10,,',
+  'Saturday lunch,Meal,Saturday,12:00,13:00,Hall,,,',
+  'Campfire,Programme,Saturday,19:30,21:00,Fire circle,,,',
 ].join('\n');
 
 /**
@@ -90,8 +91,12 @@ export function ProgramImport() {
     setError(null);
     try {
       const activities = toSend
-        .filter((r) => r.kind === 'activity')
+        .filter((r) => r.kind !== 'meal')
         .map((r) => ({
+          kind: r.kind === 'program' ? ('program' as const) : ('activity' as const),
+          // Booking-required sessions can be booked by people themselves (lanyard page and sign-up screen).
+          bookingRequired: r.bookingRequired,
+          signupOpen: r.bookingRequired,
           name: r.name,
           location: r.location,
           description: r.description,
@@ -154,8 +159,9 @@ export function ProgramImport() {
           <Section title="Choose file" id="file">
             <div className="prose">
               <p>
-                Use any spreadsheet with one row per session: at least a name, and ideally a day, start and end time and place. Meals can go in the same file.
-                Repeat a row for each session of the same activity.
+                Use any spreadsheet with one row per session: at least a name, and ideally a day, start and end time and place. Meals and programme items
+                (Welcome, Movies, Depart) can go in the same file: set Type to Meal or Programme. Put Required in the Booking column for activities people must
+                book. Repeat a row for each session of the same activity.
               </p>
               <p className="meta">
                 Days can be dates (5/12/2026), weekdays (Saturday) or "Day 1". Times can be 9:00, 9am or 14:30.{' '}
@@ -253,7 +259,7 @@ export function ProgramImport() {
         {step === 'check' && (
           <Section title="Check" id="check">
             <div className="tiles">
-              <CountTile value={toSend.filter((r) => r.kind === 'activity').length} label="Activities to add" tone="success" />
+              <CountTile value={toSend.filter((r) => r.kind !== 'meal').length} label="Activities and programme" tone="success" />
               <CountTile value={toSend.filter((r) => r.kind === 'meal').length} label="Meals to add" tone="info" />
               <CountTile value={problems.length} label="Rows with problems" tone={problems.length ? 'warning' : 'neutral'} />
             </div>
@@ -296,10 +302,16 @@ export function ProgramImport() {
                         <td className="num">{r.line}</td>
                         <td>
                           <strong>{r.name || '(no name)'}</strong>
-                          {r.kind === 'meal' && (
+                          {r.kind !== 'activity' && (
                             <>
                               {' '}
-                              <Badge tone="info">Meal</Badge>
+                              <Badge tone={r.kind === 'meal' ? 'info' : 'neutral'}>{r.kind === 'meal' ? 'Meal' : 'Programme'}</Badge>
+                            </>
+                          )}
+                          {r.bookingRequired && (
+                            <>
+                              {' '}
+                              <Badge tone="brand">Booking required</Badge>
                             </>
                           )}
                         </td>

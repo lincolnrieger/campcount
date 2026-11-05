@@ -205,6 +205,8 @@ const activityFields = {
   bookingRequired: z.boolean(),
   /** People can book this session themselves at the sign-up screen. */
   signupOpen: z.boolean(),
+  /** 'program': on the schedule only (Welcome, Movies…), never booked or scanned. */
+  kind: z.enum(['activity', 'program']),
 };
 
 export const activityInputSchema = z.strictObject({
@@ -220,6 +222,7 @@ export const activityInputSchema = z.strictObject({
   allowRepeat: activityFields.allowRepeat.default(true),
   bookingRequired: activityFields.bookingRequired.default(false),
   signupOpen: activityFields.signupOpen.default(false),
+  kind: activityFields.kind.default('activity'),
 });
 export const activityPatchSchema = z.strictObject(activityFields).partial().extend({ status: z.enum(['active', 'cancelled']).optional() });
 

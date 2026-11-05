@@ -95,7 +95,7 @@ export function buildTargets(event: EventSummary, meals: Meal[], activities: Act
     }
   }
   if (event.features.activities && can('activity.scan')) {
-    for (const a of activities.filter((a) => a.status === 'active')) {
+    for (const a of activities.filter((a) => a.status === 'active' && a.kind !== 'program')) {
       targets.push({
         key: `activity:${a.id}`,
         to: `${base}/activity/${a.id}`,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { autoMapProgram, isMealRow, parseDay, parseTime, prepareProgram } from '../src/shared/program';
+import { autoMapProgram, isMealRow, needsBooking, parseDay, parseTime, prepareProgram } from '../src/shared/program';
 
 // A Saturday-to-Monday camp.
 const DAYS = ['2026-12-05', '2026-12-06', '2026-12-07'];
@@ -77,4 +77,23 @@ describe('reading a programme', () => {
     expect(out[4]!.errors[0]).toMatch(/Friday/);
     expect(out[5]!.errors).toContain('Ends before it starts');
   });
+
+  it('reads programme items and booking-required activities', () => {
+    const rows = [
+      ['Welcome', 'Programme', 'Sat', '8:30am', '', ''],
+      ['Cycling', 'Activity', 'Sat', '9am', '12pm', 'Required'],
+      ['Climbing', 'Activity', '', '', '', ''],
+      ['Dinner', 'Meal', 'Sat', '7pm', '8:30pm', 'Yes'],
+    ];
+    const out = prepareProgram(rows, autoMapProgram(['Name', 'Type', 'Day', 'Start', 'End', 'Booking']), DAYS, { mealsByName: true });
+    expect(out.map((r) => [r.kind, r.bookingRequired])).toEqual([
+      ['program', false],
+      ['activity', true],
+      ['activity', false],
+      ['meal', false],
+    ]);
+    for (const yes of ['Yes', 'Required', 'rego', 'Y', 'x']) expect(needsBooking(yes), yes).toBe(true);
+    for (const no of ['', 'No', 'Optional', 'n']) expect(needsBooking(no), no).toBe(false);
+  });
 });
+
