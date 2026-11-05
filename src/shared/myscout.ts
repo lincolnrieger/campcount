@@ -75,8 +75,19 @@ export interface PreparedRow {
   errors: string[];
 }
 
-/** Turn source rows into CampCount rows, keeping only allowlisted fields. */
-export function prepareRows(rows: string[][], mapping: ColumnMapping): PreparedRow[] {
+/** An extra column the event manager chose to keep, under its own name. */
+export interface ExtraColumn {
+  index: number;
+  label: string;
+}
+
+/** A column header as an extra field's name (trimmed to what the server accepts). */
+export function extraLabel(header: string, index: number): string {
+  return (header.trim() || `Column ${index + 1}`).replace(/\s+/g, ' ').slice(0, 40);
+}
+
+/** Turn source rows into CampCount rows, keeping only allowlisted fields plus any extra columns chosen. */
+export function prepareRows(rows: string[][], mapping: ColumnMapping, extra: ExtraColumn[] = []): PreparedRow[] {
   const get = (r: string[], f: TargetField) => (mapping[f] === undefined ? '' : (r[mapping[f]!] ?? '').trim());
   return rows.map((r, i) => {
     const errors: string[] = [];
@@ -107,6 +118,7 @@ export function prepareRows(rows: string[][], mapping: ColumnMapping): PreparedR
         team: get(r, 'team').slice(0, 60),
         sourceStatus: get(r, 'status').slice(0, 160),
         photoConsent: mapping.photo === undefined ? 'unknown' : parsePhotoConsent(get(r, 'photo')),
+        ...(extra.length ? { extra: Object.fromEntries(extra.map((c) => [c.label, (r[c.index] ?? '').trim().slice(0, 200)])) } : {}),
       },
     };
   });
@@ -127,4 +139,28 @@ export function flagDuplicates(prepared: PreparedRow[]): void {
 /** Normalise dietary text before fingerprinting so whitespace/case edits don't trigger review. */
 export function normaliseDietaryText(text: string): string {
   return text.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/**
+ * Whole notes that only say there's nothing to record. Matched against the
+ * entire note (after case, spaces and punctuation are ignored), never a part
+ * of it, so "None, but vegetarian" or "Nil except peanuts" never match and
+ * still need a person to read them. Abbreviations like NKDA (no known *drug*
+ * allergies) are deliberately not here: they say nothing about food.
+ */
+const SAYS_NOTHING = new Set([
+  'nil', 'nill', 'none', 'null', 'n/a', 'na', 'no', 'nothing', 'not applicable', '-', '--', '0',
+  'nil known', 'none known', 'nothing known', 'none listed', 'none required', 'not required',
+  'no allergies', 'no known allergies', 'no food allergies', 'no requirements', 'no dietary requirements',
+  'no dietary needs', 'no special requirements', 'no special dietary requirements', 'nil allergies',
+]);
+
+/** Does this dietary/medical note, as a whole, say there is nothing to record? */
+export function saysNothing(text: string): boolean {
+  const t = text
+    .toLowerCase()
+    .replace(/[.!,;:'"()[\]]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return t !== '' && SAYS_NOTHING.has(t);
 }

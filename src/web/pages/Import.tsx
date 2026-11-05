@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { parseDelimited } from '../../shared/csv';
 import type { ColumnMapping, PreparedRow, TargetField } from '../../shared/myscout';
-import { TARGET_FIELDS, autoMap, flagDuplicates, missingRequired, normaliseDietaryText, prepareRows } from '../../shared/myscout';
+import { TARGET_FIELDS, autoMap, extraLabel, flagDuplicates, missingRequired, normaliseDietaryText, prepareRows, saysNothing } from '../../shared/myscout';
+import { MAX_EXTRA_FIELDS } from '../../shared/schemas';
 import type { DietaryEntryInput, ImportRow } from '../../shared/schemas';
 import { ApiFailure, api } from '../api';
 import { DietaryEditor } from '../components/DietaryEditor';
@@ -63,6 +64,8 @@ export function Import() {
   const [fileName, setFileName] = useState('');
   const [table, setTable] = useState<{ headers: string[]; rows: string[][] } | null>(null);
   const [mapping, setMapping] = useState<ColumnMapping>({});
+  /** Other columns the manager chose to keep on each person's profile. */
+  const [extraCols, setExtraCols] = useState<number[]>([]);
   const [prepared, setPrepared] = useState<PreparedRow[]>([]);
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -96,6 +99,7 @@ export function Import() {
       setTable(parsed);
       setFileName(file.name);
       setMapping(autoMap(parsed.headers));
+      setExtraCols([]);
       setStep('map');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'That file could not be read.');
@@ -116,7 +120,12 @@ export function Import() {
 
   async function check() {
     if (!table) return;
-    const next = prepareRows(table.rows, mapping);
+    const used = new Set(Object.values(mapping));
+    const next = prepareRows(
+      table.rows,
+      mapping,
+      extraCols.filter((i) => !used.has(i)).map((i) => ({ index: i, label: extraLabel(table.headers[i] ?? '', i) })),
+    );
     flagDuplicates(next);
     setPrepared(next);
     setStep('check');
@@ -173,7 +182,6 @@ export function Import() {
         <LoadError error={context.error} onRetry={context.reload} what="the import" />
       </>
     );
-  const mappedCount = Object.keys(mapping).length;
   const missing = missingRequired(mapping);
 
   return (
@@ -215,8 +223,8 @@ export function Import() {
         {step === 'map' && table && (
           <Section title="Match columns" id="map">
             <p className="meta">
-              {fileName}: {plural(table.rows.length, 'person', 'people')}, {plural(table.headers.length, 'column')}. Only the {mappedCount} matched columns are
-              used; the other {table.headers.length - mappedCount} never leave this computer.
+              {fileName}: {plural(table.rows.length, 'person', 'people')}, {plural(table.headers.length, 'column')}. Only the matched columns and any others you
+              choose to keep are used; the rest never leave this computer.
             </p>
             <ul className="list">
               {(Object.keys(TARGET_FIELDS) as TargetField[]).map((field) => {
@@ -254,6 +262,7 @@ export function Import() {
                 );
               })}
             </ul>
+            <OtherColumns table={table} mapping={mapping} chosen={extraCols} onChange={setExtraCols} />
             {mapping.dietaryText !== undefined && !reviewing && (
               <Notice tone="warning">
                 <p>
@@ -360,8 +369,11 @@ export function Import() {
             <p className="prose">
               Turn each note into dietary needs. Record food needs only; other medical information stays in MyScout. The notes themselves are not saved.
             </p>
+            <NothingToRecord pending={pending} dietary={dietary} onMark={(keys) => setDietary({ ...dietary, ...Object.fromEntries(keys.map((k) => [k, []])) })} onUndo={(keys) => setDietary(Object.fromEntries(Object.entries(dietary).filter(([k]) => !keys.includes(k))))} />
             <ul className="review-list">
-              {pending.map(({ source }) => {
+              {pending
+                .filter(({ source }) => !(saysNothing(source.dietaryText) && dietary[source.row.memberNumber]?.length === 0))
+                .map(({ source }) => {
                 const key = source.row.memberNumber;
                 const decided = dietary[key];
                 return (
@@ -438,5 +450,118 @@ function Problems({ invalid }: { invalid: PreparedRow[] }) {
         Download the list of problems
       </Button>
     </Notice>
+  );
+}
+
+/** Column names that suggest contact, medical or identity details: never offered as extras. */
+const SENSITIVE = /e-?mail|phone|mobile|address|street|suburb|postcode|medic|health|allerg|condition|birth|\bdob\b|guardian|parent|carer|contact|emergency|doctor|insurance/i;
+
+/**
+ * Columns that aren't matched to anything, offered as extras to keep on each
+ * person's profile (team, patrol, bus, tent, or any MyScout custom field).
+ */
+function OtherColumns({ table, mapping, chosen, onChange }: { table: { headers: string[]; rows: string[][] }; mapping: ColumnMapping; chosen: number[]; onChange: (next: number[]) => void }) {
+  const used = new Set(Object.values(mapping));
+  const unmatched = table.headers.map((h, i) => ({ h, i })).filter(({ i }) => !used.has(i));
+  const others = unmatched.filter(({ h }) => !SENSITIVE.test(h));
+  const hidden = unmatched.length - others.length;
+  if (others.length === 0) return null;
+  const full = chosen.filter((i) => !used.has(i)).length >= MAX_EXTRA_FIELDS;
+  return (
+    <fieldset className="choices other-columns">
+      <legend className="field-label">Other columns to keep (optional)</legend>
+      <p className="field-hint">
+        Tick any column you want on each person's profile, such as a team, patrol, bus or tent, or a MyScout custom field. Up to {MAX_EXTRA_FIELDS}. Only keep what
+        staff need at camp: never medical or contact details.
+      </p>
+      <div className="other-columns-list">
+        {others.map(({ h, i }) => {
+          const sample = table.rows.find((r) => (r[i] ?? '').trim())?.[i]?.trim() ?? '';
+          const checked = chosen.includes(i);
+          return (
+            <Choice
+              key={i}
+              label={extraLabel(h, i)}
+              description={sample ? `For example: ${sample.slice(0, 60)}` : 'Empty in this file'}
+              checked={checked}
+              disabled={!checked && full}
+              onChange={(e) => onChange(e.target.checked ? [...chosen, i] : chosen.filter((x) => x !== i))}
+            />
+          );
+        })}
+      </div>
+      {hidden > 0 && <p className="field-hint">{plural(hidden, 'column')} that look like contact, medical or personal details can't be kept and stay on this computer.</p>}
+    </fieldset>
+  );
+}
+
+/**
+ * Notes that, as a whole, just say there's nothing to record ("Nil", "None",
+ * "N/A"…). Each is listed with its exact text and its own tick box, all
+ * ticked, so the manager can glance down the list, untick anything odd, and
+ * mark the rest as no dietary needs in one go. Anything else is never here.
+ */
+function NothingToRecord({
+  pending,
+  dietary,
+  onMark,
+  onUndo,
+}: {
+  pending: { source: PreparedRow }[];
+  dietary: Record<string, DietaryEntryInput[]>;
+  onMark: (keys: string[]) => void;
+  onUndo: (keys: string[]) => void;
+}) {
+  const matches = pending.map((p) => p.source).filter((s) => saysNothing(s.dietaryText));
+  const marked = matches.filter((s) => dietary[s.row.memberNumber]?.length === 0).map((s) => s.row.memberNumber);
+  const open = matches.filter((s) => dietary[s.row.memberNumber] === undefined);
+  const [unticked, setUnticked] = useState<Set<string>>(new Set());
+  if (matches.length === 0) return null;
+  const ticked = open.filter((s) => !unticked.has(s.row.memberNumber));
+  return (
+    <div className="panel panel-pad nothing-panel">
+      <h3>{plural(matches.length, 'note says', 'notes say')} there's nothing to record</h3>
+      {open.length > 0 ? (
+        <>
+          <p className="meta">
+            These notes are only "Nil", "None", "N/A" or similar, with nothing else written. Check the list, untick anyone you want to read in full, then mark the
+            rest. Notes with any other words are never in this list.
+          </p>
+          <fieldset className="nothing-list">
+            <legend className="visually-hidden">Notes that say nothing to record</legend>
+            {open.map((s) => {
+              const key = s.row.memberNumber;
+              return (
+                <Choice
+                  key={key}
+                  label={`${s.row.preferredName || s.row.firstName} ${s.row.lastName}`}
+                  description={`Note: "${s.dietaryText}"`}
+                  checked={!unticked.has(key)}
+                  onChange={(e) => {
+                    const next = new Set(unticked);
+                    if (e.target.checked) next.delete(key);
+                    else next.add(key);
+                    setUnticked(next);
+                  }}
+                />
+              );
+            })}
+          </fieldset>
+          <div className="btn-row">
+            <Button kind="primary" disabled={ticked.length === 0} onClick={() => onMark(ticked.map((s) => s.row.memberNumber))}>
+              Mark {plural(ticked.length, 'person', 'people')} as no dietary needs
+            </Button>
+          </div>
+        </>
+      ) : null}
+      {marked.length > 0 && (
+        <p className="nothing-done">
+          <Badge tone="success">Done</Badge> {plural(marked.length, 'person', 'people')} marked as no dietary needs.{' '}
+          <Button small kind="ghost" onClick={() => onUndo(marked)}>
+            Undo
+          </Button>
+        </p>
+      )}
+    </div>
   );
 }

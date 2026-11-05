@@ -29,6 +29,9 @@ interface PersonData {
     position: string;
     status: 'active' | 'withdrawn';
     shortCode: string | null;
+    team?: string;
+    /** Extra columns kept from an import, like { Bus: '2' }. */
+    extra?: Record<string, string>;
     photoConsent?: 'yes' | 'no' | 'unknown';
     dietary?: DietaryEntryInput[];
   };
@@ -420,6 +423,18 @@ export function Person() {
                 <dt>Scout group</dt>
                 <dd>{r.groupName || 'Not recorded'}</dd>
               </div>
+              {r.team && (
+                <div>
+                  <dt>Team</dt>
+                  <dd>{r.team}</dd>
+                </div>
+              )}
+              {Object.entries(r.extra ?? {}).map(([k, v]) => (
+                <div key={k}>
+                  <dt>{k}</dt>
+                  <dd>{v}</dd>
+                </div>
+              ))}
               {r.photoConsent && (
                 <div>
                   <dt>Photos</dt>
@@ -517,6 +532,7 @@ function DetailsForm({ r, back, path, onSaved }: { r: PersonData['registration']
     position: r.position,
     photoConsent: r.photoConsent,
   });
+  const [extra, setExtra] = useState<Record<string, string>>(r.extra ?? {});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -530,8 +546,9 @@ function DetailsForm({ r, back, path, onSaved }: { r: PersonData['registration']
     if (!f.lastName.trim()) local.lastName = 'Enter a last name';
     setErrors(local);
     if (Object.keys(local).length) return;
-    const body: Record<string, string> = {};
+    const body: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(f)) if (v !== undefined && v !== (r as unknown as Record<string, unknown>)[k]) body[k] = v;
+    if (JSON.stringify(extra) !== JSON.stringify(r.extra ?? {})) body.extra = extra;
     setBusy(true);
     setFailure(null);
     try {
@@ -602,6 +619,17 @@ function DetailsForm({ r, back, path, onSaved }: { r: PersonData['registration']
               <option value="unknown">Not recorded</option>
             </select>
           </Field>
+        )}
+        {Object.keys(r.extra ?? {}).length > 0 && (
+          <fieldset className="form">
+            <legend className="field-label">From the import</legend>
+            {Object.keys(r.extra ?? {}).map((k, i) => (
+              <Field key={k} id={`p-extra-${i}`} label={k} optional>
+                <input className="input" value={extra[k] ?? ''} onChange={(e) => setExtra({ ...extra, [k]: e.target.value })} autoComplete="off" />
+              </Field>
+            ))}
+            <p className="field-hint">Clear a box to remove that detail.</p>
+          </fieldset>
         )}
         <div className="btn-row">
           <Button type="submit" kind="primary" busy={busy} busyLabel="Saving…">

@@ -116,6 +116,12 @@ export type DietaryEntryInput = z.infer<typeof dietaryEntrySchema>;
  * guarantee that nothing else from the source file (addresses, Medicare
  * numbers, guardian details, free-text medical notes) can ever be stored.
  */
+/** Up to 12 extra columns kept from an import, as { "column name": "value" }. An empty value removes that field. */
+export const MAX_EXTRA_FIELDS = 12;
+export const extraFieldsSchema = z
+  .record(z.string().trim().min(1).max(40), z.string().trim().max(200))
+  .refine((o) => Object.keys(o).length <= MAX_EXTRA_FIELDS, `Keep at most ${MAX_EXTRA_FIELDS} extra columns`);
+
 export const importRowSchema = z.strictObject({
   memberNumber: z.string().trim().regex(/^[A-Za-z0-9-]{1,20}$/, 'Membership number is missing or invalid'),
   firstName: trimmed(60).min(1, 'First name is missing'),
@@ -133,6 +139,8 @@ export const importRowSchema = z.strictObject({
   dietaryFingerprint: z.string().regex(/^[0-9a-f]{64}$/).nullable(),
   /** Present only when the director reviewed this row's dietary text in this import. */
   dietary: z.array(dietaryEntrySchema).max(10).optional(),
+  /** Extra columns chosen in this import. Merged into what's already there; absent leaves them as they are. */
+  extra: extraFieldsSchema.optional(),
 });
 export type ImportRow = z.infer<typeof importRowSchema>;
 
@@ -148,6 +156,8 @@ export const registrationPatchSchema = z.strictObject({
   position: trimmed(120).optional(),
   photoConsent: z.enum(['yes', 'no', 'unknown']).optional(),
   status: z.enum(['active', 'withdrawn']).optional(),
+  /** Replaces all extra fields. */
+  extra: extraFieldsSchema.optional(),
 });
 
 export const dietaryUpdateSchema = z.strictObject({ entries: z.array(dietaryEntrySchema).max(10) });
