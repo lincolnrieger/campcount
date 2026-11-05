@@ -5,6 +5,7 @@
 // Usage (with `npm run dev -- --port 5173` running, and a local admin account):
 //   UI_EMAIL=admin@example.test UI_PASSWORD=… node scripts/ui-check.mjs [page,page…]
 // Screenshots go to screenshots/ (git-ignored). Never put real credentials in the repo.
+/* global document, window, getComputedStyle */
 import { createRequire } from 'node:module';
 import { mkdirSync, readFileSync } from 'node:fs';
 
@@ -105,7 +106,8 @@ for (const size of SIZES) {
       const small = await page.evaluate(() =>
         [...document.querySelectorAll('a[href], button, input, select, textarea, summary, [role="button"]')]
           .filter((el) => {
-            if (el.closest('p, li > span, td')?.matches('p') && el.tagName === 'A') return false; // links inside sentences are exempt
+            // Links and link-style buttons inside a sentence are exempt (WCAG 2.5.8 inline exception).
+            if (getComputedStyle(el).display === 'inline' && (el.closest('p, li, td, dd, div')?.textContent ?? '').trim().length > (el.textContent ?? '').trim().length) return false;
             const r = el.getBoundingClientRect();
             if (r.width === 0 || r.height === 0 || r.bottom < 0) return false; // hidden, or off screen until focused (skip link)
             if (el.closest('.row-link, tr.row-link')) return false; // the whole row is the link's hit area

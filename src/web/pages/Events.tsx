@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { ApiFailure, api } from '../api';
 import { matchesSearch } from '../../shared/search';
 import type { EventFeatures, EventStatus } from '../../shared/schemas';
@@ -35,6 +35,16 @@ function landingFor(e: EventSummary): string | null {
 export function Events() {
   const { me } = useSession();
   const { data, error, loading, reload } = useApi<{ events: EventSummary[] }>('/events');
+  const landNavigate = useNavigate();
+  // First visit this page load: someone on exactly one event goes straight to it.
+  useEffect(() => {
+    if (landed || !data) return;
+    landed = true;
+    const noPlatform = me?.kind === 'user' && me.platformPermissions.length === 0;
+    const only = data.events.length === 1 ? data.events[0]! : null;
+    const to = noPlatform && only ? landingFor(only) : null;
+    if (to) landNavigate(to, { replace: true });
+  }, [data, me, landNavigate]);
   const canCreate = me?.kind === 'user' && me.platformPermissions.includes('platform.events.create');
   const [q, setQ] = useState('');
   const [showPast, setShowPast] = useState(false);
@@ -62,13 +72,6 @@ export function Events() {
   if (!data) return null;
   const all = data.events;
 
-  if (!landed) {
-    landed = true;
-    const noPlatform = me?.kind === 'user' && me.platformPermissions.length === 0;
-    const only = all.length === 1 ? all[0]! : null;
-    const to = noPlatform && only ? landingFor(only) : null;
-    if (to) return <Navigate to={to} replace />;
-  }
 
   const matching = all.filter((e) => matchesSearch(q, e.name, e.location));
   const byDate = (a: EventSummary, b: EventSummary) => a.startsOn.localeCompare(b.startsOn);
