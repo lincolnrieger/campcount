@@ -7,7 +7,7 @@ import { useSession } from '../session';
 import { eventSiteUrl, useSite } from '../site';
 import type { EventSummary } from '../types';
 import { useApi } from '../useApi';
-import { Badge, Button, ButtonLink, EmptyState, ErrorSummary, Field, Icon, LoadError, Loading, PageHeader, Section, SkeletonHeader, SkeletonRows, formatDateRange, useToast, useWide } from '../ui';
+import { Badge, Button, ButtonLink, EmptyState, ErrorSummary, Field, Icon, LoadError, Loading, PageHeader, Section, SkeletonHeader, SkeletonRows, formatDateRange, useConfirm, useToast, useWide } from '../ui';
 import { FeatureChecklist } from './Events';
 import type { EventFeatures } from '../../shared/schemas';
 
@@ -372,6 +372,10 @@ export function CampPage() {
   const { campId } = useParams();
   const site = useSite();
   const toast = useToast();
+  const confirm = useConfirm();
+  const navigate = useNavigate();
+  const { me } = useSession();
+  const canDelete = me?.kind === 'user' && me.platformPermissions.includes('platform.events.oversee');
   const { data, error, loading, reload } = useApi<{ event: EventSummary }>(`/events/${campId}`);
   const [brand, setBrand] = useState<BrandingValue | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -480,6 +484,40 @@ export function CampPage() {
           {url && <p className="meta">These open on the camp's own site. Sign in there with your CampCount account.</p>}
         </Section>
       </div>
+      {canDelete && (
+        <section className="danger-zone camp-delete" aria-labelledby="delete-heading">
+          <h2 id="delete-heading">Delete camp</h2>
+          <p className="prose">
+            Deletes {e.name} for good: its people, lanyards, scans, dietary records, activities, meals, stations, logo and address. Staff accounts are kept;
+            they just lose access to this camp. Download anything you need from Reports first.
+          </p>
+          <div>
+            <Button
+              kind="danger"
+              busyLabel="Deleting…"
+              onAction={async () => {
+                const ok = await confirm({
+                  title: `Delete ${e.name}?`,
+                  body: <p>Everything in this camp is deleted, including every scan and person on it. This can't be undone.</p>,
+                  confirm: 'Delete camp',
+                  danger: true,
+                  typeToConfirm: 'DELETE',
+                });
+                if (!ok) return;
+                try {
+                  await api(`/admin/events/${e.id}`, { method: 'DELETE' });
+                  toast(`Deleted ${e.name}`);
+                  navigate('/', { replace: true });
+                } catch (err) {
+                  toast(err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.', { tone: 'error' });
+                }
+              }}
+            >
+              Delete camp
+            </Button>
+          </div>
+        </section>
+      )}
     </>
   );
 }

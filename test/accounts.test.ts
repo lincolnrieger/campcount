@@ -91,16 +91,31 @@ describe('managing accounts', () => {
     expect(await json(await api(`/admin/users/${fresh.id}`, { cookie: admin.cookie, method: 'DELETE' }))).toEqual({ result: 'deleted' });
     expect(await testEnv.DB.prepare(`SELECT 1 FROM users WHERE id = ?`).bind(fresh.id).first()).toBeNull();
 
-    // An account that created an event must stay referenced, so it is anonymised.
+    // An account that created a camp is still deleted completely: the camp passes to the admin deleting it.
     const creator = await createUser({ platformAdmin: true });
-    await createEvent(creator.id);
-    expect(await json(await api(`/admin/users/${creator.id}`, { cookie: admin.cookie, method: 'DELETE' }))).toEqual({ result: 'anonymised' });
+    const eventId = await createEvent(creator.id);
+    expect(await json(await api(`/admin/users/${creator.id}`, { cookie: admin.cookie, method: 'DELETE' }))).toEqual({ result: 'deleted' });
+    expect(await testEnv.DB.prepare(`SELECT 1 FROM users WHERE id = ?`).bind(creator.id).first()).toBeNull();
+    expect(await testEnv.DB.prepare(`SELECT created_by FROM events WHERE id = ?`).bind(eventId).first()).toEqual({ created_by: admin.id });
+
+    // Scans can't be changed, so an account that recorded scans is reduced to a hidden, anonymous placeholder.
+    const scanner = await createUser();
+    const now = new Date().toISOString();
+    await testEnv.DB.prepare(
+      `INSERT INTO scans (id, event_id, context_type, direction, method, device_time, server_time, device_id, actor_user_id, outcome)
+       VALUES (?, ?, 'site', 'in', 'manual', ?, ?, 'test', ?, 'rejected')`,
+    )
+      .bind(crypto.randomUUID(), eventId, now, now, scanner.id)
+      .run();
+    expect(await json(await api(`/admin/users/${scanner.id}`, { cookie: admin.cookie, method: 'DELETE' }))).toEqual({ result: 'anonymised' });
     const row = await testEnv.DB.prepare(`SELECT email, display_name, status, password_hash FROM users WHERE id = ?`)
-      .bind(creator.id)
+      .bind(scanner.id)
       .first<Record<string, string | null>>();
     expect(row).toMatchObject({ display_name: 'Deleted account', status: 'disabled', password_hash: null });
     expect(row!.email).toMatch(/@deleted\.invalid$/);
-    expect((await api('/me', { cookie: creator.cookie })).status).toBe(401);
+    expect((await api('/me', { cookie: scanner.cookie })).status).toBe(401);
+    const list = await json(await api('/admin/users', { cookie: admin.cookie }));
+    expect(list.users.some((u: { id: string }) => u.id === scanner.id)).toBe(false);
   });
 
   it('never deletes the last admin or yourself from the admin screen', async () => {

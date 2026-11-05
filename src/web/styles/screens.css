@@ -468,3 +468,7 @@
   min-height: var(--control);
   max-width: 100%;
 }
+
+.camp-delete {
+  margin-top: var(--section-gap);
+}

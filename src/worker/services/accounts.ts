@@ -4,14 +4,30 @@ import { auditStatement } from './audit';
 import type { AuditActor } from './audit';
 
 /**
- * Delete an account. If the account appears in records that must be kept
- * (events it created, scans it made, dietary entries it recorded), it is
- * anonymised instead: name and email are wiped, it can never sign in again,
- * and the records stay intact without identifying the person.
+ * Delete an account completely. First every record that merely points at it
+ * is let go: "created by" on camps, stations, dietary entries and imports
+ * passes to the admin doing the deleting, and "added by"/"removed by" on
+ * staff assignments is cleared. Only scans can't be changed (they are the
+ * camp's attendance record and are append-only), so an account that
+ * recorded scans is reduced to an anonymous placeholder instead: name and
+ * email wiped, never able to sign in, and hidden from every list.
  */
 export async function deleteAccount(env: Env, userId: string, actor: AuditActor): Promise<'deleted' | 'anonymised'> {
   const db = env.DB;
   const now = nowIso();
+  // Someone else is deleting it: hand over what it created. (Deleting your own account keeps them as is.)
+  const heir = actor.type === 'user' && actor.id && actor.id !== userId ? actor.id : null;
+  const release: D1PreparedStatement[] = [
+    db.prepare(`UPDATE assignments SET created_by = NULL WHERE created_by = ?`).bind(userId),
+    db.prepare(`UPDATE assignments SET revoked_by = NULL WHERE revoked_by = ?`).bind(userId),
+  ];
+  if (heir) {
+    for (const table of ['events', 'stations', 'dietary_entries', 'import_jobs']) {
+      // Table names come from this fixed list, never from input.
+      release.push(db.prepare(`UPDATE ${table} SET created_by = ? WHERE created_by = ?`).bind(heir, userId));
+    }
+  }
+  await db.batch(release);
   try {
     await db.batch([
       db.prepare(`DELETE FROM sessions WHERE user_id = ?`).bind(userId),

@@ -192,14 +192,19 @@ export function AdminUsers() {
         onSelect: async () => {
           const ok = await confirm({
             title: `Delete ${u.displayName}'s account?`,
-            body: <p>They lose access to every event. This can't be undone.</p>,
+            body: (
+              <p>
+                The account is removed completely: their name, email, password and access to every camp. Camps they created pass to you. To stop them signing in
+                but keep the account, disable it instead. This can't be undone.
+              </p>
+            ),
             confirm: 'Delete account',
             danger: true,
           });
           if (!ok) return;
           try {
             const res = await api<{ result: string }>(`/admin/users/${u.id}`, { method: 'DELETE' });
-            toast(res.result === 'anonymised' ? `Deleted ${u.displayName}. Their name was wiped from past records.` : `Deleted ${u.displayName}`);
+            toast(res.result === 'anonymised' ? `Deleted ${u.displayName}. Scans they recorded are kept without their name.` : `Deleted ${u.displayName}`);
             await users.reload();
           } catch (err) {
             fail(err);

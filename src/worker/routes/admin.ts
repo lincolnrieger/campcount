@@ -9,6 +9,7 @@ import { getCookie } from 'hono/cookie';
 import { auditStatement } from '../services/audit';
 import { createDemoEvent, deleteDemoEvent } from '../services/demo';
 import { deleteAccount, isLastAdmin } from '../services/accounts';
+import { deleteEvent } from '../services/eventDelete';
 import { SESSION_COOKIE } from '../services/sessions';
 import { sha256Hex } from '../lib/crypto';
 import { can } from '../services/principal';
@@ -371,6 +372,15 @@ adminRoutes.post('/demo', async (c) => {
   const { participants } = await parseBody(c, demoCreateSchema);
   const { eventId } = await createDemoEvent(c.env, actor.userId, participants);
   return c.json({ eventId }, 201);
+});
+
+/** Delete a camp completely. Platform admins only, and only from the main site (the wall blocks /api/admin on camp addresses). */
+adminRoutes.delete('/events/:eventId', async (c) => {
+  requirePermission(c, 'platform.events.oversee');
+  const actor = requireUser(c);
+  const result = await deleteEvent(c.env, actor.userId, c.req.param('eventId'));
+  if (!result) throw notFound();
+  return c.json({ ok: true, ...result });
 });
 
 adminRoutes.delete('/demo/:eventId', async (c) => {
