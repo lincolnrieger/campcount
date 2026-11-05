@@ -1,16 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { ApiFailure, api } from '../api';
-import { Icon } from '../components/Icon';
 import { QrCode } from '../components/QrCode';
 import { placesLeft } from '../components/SignupPanel';
 import type { SignupSession } from '../components/SignupPanel';
-import { ActionButton, BackLink, Loading, LoadError, Notice, PageHeader, Skeleton } from '../components/ui';
-import { useToast } from '../components/Toast';
-import { useTitle } from '../shell';
 import { useApi } from '../useApi';
-import { useEvent } from './EventLayout';
 import { dayInZone, dayLabel, timeRange } from '../../shared/time';
+import { Badge, Button, EmptyState, Icon, LoadError, Loading, Notice, PageHeader, Section, Skeleton, SkeletonRows, useConfirm, useToast } from '../ui';
+import { useEvent } from './EventLayout';
 
 interface SignupInfo {
   enabled: boolean;
@@ -18,176 +15,218 @@ interface SignupInfo {
   sessions: SignupSession[];
 }
 
-/** Activities › Sign-up screen: the kiosk link for camp HQ and a poster for each session people can book. */
+/** Activities › Sign-up kiosk and posters: the kiosk link for camp HQ, and a poster for each session people can book. */
 export function SignupScreen() {
-  useTitle('Sign-up screen');
-  const { event, can, reload: reloadEvent } = useEvent();
+  const { event, can, base, reload: reloadEvent } = useEvent();
   const toast = useToast();
+  const confirm = useConfirm();
   const manage = can('activities.manage');
   const signup = useApi<SignupInfo>(manage ? `/events/${event.id}/signup` : null);
-  const [picked, setPicked] = useState<Set<string> | null>(null);
-  const [message, setMessage] = useState<{ tone: 'ok' | 'stop'; text: string } | null>(null);
-  const [copied, setCopied] = useState(false);
+  // Which posters to print: null means none chosen yet; printing waits for the render.
+  const [printing, setPrinting] = useState<string[] | null>(null);
   const tz = event.timezone;
+  const back = { to: `${base}/activities`, label: 'Activities' };
 
-  async function act(action: () => Promise<unknown>, ok: string) {
-    try {
-      await action();
-      setMessage(null);
-      toast(ok);
-      await signup.reload();
-    } catch (err) {
-      setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
-    }
-  }
+  useEffect(() => {
+    if (!printing) return;
+    const t = window.setTimeout(() => {
+      window.print();
+      setPrinting(null);
+    }, 50);
+    return () => window.clearTimeout(t);
+  }, [printing]);
 
-  const sessions = signup.data?.sessions ?? [];
-  const chosen = sessions.filter((s) => !picked || picked.has(s.id));
+  const fail = (err: unknown) => toast(err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.', { tone: 'error' });
+
+  if (!manage)
+    return (
+      <>
+        <PageHeader title="Sign-up kiosk" back={back} />
+        <Notice tone="warning">
+          <p>Only event managers can set up the sign-up kiosk.</p>
+        </Notice>
+      </>
+    );
+  if (signup.loading && !signup.data)
+    return (
+      <Loading what="sign-up kiosk">
+        <Skeleton className="skeleton-title" />
+        <Skeleton width="100%" height="14rem" className="" />
+        <SkeletonRows rows={3} />
+      </Loading>
+    );
+  if (signup.error)
+    return (
+      <>
+        <PageHeader title="Sign-up kiosk" back={back} />
+        <LoadError error={signup.error} onRetry={signup.reload} what="the sign-up kiosk" />
+      </>
+    );
+  const data = signup.data!;
+  const sessions = data.sessions;
   const when = (s: SignupSession) => (s.startsAt ? `${dayLabel(dayInZone(s.startsAt, tz), 'long')}, ${timeRange(s.startsAt, s.endsAt, tz)}` : 'Any time');
+  const toPrint = sessions.filter((s) => printing?.includes(s.id));
 
   return (
-    <div className="qr-page">
+    <>
       <div className="no-print">
-        <BackLink to=".." label="Activities" />
-        <PageHeader title="Sign-up screen" sub="People book activity sessions by scanning their lanyard at a tablet or from a session poster." />
-      </div>
-      {!manage && <Notice tone="stop">Only event managers can set up the sign-up screen.</Notice>}
-      {signup.error && <LoadError error={signup.error} onRetry={signup.reload} />}
-      {message && <Notice tone={message.tone}>{message.text}</Notice>}
-
-      {manage && (
-        <section className="list-section no-print">
-          <h2 className="list-heading">Kiosk</h2>
-          {signup.loading && !signup.data && (
-            <Loading label="Loading sign-up screen">
-              <Skeleton width="100%" height="15rem" radius="var(--radius)" />
-            </Loading>
-          )}
-          {signup.data && !signup.data.enabled && (
-            <div className="list-pad">
-              <p>Activity sign-up is switched off for this event.</p>
-              {can('event.configure') && (
-                <ActionButton
-                  className="btn btn-small"
-                  busyLabel="Turning on…"
-                  onAction={() =>
-                    act(async () => {
-                      await api(`/events/${event.id}`, { method: 'PATCH', body: { features: { selfSignup: true } } });
-                      await reloadEvent();
-                    }, 'Activity sign-up is on. Open an activity and tick "People can sign up" to list it.')
-                  }
-                >
-                  Turn on activity sign-up
-                </ActionButton>
-              )}
-            </div>
-          )}
-          {signup.data?.enabled && (
-            <div className="list-pad share-box">
-              <div className="poster">
-                <p className="poster-title">Activity sign-up</p>
-                <div className="poster-qr">
-                  <QrCode value={signup.data.link} size="100%" label="Sign-up screen QR code" />
-                </div>
-              </div>
-              <div className="share-actions">
-                <p className="flush">
-                  Open this on a tablet at camp HQ. People scan their lanyard (or type its code) and book. It goes back to the start after 90
-                  seconds.
-                </p>
-                <input className="input input-compact link-share-input" readOnly value={signup.data.link} onFocus={(e) => e.target.select()} aria-label="Sign-up screen link" />
-                <div className="actions flush-top">
-                  <a className="btn btn-small" href={signup.data.link} target="_blank" rel="noreferrer">
-                    Open sign-up screen<span className="visually-hidden"> (opens in a new tab)</span>
-                  </a>
-                  <button className="btn btn-secondary btn-small" onClick={() => void navigator.clipboard?.writeText(signup.data!.link).then(() => setCopied(true))}>
-                    {copied ? 'Link copied' : 'Copy link'}
-                  </button>
-                  <button
-                    className="btn-link push-end text-stop"
-                    onClick={() => {
-                      if (window.confirm('Make a new link? The current link, open sign-up screens and printed posters stop working.'))
-                        void act(() => api(`/events/${event.id}/signup/new-link`, { body: {} }), 'New link made. Reprint any posters.');
+        <PageHeader
+          title="Sign-up kiosk"
+          back={back}
+          summary="People book activity sessions by scanning their lanyard at a tablet, or from a poster at the activity."
+          menu={
+            data.enabled
+              ? [
+                  {
+                    label: 'Make a new link…',
+                    danger: true,
+                    onSelect: async () => {
+                      const ok = await confirm({
+                        title: 'Make a new link?',
+                        body: <p>The current link, any open kiosk screens and every printed poster stop working. You'll need to reprint the posters.</p>,
+                        confirm: 'Make a new link',
+                        danger: true,
+                      });
+                      if (!ok) return;
+                      try {
+                        await api(`/events/${event.id}/signup/new-link`, { body: {} });
+                        toast('New link made. Reprint the posters.');
+                        await signup.reload();
+                      } catch (err) {
+                        fail(err);
+                      }
+                    },
+                  },
+                ]
+              : undefined
+          }
+        />
+        <div className="sections">
+          {!data.enabled ? (
+            <EmptyState
+              title="Activity sign-up is switched off"
+              actions={
+                can('event.configure') && (
+                  <Button
+                    kind="primary"
+                    busyLabel="Turning on…"
+                    onAction={async () => {
+                      try {
+                        await api(`/events/${event.id}`, { method: 'PATCH', body: { features: { selfSignup: true } } });
+                        await reloadEvent();
+                        await signup.reload();
+                        toast('Activity sign-up is on');
+                      } catch (err) {
+                        fail(err);
+                      }
                     }}
                   >
-                    Replace link
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </section>
-      )}
-
-      {manage && signup.data?.enabled && (
-        <section className="list-section">
-          <div className="section-row no-print">
-            <h2 className="list-heading">Session posters</h2>
-            {chosen.length > 0 && (
-              <button className="btn btn-small" onClick={() => window.print()}>
-                <Icon name="print" size={18} /> Print {chosen.length} poster{chosen.length === 1 ? '' : 's'}
-              </button>
-            )}
-          </div>
-          {sessions.length === 0 ? (
-            <p className="field-hint no-print">
-              No sessions are open for sign-up yet. Open an activity on the <Link to=".." relative="path">Activities</Link> tab, choose Edit
-              activity and tick "People can sign up".
-            </p>
+                    Turn on activity sign-up
+                  </Button>
+                )
+              }
+            >
+              Turn it on to let people book sessions themselves.
+            </EmptyState>
           ) : (
             <>
-              <p className="field-hint no-print">
-                Put a poster at each activity. Scanning it opens the sign-up page with that session chosen; they then scan or type their lanyard
-                code to book.
-              </p>
-              <ul className="list no-print">
-                {sessions.map((s) => (
-                  <li key={s.id}>
-                    <label className="list-row poster-pick">
-                      <input
-                        type="checkbox"
-                        checked={!picked || picked.has(s.id)}
-                        onChange={(e) => {
-                          const next = new Set(picked ?? sessions.map((x) => x.id));
-                          if (e.target.checked) next.add(s.id);
-                          else next.delete(s.id);
-                          setPicked(next);
-                        }}
-                      />
-                      <span className="list-main">
-                        <strong>{s.name}</strong>
-                        <span>
-                          {when(s)}
-                          {s.location && `, ${s.location}`}
-                        </span>
-                      </span>
-                      <span className="tag tag-places">{placesLeft(s)}</span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-              <div className="session-posters">
-                {chosen.map((s) => (
-                  <article key={s.id} className="session-poster">
-                    <p className="session-poster-event">{event.name}</p>
-                    <h3>{s.name}</h3>
-                    <p className="session-poster-when">
-                      {when(s)}
-                      {s.location && <br />}
-                      {s.location}
-                    </p>
-                    <div className="session-poster-qr">
-                      <QrCode value={`${signup.data!.link}?activity=${s.id}`} size="100%" label={`Sign up for ${s.name}`} />
+              <Section title="Kiosk" id="kiosk">
+                <div className="panel panel-pad kiosk-share">
+                  <div className="kiosk-qr">
+                    <QrCode value={data.link} size="100%" label="Sign-up kiosk QR code" />
+                  </div>
+                  <div className="stack">
+                    <p>Open this on a tablet at camp HQ. People scan their lanyard, or type its code, and book. It goes back to the start after 90 seconds.</p>
+                    <div className="field">
+                      <label htmlFor="kiosk-link" className="field-label">
+                        Kiosk link
+                      </label>
+                      <input id="kiosk-link" className="input" readOnly value={data.link} onFocus={(e) => e.target.select()} />
                     </div>
-                    <p className="session-poster-cta">Scan to sign up, then scan your lanyard</p>
-                  </article>
-                ))}
-              </div>
+                    <div className="btn-row">
+                      <a className="btn btn-primary" href={data.link} target="_blank" rel="noreferrer">
+                        Open kiosk<span className="visually-hidden"> (opens in a new tab)</span>
+                      </a>
+                      <Button
+                        onAction={async () => {
+                          try {
+                            await navigator.clipboard.writeText(data.link);
+                            toast('Link copied');
+                          } catch {
+                            toast("Couldn't copy. Select the link and copy it yourself.", { tone: 'error' });
+                          }
+                        }}
+                      >
+                        <Icon name="copy" />
+                        Copy link
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </Section>
+
+              <Section
+                title="Session posters"
+                id="posters"
+                actions={
+                  sessions.length > 1 && (
+                    <Button onClick={() => setPrinting(sessions.map((s) => s.id))}>
+                      <Icon name="print" />
+                      Print all
+                    </Button>
+                  )
+                }
+              >
+                {sessions.length === 0 ? (
+                  <EmptyState title="No sessions open for sign-up">
+                    Open an activity on the <Link to={`${base}/activities`}>Activities</Link> tab, choose Edit activity, and tick "Open for self sign-up".
+                  </EmptyState>
+                ) : (
+                  <>
+                    <p className="meta">Put a poster at each activity. Scanning it opens the kiosk with that session chosen; people then scan their lanyard to book.</p>
+                    <ul className="list">
+                      {sessions.map((s) => (
+                        <li key={s.id} className="row">
+                          <span className="row-main">
+                            <span className="row-title">{s.name}</span>
+                            <span className="row-meta">{[when(s), s.location || null].filter(Boolean).join(' · ')}</span>
+                          </span>
+                          <Badge tone={s.full ? 'neutral' : 'success'}>{placesLeft(s)}</Badge>
+                          <span className="row-side">
+                            <Button small onClick={() => setPrinting([s.id])}>
+                              Print<span className="visually-hidden"> poster for {s.name}</span>
+                            </Button>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </Section>
             </>
           )}
-        </section>
-      )}
+        </div>
+      </div>
 
-    </div>
+      {toPrint.length > 0 && (
+        <div className="session-posters" aria-hidden="true">
+          {toPrint.map((s) => (
+            <article key={s.id} className="session-poster">
+              <p className="session-poster-event">{event.name}</p>
+              <h2>{s.name}</h2>
+              <p className="session-poster-when">
+                {when(s)}
+                {s.location && <br />}
+                {s.location}
+              </p>
+              <div className="session-poster-qr">
+                <QrCode value={`${data.link}?activity=${s.id}`} size="100%" label={`Sign up for ${s.name}`} />
+              </div>
+              <p className="session-poster-cta">Scan to sign up, then scan your lanyard</p>
+            </article>
+          ))}
+        </div>
+      )}
+    </>
   );
 }

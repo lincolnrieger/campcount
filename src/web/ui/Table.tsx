@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { Icon } from './Icon';
 
 export type SortDir = 'asc' | 'desc';
@@ -7,7 +7,7 @@ export interface SortState<K extends string> {
   dir: SortDir;
 }
 
-/** Which column a table is sorted by. Clicking the same column again reverses it. */
+/** Which column a table is sorted by. Choosing the same column again reverses it. */
 export function useSort<K extends string>(key: K, dir: SortDir = 'asc') {
   const [sort, setSort] = useState<SortState<K>>({ key, dir });
   const toggle = (k: K) => setSort((s) => (s.key === k ? { key: k, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key: k, dir: 'asc' }));
@@ -30,26 +30,26 @@ export function sortRows<T>(rows: T[], get: (row: T) => string | number | null |
 }
 
 /** A sortable column header: a button inside the th, with aria-sort on the active column. */
-export function SortHeader<K extends string>({
-  label,
-  column,
-  sort,
-  onSort,
-  className,
-}: {
-  label: string;
-  column: K;
-  sort: SortState<K>;
-  onSort: (k: K) => void;
-  className?: string;
-}) {
+export function SortHeader<K extends string>({ label, column, sort, onSort, className }: { label: string; column: K; sort: SortState<K>; onSort: (k: K) => void; className?: string }) {
   const active = sort.key === column;
   return (
     <th scope="col" className={className} aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
-      <button type="button" className="sort-button" onClick={() => onSort(column)}>
+      <button type="button" className="sort-btn" onClick={() => onSort(column)}>
         {label}
-        <Icon name={active ? (sort.dir === 'asc' ? 'sortAsc' : 'sortDesc') : 'sort'} size={14} />
+        <Icon name={active ? (sort.dir === 'asc' ? 'sortAsc' : 'sortDesc') : 'sort'} size={16} />
       </button>
     </th>
   );
+}
+
+const WIDE = '(min-width: 1024px)';
+const subscribeWide = (cb: () => void) => {
+  const m = window.matchMedia(WIDE);
+  m.addEventListener('change', cb);
+  return () => m.removeEventListener('change', cb);
+};
+
+/** True on screens wide enough for tables (1024px and up). Below that, show list rows. */
+export function useWide(): boolean {
+  return useSyncExternalStore(subscribeWide, () => window.matchMedia(WIDE).matches, () => true);
 }

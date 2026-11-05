@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ApiFailure, api } from '../api';
 import { clearDevice } from '../offline/db';
 import { useSession } from '../session';
-import { Icon } from './Icon';
-import { Loading, Notice, Skeleton, SkeletonList } from './ui';
+import { Badge, Button, Loading, Notice, Sheet } from '../ui';
 
 interface Options {
   events: { id: string; name: string; isDemo: boolean; status: string; activities: { id: string; name: string }[] }[];
@@ -21,10 +20,9 @@ export async function stopPreview() {
   await api('/admin/preview', { method: 'DELETE' });
 }
 
-/** Bottom sheet (phones) / dialog (desktop) for choosing an event and role to view as. */
-export function ViewAsSheet({ open, onClose, initialEventId }: { open: boolean; onClose: () => void; initialEventId?: string }) {
+/** Pick an event, then a role (and an activity, for activity leaders), and see the app as they do. */
+export function ViewAsForm({ initialEventId }: { initialEventId?: string }) {
   const { me } = useSession();
-  const dialog = useRef<HTMLDialogElement>(null);
   const [options, setOptions] = useState<Options | null>(null);
   const [eventId, setEventId] = useState(initialEventId ?? '');
   const [error, setError] = useState<string | null>(null);
@@ -32,19 +30,13 @@ export function ViewAsSheet({ open, onClose, initialEventId }: { open: boolean; 
   const current = me?.kind === 'user' ? me.preview : null;
 
   useEffect(() => {
-    const d = dialog.current;
-    if (!d) return;
-    if (open && !d.open) {
-      d.showModal();
-      api<Options>('/admin/preview/options')
-        .then((o) => {
-          setOptions(o);
-          setEventId((id) => id || current?.eventId || initialEventId || o.events[0]?.id || '');
-        })
-        .catch((err) => setError(err instanceof ApiFailure ? err.message : 'Could not load events.'));
-    }
-    if (!open && d.open) d.close();
-  }, [open, current?.eventId, initialEventId]);
+    api<Options>('/admin/preview/options')
+      .then((o) => {
+        setOptions(o);
+        setEventId((id) => id || current?.eventId || initialEventId || o.events[0]?.id || '');
+      })
+      .catch((err) => setError(err instanceof ApiFailure ? err.message : "Couldn't load events. Check your signal and try again."));
+  }, [current?.eventId, initialEventId]);
 
   const event = options?.events.find((e) => e.id === eventId);
 
@@ -56,8 +48,7 @@ export function ViewAsSheet({ open, onClose, initialEventId }: { open: boolean; 
       // Full reload so nothing loaded under the previous role lingers on screen.
       window.location.assign(`/events/${eventId}`);
     } catch (err) {
-      setError(err instanceof ApiFailure ? err.message : 'Something went wrong.');
-    } finally {
+      setError(err instanceof ApiFailure ? err.message : 'Something went wrong. Try again.');
       setBusy(false);
     }
   }
@@ -73,31 +64,27 @@ export function ViewAsSheet({ open, onClose, initialEventId }: { open: boolean; 
   }
 
   return (
-    <dialog ref={dialog} className="sheet-dialog" onClose={onClose} aria-labelledby="viewas-title">
-      <div className="sheet-head">
-        <h2 id="viewas-title">View as</h2>
-        <button type="button" className="icon-button" onClick={onClose} aria-label="Close">
-          <Icon name="close" />
-        </button>
-      </div>
-      <p className="field-hint">Nothing changes for anyone else.</p>
-      {error && <Notice tone="stop">{error}</Notice>}
+    <div className="stack">
+      {error && (
+        <Notice tone="error">
+          <p>{error}</p>
+        </Notice>
+      )}
       {current && (
-        <button type="button" className="btn btn-block section-gap-sm" disabled={busy} onClick={() => void backToMe()}>
-          Back to me
-        </button>
+        <div>
+          <Button kind="primary" busy={busy} onClick={() => void backToMe()}>
+            Stop viewing as
+          </Button>
+        </div>
       )}
-      {!options && !error && (
-        <Loading label="Loading events and roles">
-          <Skeleton width="100%" height="48px" radius="var(--radius-control)" />
-          <SkeletonList rows={3} lines={2} aside="none" />
-        </Loading>
-      )}
+      {!options && !error && <Loading what="events and roles" rows={4} />}
       {options && (
         <>
-          <div className="field section-gap-sm">
-            <label htmlFor="viewas-event">Event</label>
-            <select id="viewas-event" className="input" value={eventId} onChange={(e) => setEventId(e.target.value)}>
+          <div className="field viewas-event">
+            <label htmlFor="viewas-event" className="field-label">
+              Event
+            </label>
+            <select id="viewas-event" className="select" value={eventId} onChange={(e) => setEventId(e.target.value)}>
               {options.events.map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.name}
@@ -106,56 +93,54 @@ export function ViewAsSheet({ open, onClose, initialEventId }: { open: boolean; 
               ))}
             </select>
           </div>
-          <ul className="role-list">
-            {options.roles.map((r) =>
-              r.scope === 'activity' && event && event.activities.length > 0 ? (
-                <li key={r.key} className="role-group">
-                  <p>
-                    <strong>{r.name}</strong>
-                    <span>Choose an activity</span>
-                  </p>
-                  <div className="role-chips">
-                    {event.activities.map((a) => {
-                      const isCurrent = current?.eventId === eventId && current.roleKey === r.key && current.activityId === a.id;
-                      return (
-                        <button
-                          key={a.id}
-                          type="button"
-                          className={isCurrent ? 'role-chip is-current' : 'role-chip'}
-                          aria-current={isCurrent || undefined}
-                          disabled={busy}
-                          onClick={() => void choose(r.key, a.id)}
-                        >
-                          {a.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </li>
-              ) : (
+          <ul className="list">
+            {options.roles.map((r) => {
+              const isCurrent = current?.eventId === eventId && current.roleKey === r.key;
+              if (r.scope === 'activity' && event && event.activities.length > 0) {
+                return (
+                  <li key={r.key} className="row viewas-role">
+                    <span className="row-main">
+                      <span className="row-title">{r.name}</span>
+                      <span className="row-meta">Choose an activity</span>
+                      <span className="viewas-activities">
+                        {event.activities.map((a) => {
+                          const on = isCurrent && current?.activityId === a.id;
+                          return (
+                            <Button key={a.id} small kind={on ? 'primary' : 'secondary'} aria-current={on || undefined} disabled={busy} onClick={() => void choose(r.key, a.id)}>
+                              {a.name}
+                            </Button>
+                          );
+                        })}
+                      </span>
+                    </span>
+                  </li>
+                );
+              }
+              return (
                 <li key={r.key}>
-                  <RoleButton
-                    name={r.name}
-                    detail={r.description}
-                    current={current?.eventId === eventId && current.roleKey === r.key}
-                    disabled={busy || !eventId}
-                    onClick={() => void choose(r.key, null)}
-                  />
+                  <button type="button" className="row row-button" aria-current={isCurrent || undefined} disabled={busy || !eventId} onClick={() => void choose(r.key, null)}>
+                    <span className="row-main">
+                      <span className="row-title">{r.name}</span>
+                      <span className="row-meta">{r.description}</span>
+                    </span>
+                    {isCurrent && <Badge tone="brand">Viewing</Badge>}
+                  </button>
                 </li>
-              ),
-            )}
+              );
+            })}
           </ul>
         </>
       )}
-    </dialog>
+    </div>
   );
 }
 
-function RoleButton({ name, detail, current, disabled, onClick }: { name: string; detail: string; current: boolean; disabled: boolean; onClick: () => void }) {
+/** The same choice in a sheet. */
+export function ViewAsSheet({ open, onClose, initialEventId }: { open: boolean; onClose: () => void; initialEventId?: string }) {
   return (
-    <button type="button" className={current ? 'role-button is-current' : 'role-button'} disabled={disabled} onClick={onClick} aria-current={current || undefined}>
-      <strong>{name}</strong>
-      <span>{detail}</span>
-    </button>
+    <Sheet open={open} title="View as a role" onClose={onClose}>
+      {open && <ViewAsForm initialEventId={initialEventId} />}
+    </Sheet>
   );
 }
+

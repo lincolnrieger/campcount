@@ -1,0 +1,111 @@
+/* Screens: admin, account and public pages. Tokens only. */
+
+/* ---------- Public (sign in, pair, links) ---------- */
+.public-card > h1,
+.public-card .form h1 {
+  font-size: var(--text-xl);
+}
+.public-card .form {
+  gap: var(--space-4);
+}
+.stack-tight {
+  display: grid;
+  gap: var(--space-1);
+}
+.signin-alt {
+  display: grid;
+  gap: var(--space-2);
+  padding-top: var(--space-4);
+  border-top: var(--border-width) solid var(--divider);
+}
+
+/* ---------- Accounts, demo camps ---------- */
+.badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.row .badges {
+  margin-top: var(--space-1);
+}
+.table tr.is-muted td {
+  color: var(--ink-3);
+}
+.demo-size {
+  max-width: 20rem;
+}
+
+/* ---------- Sign-up kiosk and My activities (full screen, no app frame) ---------- */
+.signup-page {
+  min-height: 100dvh;
+  background: var(--canvas);
+}
+.signup-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  /* Line the logo up with the content column below. */
+  padding: var(--space-4) max(var(--page-pad), calc((100% - var(--content-max)) / 2 + var(--page-pad)));
+  background: var(--surface);
+  border-bottom: var(--border-width) solid var(--divider);
+}
+.signup-sub {
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+}
+.signup-body {
+  display: grid;
+  gap: var(--section-gap);
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: var(--page-pad) var(--page-pad) var(--space-7);
+}
+/* The kiosk is read from arm's length: everything a quarter bigger, buttons 56px. */
+.signup-kiosk {
+  font-size: calc(var(--text-base) * 1.25);
+}
+.signup-kiosk h1 {
+  font-size: calc(var(--text-xl) * 1.25);
+}
+.signup-kiosk h2 {
+  font-size: calc(var(--text-lg) * 1.25);
+}
+.signup-kiosk .meta,
+.signup-kiosk .row-meta,
+.signup-kiosk .field-label,
+.signup-kiosk .field-hint,
+.signup-kiosk .signup-sub {
+  font-size: calc(var(--text-sm) * 1.25);
+}
+.signup-kiosk .btn,
+.signup-kiosk .input {
+  min-height: var(--control-lg);
+  font-size: calc(var(--text-base) * 1.25);
+}
+.kiosk {
+  display: grid;
+  gap: var(--section-gap);
+  align-items: start;
+}
+@media (min-width: 900px) {
+  .kiosk {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  }
+}
+.kiosk-scan,
+.kiosk-board {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.kiosk-viewfinder {
+  max-height: 50dvh;
+}
+.kiosk-type {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+.kiosk-type .field {
+  width: 100%;
+}

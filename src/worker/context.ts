@@ -4,11 +4,12 @@ import type { Permission } from '../shared/permissions';
 import type { Env } from './env';
 import { badRequest, forbidden, notFound, unauthenticated } from './lib/errors';
 import type { Principal, Scope, UserPrincipal } from './services/principal';
+import type { Site } from './services/site';
 import { can } from './services/principal';
 
 export interface AppEnv {
   Bindings: Env;
-  Variables: { principal: Principal | null };
+  Variables: { principal: Principal | null; site?: Site };
 }
 
 export type AppContext = Context<AppEnv>;

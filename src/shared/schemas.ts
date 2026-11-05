@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { SECTIONS } from './sections';
+import { BRAND_COLOR_PATTERN, subdomainProblem } from './site';
 
 export { SECTIONS };
 
@@ -49,6 +50,14 @@ const eventFields = {
   startsOn: isoDate,
   endsOn: isoDate,
   features: eventFeaturesSchema.partial().default({}),
+  /** The event's own address: <subdomain>.campcount.com. */
+  subdomain: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .refine((v) => subdomainProblem(v) === null, { message: 'Use 3 to 40 lowercase letters, numbers and hyphens (not a reserved word)' })
+    .optional(),
+  brandColor: z.string().regex(BRAND_COLOR_PATTERN, 'Choose a colour like #1F5C46').optional(),
 };
 
 export const createEventSchema = z
@@ -63,6 +72,8 @@ export const updateEventSchema = z
     startsOn: isoDate,
     endsOn: isoDate,
     features: eventFeaturesSchema.partial(),
+    subdomain: eventFields.subdomain.unwrap(),
+    brandColor: eventFields.brandColor.unwrap(),
   })
   .partial();
 

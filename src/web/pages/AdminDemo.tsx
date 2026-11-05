@@ -1,12 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { ApiFailure, api } from '../api';
-import { Loading, LoadError, Notice, PageHeader, SkeletonList } from '../components/ui';
-import { Menu } from '../components/Menu';
-import { Icon } from '../components/Icon';
 import { ViewAsSheet } from '../components/ViewAs';
 import { useApi } from '../useApi';
-import { useTitle } from '../shell';
+import { Button, EmptyState, Icon, LoadError, Loading, Menu, PageHeader, Section, SkeletonRows, useConfirm, useToast } from '../ui';
 
 interface DemoEvent {
   id: string;
@@ -16,96 +13,109 @@ interface DemoEvent {
   accounts: { id: string; name: string; role: string; activity: string | null }[];
 }
 
+/** Admin › Demo camps: practice camps full of made-up people, to try every role. */
 export function AdminDemo() {
-  useTitle('Demo camps');
   const { data, error, loading, reload } = useApi<{ events: DemoEvent[] }>('/admin/demo');
+  const toast = useToast();
+  const confirm = useConfirm();
   const [size, setSize] = useState('80');
-  const [message, setMessage] = useState<{ tone: 'ok' | 'stop'; text: string } | null>(null);
-  const [busy, setBusy] = useState(false);
   const [viewing, setViewing] = useState<string | null>(null);
 
-  async function act(action: () => Promise<unknown>, success?: string) {
-    setBusy(true);
-    setMessage(null);
+  async function create() {
     try {
-      await action();
-      if (success) setMessage({ tone: 'ok', text: success });
+      await api('/admin/demo', { body: { participants: Number(size) } });
+      toast('Demo camp ready. You are its event manager.');
       await reload();
     } catch (err) {
-      setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
-    } finally {
-      setBusy(false);
+      toast(err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.', { tone: 'error' });
     }
   }
 
   return (
     <>
-      <PageHeader level={1}
-        title="Demo camps" titleOn="desktop"
-        sub="A practice camp filled with made-up people. Use View as to try each role. No real member data is used."
+      <PageHeader
+        title="Demo camps"
+        back={{ to: '/admin', label: 'Admin' }}
+        summary="Practice camps with made-up people. No real member data is used."
+        primary={
+          <Button kind="primary" busyLabel="Creating…" onAction={create}>
+            <Icon name="plus" />
+            Create demo camp
+          </Button>
+        }
       />
-      {message && <Notice tone={message.tone}>{message.text}</Notice>}
-
-      <section className="narrow">
-        <h2>New demo camp</h2>
-        <div className="inline-form">
-          <label className="visually-hidden" htmlFor="demo-size">
-            Number of youth participants
+      <div className="sections">
+        <div className="field demo-size">
+          <label htmlFor="demo-size" className="field-label">
+            Size of the next demo camp
           </label>
-          <select id="demo-size" className="input" value={size} onChange={(e) => setSize(e.target.value)}>
-            <option value="20">20 youth</option>
-            <option value="80">80 youth</option>
-            <option value="200">200 youth</option>
-            <option value="400">400 youth</option>
+          <select id="demo-size" className="select" value={size} onChange={(e) => setSize(e.target.value)}>
+            <option value="20">20 young people</option>
+            <option value="80">80 young people</option>
+            <option value="200">200 young people</option>
+            <option value="400">400 young people</option>
           </select>
-          <button
-            className="btn"
-            disabled={busy}
-            onClick={() => void act(() => api('/admin/demo', { body: { participants: Number(size) } }), 'Demo camp ready. You are its event manager.')}
-          >
-            {busy ? 'Creating…' : 'Create demo camp'}
-          </button>
         </div>
-      </section>
 
-      {loading && !data && (
-        <Loading label="Loading demo camps">
-          <SkeletonList rows={2} aside="button" />
-        </Loading>
-      )}
-      {error && <LoadError error={error} onRetry={reload} />}
-      {data && data.events.length > 0 && (
-        <section className="list-section section-gap">
-          <h2 className="list-heading">Your demo camps</h2>
-          <ul className="list">
-            {data.events.map((e) => (
-              <li key={e.id} className="list-row demo-row">
-                <span className="list-main">
-                  <strong>
-                    <Link to={`/events/${e.id}`}>{e.name}</Link>
-                  </strong>
-                  <span>{e.people} people</span>
-                </span>
-                <button type="button" className="btn btn-secondary btn-small" onClick={() => setViewing(e.id)}>
-                  <Icon name="eye" size={18} /> View as a role
-                </button>
-                <Menu
-                  label={`More actions for ${e.name}`}
-                  items={[
-                    {
-                      label: 'Delete demo camp…',
-                      danger: true,
-                      onSelect: () => {
-                        if (window.confirm(`Delete ${e.name} and all its demo data?`)) void act(() => api(`/admin/demo/${e.id}`, { method: 'DELETE' }), 'Demo camp deleted.');
-                      },
-                    },
-                  ]}
-                />
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+        <Section title="Your demo camps" id="demos">
+          {loading && !data ? (
+            <Loading what="demo camps">
+              <SkeletonRows rows={2} action />
+            </Loading>
+          ) : error ? (
+            <LoadError error={error} onRetry={reload} what="demo camps" />
+          ) : !data || data.events.length === 0 ? (
+            <EmptyState title="No demo camps yet">Create one to try CampCount as each role.</EmptyState>
+          ) : (
+            <ul className="list">
+              {data.events.map((e) => (
+                <li key={e.id} className="row row-link">
+                  <span className="row-main">
+                    <span className="row-title">
+                      <Link to={`/camps/${e.id}`}>{e.name}</Link>
+                    </span>
+                    <span className="row-meta">
+                      {e.people} people · {e.accounts.length} demo {e.accounts.length === 1 ? 'account' : 'accounts'}
+                    </span>
+                  </span>
+                  <span className="row-side">
+                    <Button small onClick={() => setViewing(e.id)} aria-haspopup="dialog">
+                      <Icon name="eye" />
+                      <span className="only-desktop">View as a role</span>
+                      <span className="only-phone">View as</span>
+                    </Button>
+                    <Menu
+                      label={`More actions for ${e.name}`}
+                      items={[
+                        {
+                          label: 'Delete demo camp…',
+                          danger: true,
+                          onSelect: async () => {
+                            const ok = await confirm({
+                              title: `Delete ${e.name}?`,
+                              body: <p>Its made-up people, scans and demo accounts are deleted too.</p>,
+                              confirm: 'Delete demo camp',
+                              danger: true,
+                            });
+                            if (!ok) return;
+                            try {
+                              await api(`/admin/demo/${e.id}`, { method: 'DELETE' });
+                              toast(`Deleted ${e.name}`);
+                              await reload();
+                            } catch (err) {
+                              toast(err instanceof ApiFailure ? err.message : 'No connection. Try again.', { tone: 'error' });
+                            }
+                          },
+                        },
+                      ]}
+                    />
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      </div>
       <ViewAsSheet open={viewing !== null} onClose={() => setViewing(null)} initialEventId={viewing ?? undefined} />
     </>
   );

@@ -1,16 +1,20 @@
-import { createContext, useContext, useEffect, useRef } from 'react';
-import { NavLink, Outlet, useLocation, useParams } from 'react-router';
-import { Breadcrumbs } from '../components/Layout';
-import { useShell, useShellEvent, useTitle } from '../shell';
+import { createContext, useContext } from 'react';
+import { Outlet, useParams } from 'react-router';
 import type { Permission } from '../../shared/permissions';
-import { EventStatusBadge, formatDateRange, Loading, LoadError, Skeleton, SkeletonHeading, SkeletonList } from '../components/ui';
 import type { EventSummary } from '../types';
 import { useApi } from '../useApi';
+import { useShellEvent } from '../shell';
+import { EventTabs } from '../ui/AppShell';
+import { LoadError, Loading, SkeletonHeader } from '../ui';
 
 interface EventContextValue {
   event: EventSummary;
   can: (permission: Permission) => boolean;
   reload: () => Promise<void>;
+  /** Where this event's pages live: '' on the event's own site, '/events/<id>' on the main site. */
+  base: string;
+  /** True on the event's own address (supersplash.campcount.com). */
+  onSite: boolean;
 }
 
 const EventContext = createContext<EventContextValue | null>(null);
@@ -21,77 +25,53 @@ export function useEvent(): EventContextValue {
   return value;
 }
 
-export function EventLayout() {
-  const { eventId } = useParams();
-  const { data, error, loading, reload } = useApi<{ event: EventSummary }>(`/events/${eventId}`);
-
-  if (loading && !data)
-    return (
-      <Loading label="Loading event">
-        <SkeletonHeading width="16rem" />
-        <div className="skeleton-tabs">{[5, 4, 4, 5, 4].map((w, i) => <Skeleton key={i} width={`${w}rem`} height="1rem" />)}</div>
-        <SkeletonList rows={4} />
-      </Loading>
-    );
-  if (error) return <LoadError error={error} onRetry={reload} message={error.status === 404 ? "This event doesn't exist, or you're not on its staff." : undefined} />;
-  if (!data) return null;
-  return <EventShell event={data.event} reload={reload} />;
+/** Can this person do anything here other than scan? */
+export function scanOnly(event: EventSummary): boolean {
+  const can = (p: Permission) => event.permissions.includes(p);
+  return !can('reports.view') && !can('roster.view') && !can('activity.view_roster') && !can('event.configure') && !can('staff.manage') && !can('stations.manage') && !can('meals.manage');
 }
 
-function EventShell({ event, reload }: { event: EventSummary; reload: () => Promise<void> }) {
-  const navRef = useRef<HTMLElement>(null);
-  const location = useLocation();
-  const { title } = useShell();
-  // Keep the current tab visible in the swipeable tab row (phones).
-  useEffect(() => {
-    navRef.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'center' });
-  }, [location.pathname]);
-
+/** The sections of an event this person can open, most used first. On the event's own site, Scan is one of them. */
+export function eventSections(event: EventSummary, onSite = false) {
   const can = (p: Permission) => event.permissions.includes(p);
-  // Ordered by how often they're used during camp; setup lives in Settings.
-  const tabs = [
-    { to: '', label: 'Dashboard', show: true },
+  const scans = event.status === 'open' && (['site.scan', 'meal.scan', 'activity.scan'] as const).some((p) => can(p));
+  return [
+    { to: '', label: 'Home', show: !scanOnly(event) || !onSite },
+    { to: 'scan', label: 'Scan', show: onSite && scans },
     { to: 'people', label: 'People', show: can('roster.view') },
     { to: 'activities', label: 'Activities', show: event.features.activities && (can('activities.manage') || can('activity.view_roster')) },
     { to: 'meals', label: 'Meals', show: event.features.meals && can('meals.manage') },
     { to: 'reports', label: 'Reports', show: can('reports.view') && event.status !== 'draft' },
     { to: 'settings', label: 'Settings', show: can('event.configure') || can('staff.manage') || can('stations.manage') },
-  ].filter((t) => t.show);
-  const dates = `${formatDateRange(event.startsOn, event.endsOn)}${event.location ? `, ${event.location}` : ''}`;
-  useShellEvent({ id: event.id, name: event.name, meta: dates, sections: tabs.map(({ to, label }) => ({ to, label })) });
+  ]
+    .filter((s) => s.show)
+    .map(({ to, label }) => ({ to, label }));
+}
 
-  const rest = location.pathname.replace(/^\/events\/[^/]+\/?/, '').split('/').filter(Boolean);
-  const tab = tabs.find((t) => t.to === (rest[0] ?? ''));
-  // Tab pages are titled "People: Camp name"; deeper pages (a person, Lanyards…) set their own title.
-  useTitle(rest.length <= 1 && tab ? `${tab.label}: ${event.name}` : null);
-  const base = `/events/${event.id}`;
-  const trail = [
-    { to: '/', label: 'Events' },
-    { to: base, label: event.name },
-    ...(tab && tab.to ? [{ to: `${base}/${tab.to}`, label: tab.label }] : []),
-    ...(rest.length > 1 && title ? [{ label: title }] : []),
-  ];
+export function EventLayout({ siteEventId }: { siteEventId?: string }) {
+  const params = useParams();
+  const eventId = siteEventId ?? params.eventId;
+  const { data, error, loading, reload } = useApi<{ event: EventSummary }>(`/events/${eventId}`);
 
+  if (loading && !data)
+    return (
+      <Loading what="event">
+        <SkeletonHeader />
+      </Loading>
+    );
+  if (error) return <LoadError error={error} onRetry={reload} what="this event" />;
+  if (!data) return null;
+  return <EventShell event={data.event} reload={reload} onSite={Boolean(siteEventId)} />;
+}
+
+function EventShell({ event, reload, onSite }: { event: EventSummary; reload: () => Promise<void>; onSite: boolean }) {
+  const can = (p: Permission) => event.permissions.includes(p);
+  const sections = eventSections(event, onSite);
+  const base = onSite ? '' : `/events/${event.id}`;
+  useShellEvent({ id: event.id, name: event.name, status: event.status, isDemo: event.isDemo, sections, base });
   return (
-    <EventContext.Provider value={{ event, can, reload }}>
-      <Breadcrumbs trail={trail} />
-      <div className="event-head">
-        <div>
-          <h1>{event.name}</h1>
-          <p className="lede">{dates}</p>
-        </div>
-        <div className="event-badges">
-          {event.isDemo && <span className="badge-demo">Demo</span>}
-          <EventStatusBadge status={event.status} />
-        </div>
-      </div>
-      <nav className="subnav subnav-section" aria-label="Event sections" ref={navRef} hidden={tabs.length < 2}>
-        {tabs.map((t) => (
-          <NavLink key={t.to} to={t.to} end={t.to === ''}>
-            {t.label}
-          </NavLink>
-        ))}
-      </nav>
+    <EventContext.Provider value={{ event, can, reload, base, onSite }}>
+      {!onSite && <EventTabs base={base} sections={sections} />}
       <Outlet />
     </EventContext.Provider>
   );

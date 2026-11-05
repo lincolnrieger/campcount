@@ -67,19 +67,22 @@ export interface CallOptions {
   body?: unknown;
   cookie?: string;
   origin?: string | null;
+  /** Send the request to another address, e.g. an event's own site 'camp.campcount.test'. */
+  host?: string;
 }
 
 export async function api(path: string, opts: CallOptions = {}): Promise<Response> {
   const headers: Record<string, string> = {};
   const method = opts.method ?? (opts.body === undefined ? 'GET' : 'POST');
   if (opts.cookie) headers.Cookie = opts.cookie;
-  if (method !== 'GET' && opts.origin !== null) headers.Origin = opts.origin ?? ORIGIN;
+  const base = opts.host ? `https://${opts.host}` : ORIGIN;
+  if (method !== 'GET' && opts.origin !== null) headers.Origin = opts.origin ?? base;
   let body: string | undefined;
   if (opts.body !== undefined) {
     body = JSON.stringify(opts.body);
     headers['Content-Type'] = 'application/json';
   }
-  return (exports as unknown as { default: Fetcher }).default.fetch(new Request(`${ORIGIN}/api${path}`, { method, headers, body }));
+  return (exports as unknown as { default: Fetcher }).default.fetch(new Request(`${base}/api${path}`, { method, headers, body }));
 }
 
 export async function json<T = any>(res: Response): Promise<T> {

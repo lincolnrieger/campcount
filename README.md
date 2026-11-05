@@ -81,7 +81,32 @@ Settings:
 - **Email Service:** enable sending for the domain the `EMAIL_FROM` address
   uses, so sign-in codes can be emailed.
 - **Domains:** attach `campcount.com` once the domain is on the account.
-  Until then the app runs at the workers.dev address.
+  Until then the app runs at the workers.dev address, and camps open at
+  `/events/<id>` instead of their own address.
+
+### Camp addresses (supersplash.campcount.com)
+
+Each camp can have its own address. It shows only that camp, with its own
+name, colour and logo. `campcount.com` itself is the admin console. One-time
+setup, once `campcount.com` is on the Cloudflare account:
+
+1. **DNS:** add a record for `*` (wildcard). Type `AAAA`, content `100::`,
+   proxied (orange cloud).
+2. **Workers route:** open Workers & Pages, then campcount, then Settings,
+   then Domains & Routes. Add a route `*.campcount.com/*` for zone
+   `campcount.com`.
+3. **Certificate:** Cloudflare's Universal SSL covers `campcount.com` and
+   `*.campcount.com`, so nothing else is needed.
+
+`ROOT_DOMAIN` in `wrangler.jsonc` must match the domain: `campcount.com` in
+production, `localhost` in development.
+
+Then, in the admin console, set each camp's address under Camps, then the
+camp. Sign-ins are separate per address: staff sign in at their camp's
+address.
+
+Locally, try a camp's address at `http://<address>.localhost:5173`.
+Chrome and Firefox send `*.localhost` to your own computer.
 
 To create the first administrator, run the SQL from
 `scripts/create-admin.mjs` against the production database with

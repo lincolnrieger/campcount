@@ -1,0 +1,23 @@
+/* Screens: settings. Tokens only. */
+
+/* ---------- Scanning stations: pairing code ---------- */
+.pairing {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-4);
+  text-align: center;
+}
+.pairing svg {
+  border: var(--border-width) solid var(--divider);
+  border-radius: var(--radius);
+}
+
+/* ---------- Reports: check-up ---------- */
+.checkup-head {
+  background: var(--surface-sunken);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.list > ul > li + li,
+.list > .row + ul > li {
+  border-top: var(--border-width) solid var(--divider);
+}

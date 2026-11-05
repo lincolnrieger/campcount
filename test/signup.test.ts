@@ -100,7 +100,7 @@ describe('activity sign-up', () => {
     const me = await json(await api('/public/signup/identify', { body: { token: c.card('100').token } }));
     const staffOnly = (await json(await api(`/events/${c.eventId}/activities`, { cookie: c.manager.cookie }))).activities.find((a: { name: string }) => a.name === 'Staff only');
     expect((await api('/public/signup/book', { body: { pass: me.pass, activityId: staffOnly.id } })).status).toBe(404);
-    expect((await api('/public/signup/book', { body: { pass: me.pass.replace(/.$/, '0'), activityId: c.kayak9 } })).status).toBe(401);
+    expect((await api('/public/signup/book', { body: { pass: me.pass.replace(/.$/, (ch: string) => (ch === '0' ? '1' : '0')), activityId: c.kayak9 } })).status).toBe(401);
 
     await testEnv.DB.prepare(`UPDATE events SET feature_self_signup = 0 WHERE id = ?`).bind(c.eventId).run();
     expect((await json(await api(`/public/signup/event/${c.code}`))).open).toBe(false);

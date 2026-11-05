@@ -1,14 +1,12 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
-import { ApiFailure, api } from '../api';
-import { BackLink, Field, Loading, LoadError, Notice, SkeletonHeading, SkeletonList } from '../components/ui';
-import { useToast } from '../components/Toast';
-import { useApi } from '../useApi';
-import { useEvent } from './EventLayout';
-import type { Activity } from './Activities';
 import { clockInZone, dayInZone, dayLabel, eventDays, zonedIso } from '../../shared/time';
-import { useTitle } from '../shell';
+import { ApiFailure, api } from '../api';
+import type { Activity } from '../model';
+import { useApi } from '../useApi';
+import { Button, Choice, ErrorSummary, Field, Icon, LoadError, Loading, Notice, PageHeader, SkeletonHeader, SkeletonRows, useToast } from '../ui';
+import { useEvent } from './EventLayout';
 
 interface FormState {
   name: string;
@@ -71,35 +69,30 @@ function nextSession(a: Activity, tz: string): FormState {
   return { ...f, start, end: addMinutes(start, length) };
 }
 
-export function ActivityForm({
-  id,
-  initial,
-  submitLabel,
-  onSave,
-  onCancel,
-}: {
-  id: string;
-  initial: FormState;
-  submitLabel: string;
-  onSave: (body: object) => Promise<void>;
-  onCancel?: () => void;
-}) {
+function ActivityForm({ initial, submitLabel, onSave, onCancel }: { initial: FormState; submitLabel: string; onSave: (body: { name: string }) => Promise<void>; onCancel: () => void }) {
   const { event } = useEvent();
   const days = eventDays(event.startsOn, event.endsOn);
   const [form, setForm] = useState<FormState>(initial);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [failure, setFailure] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((f) => ({ ...f, [k]: v }));
   const timed = form.day !== '';
-  const badTimes = timed && form.end !== '' && minutesBetween(form.start, form.end) <= 0;
+  // Advanced options start open when this activity already uses one.
+  const advanced = Boolean(initial.capacity || !initial.trackSignOut || !initial.allowRepeat || initial.signupOpen || initial.bookingRequired);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    setBusy(true);
+    const local: Record<string, string> = {};
+    if (!form.name.trim()) local.name = 'Enter the activity name';
+    if (timed && form.end && minutesBetween(form.start, form.end) <= 0) local.end = 'The end must be after the start';
+    setErrors(local);
     setFailure(null);
+    if (Object.keys(local).length) return;
+    setBusy(true);
     try {
       await onSave({
-        name: form.name,
+        name: form.name.trim(),
         location: form.location,
         instructions: form.instructions,
         capacity: form.capacity ? Number(form.capacity) : null,
@@ -110,135 +103,126 @@ export function ActivityForm({
         bookingRequired: form.bookingRequired,
         startsAt: timed ? zonedIso(form.day, form.start, event.timezone) : null,
         endsAt: timed && form.end ? zonedIso(form.day, form.end, event.timezone) : null,
-      });
+      } as { name: string });
     } catch (err) {
       if (err instanceof ApiFailure) {
         setErrors(err.fieldErrors());
         setFailure(err.message);
-      } else setFailure('Something went wrong. Check your signal and try again.');
+      } else setFailure('No connection. Check your signal and try again.');
     } finally {
       setBusy(false);
     }
   }
 
-  return (
-    <form onSubmit={submit} noValidate className="narrow activity-form">
-      {failure && <Notice tone="stop">{failure}</Notice>}
-      <Field id={`${id}-name`} label="Activity name" error={errors.name}>
-        <input id={`${id}-name`} className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-      </Field>
+  const summary = [errors.name && { id: 'act-name', message: errors.name }, errors.end && { id: 'act-end', message: errors.end }].filter(Boolean) as { id: string; message: string }[];
 
-      <div className="field">
-        <span className="field-legend" id={`${id}-when`}>
-          When
-        </span>
-        <div className="chip-row" role="group" aria-labelledby={`${id}-when`}>
-          <button type="button" aria-pressed={!timed} className="chip-toggle" onClick={() => setForm({ ...form, day: '' })}>
-            All camp
-          </button>
+  return (
+    <form className="form" onSubmit={submit} noValidate>
+      <ErrorSummary errors={summary} />
+      {failure && summary.length === 0 && (
+        <Notice tone="error">
+          <p>{failure}</p>
+        </Notice>
+      )}
+      <Field id="act-name" label="Name" error={errors.name}>
+        <input className="input" value={form.name} onChange={(e) => set('name', e.target.value)} autoComplete="off" />
+      </Field>
+      <Field id="act-day" label="Day">
+        <select className="select" value={form.day} onChange={(e) => set('day', e.target.value)}>
+          <option value="">No set time (runs all camp)</option>
           {days.map((d) => (
-            <button key={d} type="button" aria-pressed={form.day === d} className="chip-toggle" onClick={() => setForm({ ...form, day: d })}>
-              {dayLabel(d)}
-            </button>
+            <option key={d} value={d}>
+              {dayLabel(d, 'long')}
+            </option>
           ))}
-        </div>
-      </div>
+        </select>
+      </Field>
       {timed && (
-        <div className="row time-row">
-          <Field id={`${id}-start`} label="Starts">
+        <div className="field-pair">
+          <Field id="act-start" label="Start">
             <input
-              id={`${id}-start`}
-              className="input input-time"
+              className="input"
               type="time"
               value={form.start}
               onChange={(e) => {
+                // Keep the same length when the start moves.
                 const length = form.end ? minutesBetween(form.start, form.end) : 90;
                 setForm({ ...form, start: e.target.value, end: form.end ? addMinutes(e.target.value, Math.max(15, length)) : '' });
               }}
             />
           </Field>
-          <Field id={`${id}-end`} label="Ends (optional)" error={badTimes ? 'Must be after the start' : undefined}>
-            <input id={`${id}-end`} className="input input-time" type="time" value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} />
+          <Field id="act-end" label="End" optional error={errors.end}>
+            <input className="input" type="time" value={form.end} onChange={(e) => set('end', e.target.value)} />
           </Field>
         </div>
       )}
-
-      <div className="row">
-        <Field id={`${id}-loc`} label="Location">
-          <input id={`${id}-loc`} className="input" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
-        </Field>
-        <Field id={`${id}-cap`} label="Capacity" hint="Leave blank for no limit">
-          <input
-            id={`${id}-cap`}
-            className="input"
-            inputMode="numeric"
-            value={form.capacity}
-            onChange={(e) => setForm({ ...form, capacity: e.target.value.replace(/\D/g, '') })}
-          />
-        </Field>
-      </div>
-      <Field id={`${id}-ins`} label="Instructions for leaders" hint="Shown on the activity's scanning screen.">
-        <textarea id={`${id}-ins`} className="input" rows={2} value={form.instructions} onChange={(e) => setForm({ ...form, instructions: e.target.value })} />
+      <Field id="act-place" label="Place" optional>
+        <input className="input" value={form.location} onChange={(e) => set('location', e.target.value)} autoComplete="off" />
       </Field>
-      <label className="check">
-        <input type="checkbox" checked={form.trackSignOut} onChange={(e) => setForm({ ...form, trackSignOut: e.target.checked })} />
-        <div>
-          <strong>Sign people out as well as in</strong>
-          <span>Shows who is at the activity right now. Needed for capacity limits.</span>
+      <Field id="act-ins" label="Instructions for leaders" optional hint="Shown on the activity's page and scanner.">
+        <textarea className="textarea" rows={3} value={form.instructions} onChange={(e) => set('instructions', e.target.value)} />
+      </Field>
+
+      <details className="more-options" open={advanced}>
+        <summary>
+          <Icon name="chevron" />
+          More options
+        </summary>
+        <div className="form">
+          <Field id="act-cap" label="Capacity" optional hint="Leave blank for no limit.">
+            <input className="input activity-capacity" inputMode="numeric" value={form.capacity} onChange={(e) => set('capacity', e.target.value.replace(/\D/g, ''))} />
+          </Field>
+          <fieldset className="choices">
+            <legend className="visually-hidden">Activity options</legend>
+            {form.capacity && (
+              <Choice
+                label="Refuse sign-ins when full"
+                description="If off, the leader sees a warning but the sign-in still counts."
+                checked={form.capacityPolicy === 'block'}
+                onChange={(e) => set('capacityPolicy', e.target.checked ? 'block' : 'warn')}
+              />
+            )}
+            <Choice
+              label="Sign people out as well as in"
+              description="Shows who is at the activity right now. Needed for capacity limits."
+              checked={form.trackSignOut}
+              onChange={(e) => set('trackSignOut', e.target.checked)}
+            />
+            <Choice
+              label="Allow repeat visits"
+              description="If off, a second visit is flagged as already done."
+              checked={form.allowRepeat}
+              onChange={(e) => set('allowRepeat', e.target.checked)}
+            />
+            {event.features.selfSignup && (
+              <>
+                <Choice
+                  label="Open for self sign-up"
+                  description="Listed on the sign-up kiosk and session posters. The capacity is the number of places."
+                  checked={form.signupOpen}
+                  onChange={(e) => set('signupOpen', e.target.checked)}
+                />
+                <Choice
+                  label="Booking required"
+                  description="The leader sees a warning when someone who hasn't booked is scanned in."
+                  checked={form.bookingRequired}
+                  onChange={(e) => set('bookingRequired', e.target.checked)}
+                />
+              </>
+            )}
+          </fieldset>
         </div>
-      </label>
-      <label className="check">
-        <input type="checkbox" checked={form.allowRepeat} onChange={(e) => setForm({ ...form, allowRepeat: e.target.checked })} />
-        <div>
-          <strong>Allow people to do it more than once</strong>
-          <span>If off, a second visit is flagged as already done.</span>
-        </div>
-      </label>
-      {event.features.selfSignup && (
-        <>
-          <label className="check">
-            <input type="checkbox" checked={form.signupOpen} onChange={(e) => setForm({ ...form, signupOpen: e.target.checked })} />
-            <div>
-              <strong>People can sign up</strong>
-              <span>Shows on the sign-up screen and session posters. The capacity is the number of places.</span>
-            </div>
-          </label>
-          <label className="check">
-            <input type="checkbox" checked={form.bookingRequired} onChange={(e) => setForm({ ...form, bookingRequired: e.target.checked })} />
-            <div>
-              <strong>Check bookings at the scanner</strong>
-              <span>The leader sees a warning when someone who hasn't signed up is scanned in.</span>
-            </div>
-          </label>
-        </>
-      )}
-      {form.capacity && (
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={form.capacityPolicy === 'block'}
-            onChange={(e) => setForm({ ...form, capacityPolicy: e.target.checked ? 'block' : 'warn' })}
-          />
-          <div>
-            <strong>Refuse sign-ins when full</strong>
-            <span>If off, the leader sees a warning but the sign-in is still recorded.</span>
-          </div>
-        </label>
-      )}
-      <div className="actions">
-        <button className="btn" disabled={busy || !form.name.trim() || badTimes}>
-          {busy ? 'Saving…' : submitLabel}
-        </button>
-        {onCancel && (
-          <button type="button" className="btn btn-secondary" onClick={onCancel}>
-            Cancel
-          </button>
-        )}
+      </details>
+
+      <div className="btn-row">
+        <Button type="submit" kind="primary" busy={busy} busyLabel="Saving…">
+          {submitLabel}
+        </Button>
+        <Button onClick={onCancel}>Cancel</Button>
       </div>
     </form>
   );
 }
-
 
 /**
  * Add an activity (activities/new), add another session of one
@@ -246,6 +230,7 @@ export function ActivityForm({
  */
 export function ActivityEdit() {
   const { event, can } = useEvent();
+  const { base: eventBase } = useEvent();
   const { activityId } = useParams();
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -256,40 +241,58 @@ export function ActivityEdit() {
   const source = list.data?.activities.find((a) => a.id === sourceId) ?? null;
   const mode = activityId ? 'edit' : from ? 'copy' : 'new';
   const title = mode === 'edit' ? 'Edit activity' : mode === 'copy' ? 'Add another session' : 'Add activity';
-  useTitle(title);
-  const back = mode === 'edit' ? { to: '..', label: source?.name ?? 'Activity' } : { to: '..', label: 'Activities' };
+  const base = `${eventBase}/activities`;
+  const back = mode === 'new' ? { to: base, label: 'Activities' } : { to: `${base}/${sourceId}`, label: source?.name ?? 'Activity' };
 
   if (!can('activities.manage') || (event.status !== 'draft' && event.status !== 'open'))
-    return <Notice tone="stop">Activities can only be changed by event managers while the event is a draft or open.</Notice>;
+    return (
+      <>
+        <PageHeader title={title} back={{ to: base, label: 'Activities' }} />
+        <Notice tone="warning">
+          <p>Only event managers can change activities, and only while the event is a draft or open.</p>
+        </Notice>
+      </>
+    );
   if (sourceId && list.loading && !list.data)
     return (
-      <Loading label="Loading activity">
-        <SkeletonHeading sub={false} width="12rem" />
-        <SkeletonList rows={4} lines={1} aside="none" />
+      <Loading what="activity">
+        <SkeletonHeader />
+        <SkeletonRows rows={4} />
       </Loading>
     );
-  if (list.error) return <LoadError error={list.error} onRetry={list.reload} />;
-  if (sourceId && !source) return <LoadError error={new ApiFailure(404, 'not_found', '')} message="This activity has been deleted." />;
+  if (list.error)
+    return (
+      <>
+        <PageHeader title={title} back={back} />
+        <LoadError error={list.error} onRetry={list.reload} what="this activity" />
+      </>
+    );
+  if (sourceId && !source)
+    return (
+      <>
+        <PageHeader title={title} back={{ to: base, label: 'Activities' }} />
+        <Notice tone="error">
+          <p>This activity has been deleted.</p>
+        </Notice>
+      </>
+    );
 
   return (
     <>
-      <BackLink to={back.to} label={back.label} />
-      <h2>{title}</h2>
-      {mode === 'copy' && <p className="lede">Same settings as {source!.name}, starting when it ends. Change anything you need.</p>}
+      <PageHeader title={title} back={back} summary={mode === 'copy' ? `Same settings as ${source!.name}, starting when it ends. Change anything you need.` : undefined} />
       <ActivityForm
-        id="activity"
         initial={mode === 'edit' ? toForm(source!, event.timezone) : mode === 'copy' ? nextSession(source!, event.timezone) : EMPTY}
         submitLabel={mode === 'edit' ? 'Save changes' : mode === 'copy' ? 'Add session' : 'Add activity'}
-        onCancel={() => navigate('..', { relative: 'path' })}
+        onCancel={() => navigate(back.to)}
         onSave={async (body) => {
           if (mode === 'edit') {
-            await api(`/events/${event.id}/activities/${source!.id}`, { method: 'PATCH', body });
-            toast('Changes saved.');
-            navigate('..', { relative: 'path' });
+            await api(`${base}/${source!.id}`, { method: 'PATCH', body });
+            toast('Changes saved');
+            navigate(`${base}/${source!.id}`);
           } else {
-            await api(`/events/${event.id}/activities`, { body });
-            toast(`Added ${(body as { name: string }).name}.`);
-            navigate('..', { relative: 'path' });
+            const { id } = await api<{ id: string }>(base, { body });
+            toast(`${body.name} added`);
+            navigate(`${base}/${id}`);
           }
         }}
       />

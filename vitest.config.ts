@@ -12,6 +12,7 @@ export default defineConfig(async () => {
           bindings: {
             TEST_MIGRATIONS: migrations,
             ENVIRONMENT: 'test',
+            ROOT_DOMAIN: 'campcount.test',
             AUTH_SECRET: 'test-secret-not-for-production-0123456789',
           },
         },

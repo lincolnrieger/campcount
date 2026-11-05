@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { loadSnapshot, saveSnapshot } from '../offline/db';
-import type { Activity } from '../pages/Activities';
-import type { Meal } from '../pages/Meals';
+import type { Activity } from '../model';
+import type { Meal } from '../model';
 import type { EventSummary } from '../types';
 import { dayInZone, eventDays, inferDay, timeInZone, timeRange } from '../../shared/time';
 

@@ -2,28 +2,24 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { ReactNode } from 'react';
 import { Icon } from './Icon';
 
-interface Toast {
+interface ToastItem {
   id: number;
   text: string;
-  tone: 'ok' | 'stop';
+  tone: 'ok' | 'error';
   undo?: () => Promise<unknown> | void;
 }
-
-type Show = (text: string, options?: { tone?: 'ok' | 'stop'; undo?: Toast['undo'] }) => void;
+type Show = (text: string, options?: { tone?: 'ok' | 'error'; undo?: ToastItem['undo'] }) => void;
 
 const ToastContext = createContext<Show>(() => undefined);
 
-/** Confirm a finished action: `toast('Meal deleted.')`, optionally with an Undo. */
+/** Confirm a finished action: `toast('Activity added')`, optionally with Undo. */
 export function useToast(): Show {
   return useContext(ToastContext);
 }
 
-/**
- * One message at a time, above the tab bar, read out politely by screen
- * readers. It stays while focused, and Undo gets ten seconds.
- */
+/** One message at a time, read out politely. It stays while its buttons have focus; Undo gets ten seconds. */
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [toast, setToast] = useState<Toast | null>(null);
+  const [toast, setToast] = useState<ToastItem | null>(null);
   const [held, setHeld] = useState(false);
   const next = useRef(1);
   const show = useCallback<Show>((text, options = {}) => {
@@ -32,9 +28,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!toast || held) return;
-    const t = setTimeout(() => setToast(null), toast.undo ? 10000 : 6000);
+    const t = setTimeout(() => setToast(null), toast.undo ? 10000 : 5000);
     return () => clearTimeout(t);
   }, [toast, held]);
+
+  const hold = { onFocus: () => setHeld(true), onBlur: () => setHeld(false) };
 
   return (
     <ToastContext.Provider value={show}>
@@ -42,25 +40,22 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div className="toast-region" role="status" aria-live="polite">
         {toast && (
           <div key={toast.id} className={`toast toast-${toast.tone}`}>
-            <span className="toast-mark" aria-hidden="true">
-              {toast.tone === 'ok' ? '✓' : '!'}
-            </span>
+            <Icon name={toast.tone === 'ok' ? 'success' : 'error'} />
             <p>{toast.text}</p>
             {toast.undo && (
               <button
                 type="button"
-                className="toast-action"
-                onFocus={() => setHeld(true)}
-                onBlur={() => setHeld(false)}
+                className="btn btn-ghost btn-small"
+                {...hold}
                 onClick={async () => {
                   const undo = toast.undo!;
                   setToast(null);
                   setHeld(false);
                   try {
                     await undo();
-                    show('Undone.');
+                    show('Undone');
                   } catch {
-                    show("Couldn't undo that. Check your signal and try again.", { tone: 'stop' });
+                    show("Couldn't undo that. Check your signal and try again.", { tone: 'error' });
                   }
                 }}
               >
@@ -69,16 +64,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             )}
             <button
               type="button"
-              className="toast-close"
-              onFocus={() => setHeld(true)}
-              onBlur={() => setHeld(false)}
-              aria-label="Dismiss"
+              className="icon-btn"
+              aria-label="Dismiss message"
+              {...hold}
               onClick={() => {
                 setToast(null);
                 setHeld(false);
               }}
             >
-              <Icon name="close" size={16} />
+              <Icon name="close" />
             </button>
           </div>
         )}
