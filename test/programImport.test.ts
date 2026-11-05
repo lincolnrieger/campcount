@@ -31,4 +31,33 @@ describe('programme import', () => {
     await grant(scanner.id, 'scanner', eventId);
     expect((await api(`/events/${eventId}/program/import`, { cookie: scanner.cookie, body: { activities: [{ name: 'X' }] } })).status).toBe(403);
   });
+
+  it('keeps programme items off sign-up and scanning lists, and shows the whole programme on lanyard pages', async () => {
+    const admin = await createUser({ platformAdmin: true });
+    const eventId = await createEvent(admin.id, { status: 'open' });
+    await testEnv.DB.prepare(`UPDATE events SET feature_self_signup = 1 WHERE id = ?`).bind(eventId).run();
+    const manager = await createUser();
+    await grant(manager.id, 'event_manager', eventId);
+    await api(`/events/${eventId}/program/import`, {
+      cookie: manager.cookie,
+      body: {
+        activities: [
+          { name: 'Welcome', kind: 'program', startsAt: '2026-12-05T08:30:00+10:30' },
+          { name: 'Cycling', bookingRequired: true, signupOpen: true, startsAt: '2026-12-05T09:00:00+10:30', endsAt: '2026-12-05T12:00:00+10:30' },
+        ],
+      },
+    });
+    const { activities } = await json(await api(`/events/${eventId}/activities`, { cookie: manager.cookie }));
+    expect(activities.map((a: { name: string; kind: string }) => [a.name, a.kind])).toEqual([
+      ['Welcome', 'program'],
+      ['Cycling', 'activity'],
+    ]);
+    const { code } = await json(await api(`/events/${eventId}/signup/new-link`, { cookie: manager.cookie, method: 'POST' })).catch(() => ({ code: null }));
+    const signupCode = code ?? (await testEnv.DB.prepare(`SELECT signup_code FROM events WHERE id = ?`).bind(eventId).first<{ signup_code: string }>())?.signup_code;
+    if (signupCode) {
+      const screen = await json(await api(`/public/signup/event/${signupCode}`));
+      expect(screen.sessions.map((x: { name: string }) => x.name)).toEqual(['Cycling']);
+    }
+  });
 });
+

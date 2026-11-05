@@ -67,7 +67,7 @@ export function Activities() {
       </>
     );
 
-  const all = (data?.activities ?? []).filter((a) => manager || a.status === 'active');
+  const all = (data?.activities ?? []).filter((a) => a.kind !== 'program' && (manager || a.status === 'active'));
   if (all.length === 0)
     return (
       <>

@@ -54,6 +54,7 @@ function activityDto(r: Record<string, unknown>) {
     allowRepeat: r.allow_repeat === 1,
     bookingRequired: r.booking_required === 1,
     signupOpen: r.signup_open === 1,
+    kind: r.kind ?? 'activity',
     booked: (r.booked as number | undefined) ?? 0,
     status: r.status,
   };
@@ -87,6 +88,7 @@ const ACTIVITY_COLUMNS: Record<string, string> = {
   allowRepeat: 'allow_repeat',
   bookingRequired: 'booking_required',
   signupOpen: 'signup_open',
+  kind: 'kind',
   status: 'status',
 };
 

@@ -4,13 +4,14 @@ import { useParams, useSearchParams } from 'react-router';
 import { parseCredentialPayload } from '../../shared/credentials';
 import { ApiFailure, api } from '../api';
 import { SessionBoard, SignupPanel } from '../components/SignupPanel';
-import type { SignupSession, SignupView } from '../components/SignupPanel';
+import type { ProgrammeItem, SignupSession, SignupView } from '../components/SignupPanel';
+import { dayInZone, dayLabel, timeInZone } from '../../shared/time';
 import { createDetector } from '../scan/decoder';
 import { useTitle } from '../shell';
 import { useSiteEvent } from '../site';
 import { BrandMark } from '../ui/AppShell';
 import { SiteLogo } from '../ui/SiteShell';
-import { Button, Field, Icon, Loading, Notice, SkeletonRows, formatDateRange } from '../ui';
+import { Badge, Button, Field, Icon, Loading, Notice, SkeletonRows, formatDateRange } from '../ui';
 
 /** Back to the start screen after this long without a tap, so the next person starts fresh. */
 const IDLE_MS = 90_000;
@@ -335,7 +336,89 @@ export function MyActivities() {
           <p>{person.done}</p>
         </Notice>
       )}
+      <OnNow items={v.programme ?? []} tz={v.event.timezone} />
       <SignupPanel view={v} busy={person.busy} onBook={(s) => person.book(s)} onCancel={(id) => person.cancel(id)} />
+      <Programme items={v.programme ?? []} tz={v.event.timezone} />
     </Frame>
+  );
+}
+
+const nowish = (it: ProgrammeItem, now: number) => {
+  if (!it.startsAt) return false;
+  const start = Date.parse(it.startsAt);
+  const end = it.endsAt ? Date.parse(it.endsAt) : start + 60 * 60_000;
+  return now >= start - 5 * 60_000 && now < end;
+};
+const KIND_WORD: Record<ProgrammeItem['kind'], string> = { activity: '', meal: 'Meal', program: '' };
+
+function ProgrammeRow({ it, tz }: { it: ProgrammeItem; tz: string }) {
+  return (
+    <li className="row">
+      <span className="programme-time num">{it.startsAt ? timeInZone(it.startsAt, tz) : ''}</span>
+      <span className="row-main">
+        <span className="row-title">{it.name}</span>
+        <span className="row-meta">
+          {[it.endsAt ? `until ${timeInZone(it.endsAt, tz)}` : null, it.location, KIND_WORD[it.kind] || null].filter(Boolean).join(' · ')}
+        </span>
+      </span>
+      {it.bookingRequired && <Badge tone="brand">Book first</Badge>}
+    </li>
+  );
+}
+
+/** What's happening right now, at the top, so a glance answers "where should I be?". */
+function OnNow({ items, tz }: { items: ProgrammeItem[]; tz: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  const on = items.filter((i) => nowish(i, now));
+  if (on.length === 0) return null;
+  return (
+    <section className="signup-section" aria-labelledby="on-now">
+      <h2 id="on-now">On now</h2>
+      <ul className="list">
+        {on.map((it, i) => (
+          <ProgrammeRow key={i} it={it} tz={tz} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** The whole camp programme, day by day, then the activities you can do any time. */
+function Programme({ items, tz }: { items: ProgrammeItem[]; tz: string }) {
+  const timed = items.filter((i) => i.startsAt);
+  const anyTime = items.filter((i) => !i.startsAt && i.kind === 'activity');
+  if (items.length === 0) return null;
+  const days = [...new Set(timed.map((i) => dayInZone(i.startsAt!, tz)))];
+  return (
+    <section className="signup-section" aria-labelledby="programme">
+      <h2 id="programme">Camp programme</h2>
+      {days.map((d) => (
+        <div key={d} className="list">
+          <h3 className="list-group-heading">{dayLabel(d, 'long')}</h3>
+          <ul>
+            {timed
+              .filter((i) => dayInZone(i.startsAt!, tz) === d)
+              .map((it, i) => (
+                <ProgrammeRow key={i} it={it} tz={tz} />
+              ))}
+          </ul>
+        </div>
+      ))}
+      {anyTime.length > 0 && (
+        <div className="list">
+          <h3 className="list-group-heading">Activities you can do</h3>
+          <ul>
+            {anyTime.map((it, i) => (
+              <ProgrammeRow key={i} it={it} tz={tz} />
+            ))}
+          </ul>
+        </div>
+      )}
+      {items.some((i) => i.bookingRequired) && <p className="meta">Activities marked "Book first" need a booking. Book them above, or at the sign-up screen.</p>}
+    </section>
   );
 }

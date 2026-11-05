@@ -109,3 +109,21 @@
 .kiosk-type .field {
   width: 100%;
 }
+
+/* Lanyard page: on now and the camp programme */
+.signup-section {
+  display: grid;
+  gap: var(--space-3);
+}
+.signup-section > .list + .list {
+  margin-top: var(--space-2);
+}
+.programme-time {
+  align-self: flex-start;
+  width: 5rem;
+  white-space: nowrap;
+  flex: none;
+  padding-top: 1px;
+  font-weight: var(--weight-bold);
+  color: var(--ink-2);
+}

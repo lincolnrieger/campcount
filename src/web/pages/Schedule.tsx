@@ -44,6 +44,8 @@ interface Item {
   start: number;
   end: number;
   openEnded: boolean;
+  /** A programme item (Welcome, Movies…): an activity row that's never booked or scanned. */
+  program: boolean;
   activity?: Activity;
   meal?: Meal;
 }
@@ -126,10 +128,10 @@ export function Schedule() {
       let end = endsAt ? toMin(clockInZone(endsAt, tz)) : start + DEFAULT_LENGTH;
       if (endsAt && dayInZone(endsAt, tz) !== day) end = 24 * 60;
       if (end <= start) end = start + SNAP;
-      return { key: `${kind}:${id}`, id, kind, name, location, cancelled: status === 'cancelled', day: day && days.includes(day) ? day : null, start, end, openEnded: !endsAt, ...extra };
+      return { key: `${kind}:${id}`, id, kind, name, location, cancelled: status === 'cancelled', day: day && days.includes(day) ? day : null, start, end, openEnded: !endsAt, program: false, ...extra };
     };
     return [
-      ...(acts.data?.activities ?? []).map((a) => make('activity', a.id, a.name, a.location, a.status, a.startsAt, a.endsAt, { activity: a })),
+      ...(acts.data?.activities ?? []).map((a) => make('activity', a.id, a.name, a.location, a.status, a.startsAt, a.endsAt, { activity: a, program: a.kind === 'program' })),
       ...(meals.data?.meals ?? []).map((m) => make('meal', m.id, m.name, m.location, m.status, m.startsAt, m.endsAt, { meal: m })),
     ];
   }, [acts.data, meals.data, tz, days]);
@@ -319,12 +321,12 @@ export function Schedule() {
                     <li key={it.key}>
                       <button
                         type="button"
-                        className={`schedule-chip schedule-${it.kind}${it.cancelled ? ' is-cancelled' : ''}${drag?.key === it.key && drag.moved ? ' is-lifted' : ''}`}
+                        className={`schedule-chip schedule-${it.program ? 'program' : it.kind}${it.cancelled ? ' is-cancelled' : ''}${drag?.key === it.key && drag.moved ? ' is-lifted' : ''}`}
                         onPointerDown={(e) => startDrag(e, it, 'move')}
                         onClick={() => open(it.key)}
                       >
                         <span className="schedule-name">{it.name}</span>
-                        <span className="schedule-meta">{[it.kind === 'meal' ? 'Meal' : null, it.location].filter(Boolean).join(' · ') || 'Activity'}</span>
+                        <span className="schedule-meta">{[it.kind === 'meal' ? 'Meal' : it.program ? 'Programme' : null, it.location].filter(Boolean).join(' · ') || 'Activity'}</span>
                       </button>
                     </li>
                   ))}
@@ -377,14 +379,14 @@ export function Schedule() {
                           <button
                             key={it.key}
                             type="button"
-                            className={`schedule-item schedule-${it.kind}${it.cancelled ? ' is-cancelled' : ''}${lifted ? ' is-lifted' : ''}${it.end - it.start <= 30 ? ' is-short' : ''}`}
+                            className={`schedule-item schedule-${it.program ? 'program' : it.kind}${it.cancelled ? ' is-cancelled' : ''}${lifted ? ' is-lifted' : ''}${it.end - it.start <= 30 ? ' is-short' : ''}`}
                             style={{
                               top: (it.start - top) * PX,
                               height: Math.max((it.end - it.start) * PX, 22),
                               left: `calc(${(lane.lane / lane.lanes) * 100}% + 2px)`,
                               width: `calc(${100 / lane.lanes}% - 4px)`,
                             }}
-                            aria-label={`${it.name}, ${it.kind === 'meal' ? 'meal, ' : ''}${dayLabel(d)} ${label(it.start)}${it.openEnded ? '' : ` to ${label(it.end)}`}${it.cancelled ? ', cancelled' : ''}`}
+                            aria-label={`${it.name}, ${it.kind === 'meal' ? 'meal, ' : it.program ? 'programme, ' : ''}${dayLabel(d)} ${label(it.start)}${it.openEnded ? '' : ` to ${label(it.end)}`}${it.cancelled ? ', cancelled' : ''}`}
                             onPointerDown={(e) => startDrag(e, it, 'move')}
                             onClick={() => open(it.key)}
                           >
@@ -413,6 +415,7 @@ export function Schedule() {
         )}
         <p className="meta schedule-key no-print">
           <span className="schedule-swatch schedule-activity" aria-hidden="true" /> Activity <span className="schedule-swatch schedule-meal" aria-hidden="true" /> Meal{' '}
+          <span className="schedule-swatch schedule-program" aria-hidden="true" /> Programme{' '}
           <span className="schedule-swatch is-cancelled" aria-hidden="true" /> Cancelled
         </p>
       </div>
@@ -445,6 +448,7 @@ export function Schedule() {
                       allowRepeat: a.allowRepeat,
                       bookingRequired: a.bookingRequired,
                       signupOpen: a.signupOpen,
+                      kind: a.kind,
                       ...time,
                     },
                   });
@@ -552,10 +556,11 @@ function SessionPanel({
   return (
     <>
       <p className="schedule-panel-meta">
-        <Badge tone={it.kind === 'meal' ? 'info' : 'brand'}>{it.kind === 'meal' ? 'Meal' : 'Activity'}</Badge>
+        <Badge tone={it.kind === 'meal' ? 'info' : it.program ? 'neutral' : 'brand'}>{it.kind === 'meal' ? 'Meal' : it.program ? 'Programme' : 'Activity'}</Badge>
+        {a?.bookingRequired && <Badge tone="brand">Booking required</Badge>}
         {it.cancelled && <Badge>Cancelled</Badge>}
         {it.location && <span>{it.location}</span>}
-        {a && <span>{a.capacity ? `${a.booked} of ${a.capacity} booked` : `${a.booked} booked`}</span>}
+        {a && !it.program && <span>{a.capacity ? `${a.booked} of ${a.capacity} booked` : `${a.booked} booked`}</span>}
       </p>
       {editable && (
         <form className="form" onSubmit={(e) => void save(e)} noValidate>

@@ -52,7 +52,7 @@ async function sessions(db: D1Database, eventId: string): Promise<SignupSession[
       `SELECT a.id, a.name, a.location, a.starts_at, a.ends_at, a.capacity,
               (SELECT count(*) FROM activity_bookings b WHERE b.activity_id = a.id) AS booked
          FROM activities a
-        WHERE a.event_id = ? AND a.status = 'active' AND a.signup_open = 1
+        WHERE a.event_id = ? AND a.status = 'active' AND a.signup_open = 1 AND a.kind = 'activity'
         ORDER BY a.starts_at IS NULL, a.starts_at, a.name COLLATE NOCASE`,
     )
     .bind(eventId)
@@ -130,8 +130,33 @@ async function personFor(c: AppContext, registrationId: string): Promise<Person>
   };
 }
 
+/** The whole camp programme, for people looking at their own lanyard page: activities, meals and programme items. */
+async function programme(db: D1Database, eventId: string) {
+  const [acts, meals] = await Promise.all([
+    db
+      .prepare(`SELECT name, location, starts_at, ends_at, kind, booking_required FROM activities WHERE event_id = ? AND status = 'active'`)
+      .bind(eventId)
+      .all<{ name: string; location: string; starts_at: string | null; ends_at: string | null; kind: string; booking_required: number }>(),
+    db
+      .prepare(`SELECT name, location, starts_at, ends_at FROM meal_services WHERE event_id = ? AND status = 'active'`)
+      .bind(eventId)
+      .all<{ name: string; location: string; starts_at: string | null; ends_at: string | null }>(),
+  ]);
+  return [
+    ...acts.results.map((a) => ({
+      name: a.name,
+      location: a.location,
+      startsAt: a.starts_at,
+      endsAt: a.ends_at,
+      kind: a.kind === 'program' ? 'program' : 'activity',
+      bookingRequired: a.booking_required === 1,
+    })),
+    ...meals.results.map((m) => ({ name: m.name, location: m.location, startsAt: m.starts_at, endsAt: m.ends_at, kind: 'meal', bookingRequired: false })),
+  ].sort((x, y) => (x.startsAt ?? '').localeCompare(y.startsAt ?? '') || x.name.localeCompare(y.name));
+}
+
 async function personView(c: AppContext, p: Person) {
-  const [list, booked] = await Promise.all([
+  const [list, booked, programmeList] = await Promise.all([
     sessions(c.env.DB, p.event.id),
     c.env.DB.prepare(
       `SELECT b.activity_id, b.source, a.name, a.location, a.starts_at, a.ends_at
@@ -140,6 +165,7 @@ async function personView(c: AppContext, p: Person) {
     )
       .bind(p.registrationId)
       .all<{ activity_id: string; source: string; name: string; location: string; starts_at: string | null; ends_at: string | null }>(),
+    programme(c.env.DB, p.event.id),
   ]);
   return {
     pass: await makePass(c, p.registrationId),
@@ -147,6 +173,7 @@ async function personView(c: AppContext, p: Person) {
     event: { name: p.event.name, timezone: p.event.timezone, startsOn: p.event.starts_on, endsOn: p.event.ends_on },
     open: signupOpen(p.event),
     sessions: list,
+    programme: programmeList,
     bookings: booked.results.map((b) => ({
       activityId: b.activity_id,
       name: b.name,
