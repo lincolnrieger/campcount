@@ -8,7 +8,7 @@ import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import type { Activity } from './Activities';
 import { clockInZone, dayInZone, dayLabel, eventDays, zonedIso } from '../../shared/time';
-import { useTitle } from '../useTitle';
+import { useTitle } from '../shell';
 
 interface FormState {
   name: string;

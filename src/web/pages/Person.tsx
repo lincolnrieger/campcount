@@ -1,4 +1,4 @@
-import { useTitle } from '../useTitle';
+import { useTitle } from '../shell';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router';
@@ -167,7 +167,7 @@ export function Person() {
   }
 
   return (
-    <div className="person">
+    <div className="person-page">
       <BackLink to=".." label="People" />
       <div className="person-head">
         <div className="title-row">
@@ -212,228 +212,233 @@ export function Person() {
       </div>
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
 
-      {data.where && (
-        <section className="list-section">
-          <h3 className="list-heading">Right now</h3>
-          <WhereNow where={data.where} tz={tz} />
-        </section>
-      )}
-
-      {data.bookings.length > 0 && (
-        <section className="list-section">
-          <h3 className="list-heading">Signed up for</h3>
-          <ul className="list">
-            {data.bookings.map((b) => (
-              <li key={b.activityId} className="list-row">
-                <span className="list-main">
-                  <strong>{b.name}</strong>
-                  <span>
-                    {b.startsAt ? `${dayLabel(dayInZone(b.startsAt, tz))}, ${timeRange(b.startsAt, b.endsAt, tz)}` : 'Any time'}
-                    {b.selfBooked ? '' : ', booked by leaders'}
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <section className="list-section">
-        <div className="section-row">
-          <h3 className="list-heading">Details</h3>
-          {data.can.edit && !editing && (
-            <button className="btn-link" onClick={() => setEditing(true)}>
-              Edit details
-            </button>
+      <div className="split">
+        <div>
+          {data.where && (
+            <section className="list-section">
+              <h3 className="list-heading">Right now</h3>
+              <WhereNow where={data.where} tz={tz} />
+            </section>
           )}
+
+          {data.bookings.length > 0 && (
+            <section className="list-section">
+              <h3 className="list-heading">Signed up for</h3>
+              <ul className="list">
+                {data.bookings.map((b) => (
+                  <li key={b.activityId} className="list-row">
+                    <span className="list-main">
+                      <strong>{b.name}</strong>
+                      <span>
+                        {b.startsAt ? `${dayLabel(dayInZone(b.startsAt, tz))}, ${timeRange(b.startsAt, b.endsAt, tz)}` : 'Any time'}
+                        {b.selfBooked ? '' : ', booked by leaders'}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          <section className="list-section">
+            <h3 className="list-heading">Where they've been</h3>
+            {data.history.length === 0 ? (
+              <p className="field-hint">No scans yet.</p>
+            ) : (
+              [...days].map(([day, items]) => (
+                <div key={day} className="history-day">
+                  <p className="history-date">{day}</p>
+                  <ol className="list history">
+                    {items.map((h) => {
+                      const tag = OUTCOME_TAG[h.outcome];
+                      return (
+                        <li key={h.id} className={h.outcome === 'accepted' ? 'history-row' : 'history-row is-faded'}>
+                          <span className="history-time">{timeInZone(h.at, tz)}</span>
+                          <span className="list-main">
+                            <strong>
+                              {scanVerb(h.type, h.direction)}: {h.place}
+                            </strong>
+                            <span>
+                              {h.by && `by ${h.by}`}
+                              {h.method === 'manual' && ', entered by hand'}
+                              {h.method === 'code' && ', typed code'}
+                            </span>
+                          </span>
+                          {tag && <span className={tag.tone}>{tag.label}</span>}
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </div>
+              ))
+            )}
+          </section>
         </div>
-        {editing ? (
-          <DetailsForm
-            r={r}
-            busy={busy}
-            onCancel={() => setEditing(false)}
-            onSave={(body) =>
-              void act(async () => {
-                await api(path, { method: 'PATCH', body });
-                setEditing(false);
-              }, 'Details saved.')
-            }
-          />
-        ) : (
-          <dl className="list detail-list">
-            <div>
-              <dt>Name</dt>
-              <dd>
-                {r.firstName} {r.lastName}
-                {r.preferredName && ` (goes by ${r.preferredName})`}
-              </dd>
-            </div>
-            <div>
-              <dt>Membership number</dt>
-              <dd>{r.memberNumber}</dd>
-            </div>
-            <div>
-              <dt>{r.kind === 'adult' ? 'Leader' : 'Youth'}</dt>
-              <dd>{r.kind === 'adult' ? r.position || 'Leader' : r.section}</dd>
-            </div>
-            <div>
-              <dt>Group</dt>
-              <dd>{r.groupName || '—'}</dd>
-            </div>
-            {r.photoConsent && (
-              <div>
-                <dt>Photos</dt>
-                <dd>{r.photoConsent === 'yes' ? 'OK' : r.photoConsent === 'no' ? 'No photos' : 'Not recorded'}</dd>
-              </div>
-            )}
-          </dl>
-        )}
-      </section>
-
-      {r.dietary && (
-        <section className="list-section">
-          <div className="section-row">
-            <h3 className="list-heading">Dietary needs</h3>
-            {data.can.editDietary && editingDiet === null && (
-              <button className="btn-link" onClick={() => setEditingDiet(r.dietary ?? [])}>
-                Edit dietary needs
-              </button>
-            )}
-          </div>
-          {editingDiet !== null ? (
-            <div className="list-pad">
-              <DietaryEditor value={editingDiet} onChange={setEditingDiet} labelPrefix={fullName} />
-              <div className="actions">
-                <button
-                  className="btn"
-                  disabled={busy}
-                  onClick={() =>
-                    void act(async () => {
-                      await api(`${path}/dietary`, { method: 'PUT', body: { entries: editingDiet } });
-                      setEditingDiet(null);
-                    }, 'Dietary needs saved.')
-                  }
-                >
-                  {busy ? 'Saving…' : 'Save dietary needs'}
-                </button>
-                <button className="btn btn-secondary" onClick={() => setEditingDiet(null)}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : r.dietary.length === 0 ? (
-            <p className="field-hint">None recorded.</p>
-          ) : (
-            <ul className="chips">
-              {r.dietary.map((d, i) => (
-                <li key={i} className={d.category === 'allergy' ? 'chip chip-alert' : 'chip'}>
-                  {describeEntry(d)}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
-
-      {data.can.cards && (
-        <section className="list-section">
-          <h3 className="list-heading">Lanyard</h3>
-          {!r.shortCode ? (
-            <div className="list-pad">
-              <p className="field-hint">No card issued yet.</p>
-              {r.status === 'active' && (
-                <button
-                  className="btn btn-small"
-                  disabled={busy}
-                  onClick={() =>
-                    void act(() => api(`/events/${event.id}/credentials/issue`, { body: { mode: 'missing', registrationIds: [r.id] } }), 'Card issued.')
-                  }
-                >
-                  {busy ? 'Issuing…' : 'Issue card'}
+        <aside aria-label="Details">
+          <section className="list-section">
+            <div className="section-row">
+              <h3 className="list-heading">Details</h3>
+              {data.can.edit && !editing && (
+                <button className="btn-link" onClick={() => setEditing(true)}>
+                  Edit details
                 </button>
               )}
             </div>
-          ) : card ? (
-            <div className="person-card">
-              <div className="person-card-preview">
-                <LanyardCard card={card} eventName={event.name} />
-              </div>
-              <div className="actions flush-top">
-                <ActionButton
-                  className="btn btn-small"
-                  busyLabel="Making PDF…"
-                  onAction={async () => {
-                    const { buildLanyardPdf, downloadPdf } = await import('../lanyards/pdf');
-                    downloadPdf(await buildLanyardPdf([card], 'lanyard', event.name), `${fullName.replace(/\W+/g, '-')}-lanyard.pdf`);
-                  }}
-                >
-                  <Icon name="download" size={18} /> Download PDF
-                </ActionButton>
-                <button
-                  className="btn btn-secondary btn-small"
-                  disabled={busy}
-                  onClick={() => {
-                    if (!window.confirm(`Replace ${fullName}'s card? The current one stops working straight away.`)) return;
-                    void act(async () => {
-                      await api(`/events/${event.id}/credentials/issue`, { body: { mode: 'replace', registrationIds: [r.id] } });
-                      setCard(null);
-                    }, 'New card issued. Show it again to print it.');
-                  }}
-                >
-                  Replace card
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="list-pad">
-              <p className="flush">
-                Card <strong>{r.shortCode}</strong>
-              </p>
-              <ActionButton
-                className="btn btn-secondary btn-small section-gap-sm"
-                busyLabel="Loading card…"
-                onAction={() => showCard().catch(() => setMessage({ tone: 'stop', text: "The card didn't load. Check your signal and try again." }))}
-              >
-                Show card
-              </ActionButton>
-            </div>
-          )}
-        </section>
-      )}
+            {editing ? (
+              <DetailsForm
+                r={r}
+                busy={busy}
+                onCancel={() => setEditing(false)}
+                onSave={(body) =>
+                  void act(async () => {
+                    await api(path, { method: 'PATCH', body });
+                    setEditing(false);
+                  }, 'Details saved.')
+                }
+              />
+            ) : (
+              <dl className="list detail-list">
+                <div>
+                  <dt>Name</dt>
+                  <dd>
+                    {r.firstName} {r.lastName}
+                    {r.preferredName && ` (goes by ${r.preferredName})`}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Membership number</dt>
+                  <dd>{r.memberNumber}</dd>
+                </div>
+                <div>
+                  <dt>{r.kind === 'adult' ? 'Leader' : 'Youth'}</dt>
+                  <dd>{r.kind === 'adult' ? r.position || 'Leader' : r.section}</dd>
+                </div>
+                <div>
+                  <dt>Group</dt>
+                  <dd>{r.groupName || '—'}</dd>
+                </div>
+                {r.photoConsent && (
+                  <div>
+                    <dt>Photos</dt>
+                    <dd>{r.photoConsent === 'yes' ? 'OK' : r.photoConsent === 'no' ? 'No photos' : 'Not recorded'}</dd>
+                  </div>
+                )}
+              </dl>
+            )}
+          </section>
 
-      <section className="list-section">
-        <h3 className="list-heading">Where they've been</h3>
-        {data.history.length === 0 ? (
-          <p className="field-hint">No scans yet.</p>
-        ) : (
-          [...days].map(([day, items]) => (
-            <div key={day} className="history-day">
-              <p className="history-date">{day}</p>
-              <ol className="list history">
-                {items.map((h) => {
-                  const tag = OUTCOME_TAG[h.outcome];
-                  return (
-                    <li key={h.id} className={h.outcome === 'accepted' ? 'history-row' : 'history-row is-faded'}>
-                      <span className="history-time">{timeInZone(h.at, tz)}</span>
-                      <span className="list-main">
-                        <strong>
-                          {scanVerb(h.type, h.direction)}: {h.place}
-                        </strong>
-                        <span>
-                          {h.by && `by ${h.by}`}
-                          {h.method === 'manual' && ', entered by hand'}
-                          {h.method === 'code' && ', typed code'}
-                        </span>
-                      </span>
-                      {tag && <span className={tag.tone}>{tag.label}</span>}
+          {r.dietary && (
+            <section className="list-section">
+              <div className="section-row">
+                <h3 className="list-heading">Dietary needs</h3>
+                {data.can.editDietary && editingDiet === null && (
+                  <button className="btn-link" onClick={() => setEditingDiet(r.dietary ?? [])}>
+                    Edit dietary needs
+                  </button>
+                )}
+              </div>
+              {editingDiet !== null ? (
+                <div className="list-pad">
+                  <DietaryEditor value={editingDiet} onChange={setEditingDiet} labelPrefix={fullName} />
+                  <div className="actions">
+                    <button
+                      className="btn"
+                      disabled={busy}
+                      onClick={() =>
+                        void act(async () => {
+                          await api(`${path}/dietary`, { method: 'PUT', body: { entries: editingDiet } });
+                          setEditingDiet(null);
+                        }, 'Dietary needs saved.')
+                      }
+                    >
+                      {busy ? 'Saving…' : 'Save dietary needs'}
+                    </button>
+                    <button className="btn btn-secondary" onClick={() => setEditingDiet(null)}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : r.dietary.length === 0 ? (
+                <p className="field-hint">None recorded.</p>
+              ) : (
+                <ul className="chips">
+                  {r.dietary.map((d, i) => (
+                    <li key={i} className={d.category === 'allergy' ? 'chip chip-alert' : 'chip'}>
+                      {describeEntry(d)}
                     </li>
-                  );
-                })}
-              </ol>
-            </div>
-          ))
-        )}
-      </section>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+
+          {data.can.cards && (
+            <section className="list-section">
+              <h3 className="list-heading">Lanyard</h3>
+              {!r.shortCode ? (
+                <div className="list-pad">
+                  <p className="field-hint">No card issued yet.</p>
+                  {r.status === 'active' && (
+                    <button
+                      className="btn btn-small"
+                      disabled={busy}
+                      onClick={() =>
+                        void act(() => api(`/events/${event.id}/credentials/issue`, { body: { mode: 'missing', registrationIds: [r.id] } }), 'Card issued.')
+                      }
+                    >
+                      {busy ? 'Issuing…' : 'Issue card'}
+                    </button>
+                  )}
+                </div>
+              ) : card ? (
+                <div className="person-card">
+                  <div className="person-card-preview">
+                    <LanyardCard card={card} eventName={event.name} />
+                  </div>
+                  <div className="actions flush-top">
+                    <ActionButton
+                      className="btn btn-small"
+                      busyLabel="Making PDF…"
+                      onAction={async () => {
+                        const { buildLanyardPdf, downloadPdf } = await import('../lanyards/pdf');
+                        downloadPdf(await buildLanyardPdf([card], 'lanyard', event.name), `${fullName.replace(/\W+/g, '-')}-lanyard.pdf`);
+                      }}
+                    >
+                      <Icon name="download" size={18} /> Download PDF
+                    </ActionButton>
+                    <button
+                      className="btn btn-secondary btn-small"
+                      disabled={busy}
+                      onClick={() => {
+                        if (!window.confirm(`Replace ${fullName}'s card? The current one stops working straight away.`)) return;
+                        void act(async () => {
+                          await api(`/events/${event.id}/credentials/issue`, { body: { mode: 'replace', registrationIds: [r.id] } });
+                          setCard(null);
+                        }, 'New card issued. Show it again to print it.');
+                      }}
+                    >
+                      Replace card
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="list-pad">
+                  <p className="flush">
+                    Card <strong>{r.shortCode}</strong>
+                  </p>
+                  <ActionButton
+                    className="btn btn-secondary btn-small section-gap-sm"
+                    busyLabel="Loading card…"
+                    onAction={() => showCard().catch(() => setMessage({ tone: 'stop', text: "The card didn't load. Check your signal and try again." }))}
+                  >
+                    Show card
+                  </ActionButton>
+                </div>
+              )}
+            </section>
+          )}
+        </aside>
+      </div>
 
     </div>
   );

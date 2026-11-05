@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiFailure, api } from '../api';
-import { Field, Loading, LoadError, Notice, PageHeader, SkeletonList } from '../components/ui';
+import { Field, Loading, LoadError, Notice, PageHeader, SkeletonTable } from '../components/ui';
+import { SortHeader, sortRows, useSort } from '../components/Table';
 import { Menu } from '../components/Menu';
 import { LinkShare } from '../components/LinkShare';
 import { useSession } from '../session';
 import { useApi } from '../useApi';
 import { matchesSearch } from '../../shared/search';
 import { minutesAgo } from './Live';
-import { useTitle } from '../useTitle';
+import { useTitle } from '../shell';
 
 interface UserRow {
   id: string;
@@ -30,7 +31,8 @@ export function AdminUsers() {
   const [form, setForm] = useState({ email: '', displayName: '', platformAdmin: false, sendEmail: true });
   const [shared, setShared] = useState<{ userId: string; link: string; expiresAt: string; label: string } | null>(null);
   const [query, setQuery] = useState('');
-  const [open, setOpen] = useState<string | null>(null);
+  const [filter, setFilter] = useState<'all' | 'admins' | 'no-password' | 'disabled' | 'demo'>('all');
+  const { sort, toggle } = useSort<'name' | 'email' | 'events' | 'lastSeen'>('name');
   const [message, setMessage] = useState<{ tone: 'ok' | 'stop'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -58,7 +60,6 @@ export function AdminUsers() {
       const res = await api<{ id: string; link: string; expiresAt: string; emailed: boolean }>('/admin/users', { body: form });
       setForm({ email: '', displayName: '', platformAdmin: false, sendEmail: true });
       setShared({ userId: res.id, link: res.link, expiresAt: res.expiresAt, label: `Set-up link for ${name}` });
-      setOpen(null);
       setAdding(false);
       return res.emailed
         ? `Added ${name}. We've emailed them a link to set their password. You can also copy it below.`
@@ -81,13 +82,29 @@ export function AdminUsers() {
     }, '');
   }
 
-  const list = (users.data?.users ?? []).filter((u) => matchesSearch(query, u.displayName, u.email));
+  const all = users.data?.users ?? [];
+  const list = sortRows(
+    all.filter(
+      (u) =>
+        matchesSearch(query, u.displayName, u.email) &&
+        (filter === 'all' ||
+          (filter === 'admins' && u.platformAdmin) ||
+          (filter === 'no-password' && !u.hasPassword && !u.isDemo && u.status === 'active') ||
+          (filter === 'disabled' && u.status === 'disabled') ||
+          (filter === 'demo' && u.isDemo)),
+    ),
+    (u) => (sort.key === 'name' ? u.displayName : sort.key === 'email' ? u.email : sort.key === 'events' ? u.events : (u.lastSeen ?? '')),
+    sort.dir,
+  );
+  const sharedFor = all.find((u) => u.id === shared?.userId);
 
   return (
     <>
       <PageHeader
-        title={<span className="visually-hidden">Accounts</span>}
-        sub={users.data && `${users.data.users.length} accounts`}
+        level={1}
+        title="Accounts"
+        titleOn="desktop"
+        sub={users.data && `${all.length} accounts, ${all.filter((u) => u.platformAdmin).length} administrators`}
         actions={
           !adding && (
             <button className="btn" onClick={() => setAdding(true)}>
@@ -97,114 +114,154 @@ export function AdminUsers() {
         }
       />
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
-      <div className="field">
-        <label htmlFor="people-q" className="visually-hidden">
-          Search people
-        </label>
-        <input id="people-q" className="input" type="search" placeholder="Search by name or email" value={query} onChange={(e) => setQuery(e.target.value)} />
+      {shared && (
+        <div className="narrow">
+          <LinkShare
+            link={shared.link}
+            expiresAt={shared.expiresAt}
+            label={shared.label}
+            emailBusy={busy}
+            onEmail={sharedFor ? () => passwordLink(sharedFor, true) : undefined}
+          />
+          <div className="actions flush-top section-gap-sm">
+            <button className="btn btn-secondary btn-small" onClick={() => setShared(null)}>
+              Close link
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="toolbar section-gap-sm">
+        <input
+          className="input input-search toolbar-search"
+          type="search"
+          aria-label="Search accounts"
+          placeholder="Search name or email"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        <select className="input" aria-label="Show" value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}>
+          <option value="all">All accounts</option>
+          <option value="admins">Administrators</option>
+          <option value="no-password">No password yet</option>
+          <option value="disabled">Disabled</option>
+          <option value="demo">Demo accounts</option>
+        </select>
+        <p className="toolbar-count" aria-live="polite">
+          {list.length} of {all.length}
+        </p>
       </div>
       {users.loading && !users.data && (
-        <Loading label="Loading people">
-          <SkeletonList rows={6} aside="tag" />
+        <Loading label="Loading accounts">
+          <SkeletonTable rows={8} cols={4} />
         </Loading>
       )}
       {users.error && <LoadError error={users.error} onRetry={users.reload} />}
-      {users.data && list.length === 0 && <p className="field-hint">No accounts match "{query}".</p>}
-      <ul className="people-list">
-        {list.map((u) => {
-          const isMe = u.id === myId;
-          const expanded = open === u.id;
-          return (
-            <li key={u.id} className={u.status === 'disabled' ? 'is-muted' : undefined}>
-              <button type="button" className="people-row" aria-expanded={expanded} onClick={() => setOpen(expanded ? null : u.id)}>
-                <span className="people-main">
-                  <strong>
-                    {u.displayName}
-                    {isMe && ' (you)'}
-                  </strong>
-                  <span>{u.email}</span>
-                </span>
-                <span className="people-tags">
-                  {u.platformAdmin && <span className="tag tag-admin">Admin</span>}
-                  {u.isDemo && <span className="tag">Demo</span>}
-                  {!u.hasPassword && !u.isDemo && u.status === 'active' && <span className="tag tag-warn">No password</span>}
-                  {u.hasPassword && !u.verified && !u.isDemo && <span className="tag">Not confirmed</span>}
-                  {u.status === 'disabled' && <span className="tag tag-stop">Disabled</span>}
-                </span>
-              </button>
-              {expanded && (
-                <div className="people-detail">
-                  <p className="field-hint">
-                    {u.events === 0 ? 'Not on any events' : `On ${u.events} event${u.events === 1 ? '' : 's'}`}
-                    {u.lastSeen ? `, last active ${minutesAgo(u.lastSeen)}` : ', never signed in'}
-                  </p>
-                  <div className="actions flush">
-                    {!u.isDemo && u.status === 'active' && (
-                      <button className="btn btn-small" disabled={busy} onClick={() => passwordLink(u, false)}>
-                        {u.hasPassword ? 'Make reset link' : 'Make set-up link'}
-                      </button>
-                    )}
-                    <Menu
-                      label={`More actions for ${u.displayName}`}
-                      items={[
-                        {
-                          label: 'Rename account',
-                          onSelect: () => {
-                            const name = window.prompt('New name', u.displayName);
-                            if (name && name.trim() && name.trim() !== u.displayName) {
-                              void act(() => api(`/admin/users/${u.id}`, { method: 'PATCH', body: { displayName: name.trim() } }), `Renamed to ${name.trim()}.`);
-                            }
-                          },
-                        },
-                        !isMe && {
-                          label: u.platformAdmin ? 'Remove admin rights' : 'Make admin',
-                          onSelect: () =>
-                            void act(
-                              () => api(`/admin/users/${u.id}`, { method: 'PATCH', body: { platformAdmin: !u.platformAdmin } }),
-                              u.platformAdmin ? `${u.displayName} is no longer an admin.` : `${u.displayName} is now an admin.`,
-                            ),
-                        },
-                        !isMe && {
-                          label: u.status === 'active' ? 'Disable account' : 'Enable account',
-                          onSelect: () => {
-                            if (u.status === 'active' && !window.confirm(`Disable ${u.displayName}'s account? They're signed out straight away and can't sign in until you enable it.`)) return;
-                            void act(
-                              () => api(`/admin/users/${u.id}/status`, { body: { status: u.status === 'active' ? 'disabled' : 'active' } }),
-                              u.status === 'active' ? `Disabled ${u.displayName}. They've been signed out.` : `Enabled ${u.displayName}.`,
-                            );
-                          },
-                        },
-                        !isMe && {
-                          label: 'Delete account…',
-                          danger: true,
-                          onSelect: () => {
-                            if (!window.confirm(`Delete ${u.displayName}'s account? This can't be undone.`)) return;
-                            void act(async () => {
-                              const res = await api<{ result: string }>(`/admin/users/${u.id}`, { method: 'DELETE' });
-                              if (res.result === 'anonymised') {
-                                setMessage({ tone: 'ok', text: `${u.displayName}'s account was removed. Their name was wiped from past records.` });
+      {users.data && (
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <SortHeader label="Name" column="name" sort={sort} onSort={toggle} />
+                <SortHeader label="Email" column="email" sort={sort} onSort={toggle} className="hide-sm" />
+                <th scope="col">Status</th>
+                <SortHeader label="Events" column="events" sort={sort} onSort={toggle} className="num hide-md" />
+                <SortHeader label="Last active" column="lastSeen" sort={sort} onSort={toggle} className="hide-md" />
+                <th scope="col" className="col-actions">
+                  <span className="visually-hidden">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((u) => {
+                const isMe = u.id === myId;
+                return (
+                  <tr key={u.id} className={u.status === 'disabled' ? 'is-muted' : undefined}>
+                    <td>
+                      <strong>
+                        {u.displayName}
+                        {isMe && ' (you)'}
+                      </strong>
+                      <span className="cell-sub show-sm">{u.email}</span>
+                    </td>
+                    <td className="hide-sm">{u.email}</td>
+                    <td>
+                      <span className="cell-flags">
+                        {u.platformAdmin && <span className="tag tag-admin">Admin</span>}
+                        {u.isDemo && <span className="tag">Demo</span>}
+                        {!u.hasPassword && !u.isDemo && u.status === 'active' && <span className="tag tag-warn">No password</span>}
+                        {u.hasPassword && !u.verified && !u.isDemo && <span className="tag">Not confirmed</span>}
+                        {u.status === 'disabled' && <span className="tag tag-stop">Disabled</span>}
+                        {u.status === 'active' && u.hasPassword && u.verified && !u.platformAdmin && !u.isDemo && <span className="meta">Active</span>}
+                      </span>
+                    </td>
+                    <td className="num hide-md">{u.events}</td>
+                    <td className="hide-md meta nowrap">{u.lastSeen ? minutesAgo(u.lastSeen) : 'Never'}</td>
+                    <td className="col-actions">
+                      <Menu
+                        quiet
+                        label={`Actions for ${u.displayName}`}
+                        items={[
+                          !u.isDemo &&
+                            u.status === 'active' && {
+                              label: u.hasPassword ? 'Make password reset link' : 'Make set-up link',
+                              onSelect: () => passwordLink(u, false),
+                            },
+                          {
+                            label: 'Rename account',
+                            onSelect: () => {
+                              const name = window.prompt('New name', u.displayName);
+                              if (name && name.trim() && name.trim() !== u.displayName) {
+                                void act(() => api(`/admin/users/${u.id}`, { method: 'PATCH', body: { displayName: name.trim() } }), `Renamed to ${name.trim()}.`);
                               }
-                            }, `Deleted ${u.displayName}.`);
+                            },
                           },
-                        },
-                      ]}
-                    />
-                  </div>
-                  {shared?.userId === u.id && (
-                    <LinkShare link={shared.link} expiresAt={shared.expiresAt} label={shared.label} emailBusy={busy} onEmail={() => passwordLink(u, true)} />
-                  )}
-                </div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-
-      {shared && !list.some((u) => u.id === shared.userId && open === u.id) && (
-        <div className="narrow section-gap-sm">
-          <LinkShare link={shared.link} expiresAt={shared.expiresAt} label={shared.label} />
+                          !isMe && {
+                            label: u.platformAdmin ? 'Remove admin rights' : 'Make admin',
+                            onSelect: () =>
+                              void act(
+                                () => api(`/admin/users/${u.id}`, { method: 'PATCH', body: { platformAdmin: !u.platformAdmin } }),
+                                u.platformAdmin ? `${u.displayName} is no longer an admin.` : `${u.displayName} is now an admin.`,
+                              ),
+                          },
+                          !isMe && {
+                            label: u.status === 'active' ? 'Disable account' : 'Enable account',
+                            onSelect: () => {
+                              if (u.status === 'active' && !window.confirm(`Disable ${u.displayName}'s account? They're signed out straight away and can't sign in until you enable it.`)) return;
+                              void act(
+                                () => api(`/admin/users/${u.id}/status`, { body: { status: u.status === 'active' ? 'disabled' : 'active' } }),
+                                u.status === 'active' ? `Disabled ${u.displayName}. They've been signed out.` : `Enabled ${u.displayName}.`,
+                              );
+                            },
+                          },
+                          !isMe && {
+                            label: 'Delete account…',
+                            danger: true,
+                            onSelect: () => {
+                              if (!window.confirm(`Delete ${u.displayName}'s account? This can't be undone.`)) return;
+                              void act(async () => {
+                                const res = await api<{ result: string }>(`/admin/users/${u.id}`, { method: 'DELETE' });
+                                if (res.result === 'anonymised') {
+                                  setMessage({ tone: 'ok', text: `${u.displayName}'s account was removed. Their name was wiped from past records.` });
+                                }
+                              }, `Deleted ${u.displayName}.`);
+                            },
+                          },
+                        ]}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {list.length === 0 && (
+            <div className="empty">
+              <p className="flush">No accounts match.</p>
+            </div>
+          )}
         </div>
       )}
+
 
       {adding && (
         <form onSubmit={create} noValidate className="narrow panel">

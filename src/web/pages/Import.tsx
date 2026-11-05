@@ -1,4 +1,4 @@
-import { useTitle } from '../useTitle';
+import { useTitle } from '../shell';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { parseDelimited } from '../../shared/csv';

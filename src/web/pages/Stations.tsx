@@ -5,7 +5,7 @@ import { QrCode } from '../components/QrCode';
 import { Field, Loading, LoadError, Notice, PageHeader, SkeletonList } from '../components/ui';
 import { Menu } from '../components/Menu';
 import { useToast } from '../components/Toast';
-import { useTitle } from '../useTitle';
+import { useTitle } from '../shell';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import type { Activity } from './Activities';
@@ -88,7 +88,7 @@ export function Stations() {
   return (
     <>
       <PageHeader
-        title={<span className="visually-hidden">Stations</span>}
+        title="Stations" titleOn="desktop"
         sub="A shared phone or tablet that scans one activity, meal or the gate, and nothing else. Leaders scan from the Scan tab on their own phones."
         actions={
           !adding && (

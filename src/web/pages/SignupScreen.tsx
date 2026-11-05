@@ -7,7 +7,7 @@ import { placesLeft } from '../components/SignupPanel';
 import type { SignupSession } from '../components/SignupPanel';
 import { ActionButton, BackLink, Loading, LoadError, Notice, PageHeader, Skeleton } from '../components/ui';
 import { useToast } from '../components/Toast';
-import { useTitle } from '../useTitle';
+import { useTitle } from '../shell';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 import { dayInZone, dayLabel, timeRange } from '../../shared/time';

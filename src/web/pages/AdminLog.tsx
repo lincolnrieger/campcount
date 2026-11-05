@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { ApiFailure, api } from '../api';
-import { ActionButton, Loading, Notice, PageHeader, SkeletonList } from '../components/ui';
+import { ActionButton, Loading, Notice, PageHeader, SkeletonTable } from '../components/ui';
 import type { EventSummary } from '../types';
 import { useApi } from '../useApi';
 import { scanVerb } from './Person';
-import { useTitle } from '../useTitle';
+import { useTitle } from '../shell';
 
 interface ScanEntry {
   kind: 'scan';
@@ -177,39 +177,36 @@ export function AdminLog() {
 
   return (
     <div className="log">
-      <PageHeader title={<span className="visually-hidden">Activity log</span>} sub="Times are Adelaide time." />
-      <div className="segmented segmented-3" role="group" aria-label="Show">
-        {(
-          [
-            ['all', 'Everything'],
-            ['scans', 'Scans'],
-            ['changes', 'Changes'],
-          ] as const
-        ).map(([k, label]) => (
-          <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)}>
-            {label}
-          </button>
-        ))}
-      </div>
-      <div className="row filters section-gap-sm">
-        <div className="field">
-          <label htmlFor="log-q" className="visually-hidden">
-            Search
-          </label>
-          <input id="log-q" className="input" type="search" placeholder="Person, place, staff member or action" value={q} onChange={(e) => setQ(e.target.value)} />
-        </div>
-        <div className="field">
-          <label htmlFor="log-event" className="visually-hidden">
-            Event
-          </label>
-          <select id="log-event" className="input" value={eventId} onChange={(e) => setEventId(e.target.value)}>
-            <option value="">All events</option>
-            {events.data?.events.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.name}
-              </option>
-            ))}
-          </select>
+      <PageHeader level={1} title="Activity log" titleOn="desktop" sub="Every scan and every change. Times are Adelaide time." />
+      <div className="toolbar">
+        <input
+          className="input input-search toolbar-search"
+          type="search"
+          aria-label="Search the log"
+          placeholder="Person, place, staff member or action"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        <select className="input" aria-label="Event" value={eventId} onChange={(e) => setEventId(e.target.value)}>
+          <option value="">All events</option>
+          {events.data?.events.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.name}
+            </option>
+          ))}
+        </select>
+        <div className="segmented" role="group" aria-label="Show">
+          {(
+            [
+              ['all', 'Everything'],
+              ['scans', 'Scans'],
+              ['changes', 'Changes'],
+            ] as const
+          ).map(([k, label]) => (
+            <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)}>
+              {label}
+            </button>
+          ))}
         </div>
       </div>
       {error && (
@@ -229,59 +226,93 @@ export function AdminLog() {
       )}
       {!entries && !error && (
         <Loading label="Loading the log">
-          <SkeletonList rows={6} aside="tag" heading />
+          <SkeletonTable rows={10} cols={3} />
         </Loading>
       )}
-      {entries && entries.length === 0 && <p className="field-hint">Nothing recorded{query ? ` matching "${query}"` : ''}.</p>}
-      {[...days].map(([day, items]) => (
-        <section key={day} className="list-section log-day">
-          <h2 className="list-heading">{day}</h2>
-          <ol className="list">
-            {items.map((e) => (
-              <li key={e.id} className="log-row">
-                <span className={`log-mark log-mark-${e.kind === 'scan' ? e.contextType : 'change'}`} aria-hidden="true" />
-                <span className="list-main">
-                  {e.kind === 'scan' ? (
-                    <>
-                      <strong>
-                        {e.registrationId && e.eventId ? <Link to={`/events/${e.eventId}/people/${e.registrationId}`}>{e.person}</Link> : e.person}
-                        <span className="log-verb"> {scanVerb(e.contextType, e.direction).toLowerCase()}</span> {e.contextType === 'meal' ? 'at' : e.contextType === 'site' ? 'at the' : e.direction === 'in' ? 'to' : 'of'}{' '}
-                        {e.place}
-                      </strong>
-                      <span>
-                        {e.actor ? `Scanned by ${e.actor}` : 'Scanned'}
-                        {e.method === 'manual' && ', entered by hand'}
-                        {e.method === 'code' && ', typed code'}
-                        {e.method === 'correction' && ', correction'}
-                        {!eventId && `, ${e.eventName}`}
-                        {e.note && `. ${e.note}`}
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <strong>
-                        {e.actor || 'Someone'} <span className="log-verb">{ACTIONS[e.action] ?? e.action.replace(/[._]/g, ' ')}</span> {e.target}
-                      </strong>
-                      <span>
-                        {[describeDetail(e), !eventId && e.eventName ? e.eventName : '']
-                          .filter(Boolean)
-                          .join('. ')}
-                      </span>
-                    </>
-                  )}
-                </span>
-                <span className="log-side">
-                  <time dateTime={e.at}>{timeOf(e.at)}</time>
-                  {e.kind === 'scan' && OUTCOME[e.outcome] && <span className={OUTCOME[e.outcome]!.tone}>{OUTCOME[e.outcome]!.label}</span>}
-                </span>
-              </li>
+      {entries && entries.length === 0 && (
+        <div className="empty">
+          <p className="flush">Nothing recorded{query ? ` matching "${query}"` : ''}.</p>
+        </div>
+      )}
+      {entries && entries.length > 0 && (
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th scope="col" className="nowrap">
+                  Time
+                </th>
+                <th scope="col">What happened</th>
+                {!eventId && (
+                  <th scope="col" className="hide-md">
+                    Event
+                  </th>
+                )}
+                <th scope="col" className="hide-sm">
+                  Result
+                </th>
+              </tr>
+            </thead>
+            {[...days].map(([day, items]) => (
+              <tbody key={day}>
+                <tr className="group-row">
+                  <th scope="colgroup" colSpan={eventId ? 3 : 4}>
+                    {day}
+                  </th>
+                </tr>
+                {items.map((e) => (
+                  <tr key={e.id}>
+                    <td className="nowrap meta">
+                      <time dateTime={e.at}>{timeOf(e.at)}</time>
+                    </td>
+                    <td>
+                      <span className={`log-mark log-mark-${e.kind === 'scan' ? e.contextType : 'change'}`} aria-hidden="true" />
+                      {e.kind === 'scan' ? (
+                        <>
+                          <strong>
+                            {e.registrationId && e.eventId ? <Link to={`/events/${e.eventId}/people/${e.registrationId}`}>{e.person}</Link> : e.person}
+                          </strong>
+                          <span className="log-verb"> {scanVerb(e.contextType, e.direction).toLowerCase()}</span>{' '}
+                          {e.contextType === 'meal' ? 'at' : e.contextType === 'site' ? 'at the' : e.direction === 'in' ? 'to' : 'of'} {e.place}
+                          <span className="cell-sub">
+                            {e.actor ? `Scanned by ${e.actor}` : 'Scanned'}
+                            {e.method === 'manual' && ', entered by hand'}
+                            {e.method === 'code' && ', typed code'}
+                            {e.method === 'correction' && ', correction'}
+                            {e.note && `. ${e.note}`}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <strong>{e.actor || 'Someone'}</strong> <span className="log-verb">{ACTIONS[e.action] ?? e.action.replace(/[._]/g, ' ')}</span> {e.target}
+                          {describeDetail(e) && <span className="cell-sub">{describeDetail(e)}</span>}
+                        </>
+                      )}
+                      {!eventId && e.eventName && <span className="cell-sub show-md">{e.eventName}</span>}
+                      {e.kind === 'scan' && OUTCOME[e.outcome] && (
+                        <span className="show-sm">
+                          <span className={OUTCOME[e.outcome]!.tone}>{OUTCOME[e.outcome]!.label}</span>
+                        </span>
+                      )}
+                    </td>
+                    {!eventId && <td className="hide-md meta">{e.eventName}</td>}
+                    <td className="hide-sm">
+                      {e.kind === 'scan' ? (
+                        OUTCOME[e.outcome] ? <span className={OUTCOME[e.outcome]!.tone}>{OUTCOME[e.outcome]!.label}</span> : <span className="meta">Recorded</span>
+                      ) : (
+                        <span className="meta">Change</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
             ))}
-          </ol>
-        </section>
-      ))}
+          </table>
+        </div>
+      )}
       {next && (
         <button
-          className="btn btn-secondary btn-block"
+          className="btn btn-secondary"
           disabled={loadingMore}
           onClick={async () => {
             setLoadingMore(true);

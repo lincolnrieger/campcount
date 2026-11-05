@@ -1,19 +1,32 @@
-import { Navigate, NavLink, Outlet } from 'react-router';
+import { Navigate, NavLink, Outlet, useLocation } from 'react-router';
+import { Breadcrumbs } from '../components/Layout';
 import { useSession } from '../session';
 
-/** Admin: accounts, the activity log and demo camps, as tabs. Platform admins only (the server checks too). */
+const SECTIONS = [
+  { to: 'accounts', label: 'Accounts' },
+  { to: 'log', label: 'Activity log' },
+  { to: 'demo', label: 'Demo camps' },
+];
+
+/**
+ * Administration: accounts, the activity log and demo camps. On desktop the
+ * sidebar lists them; on phones they're a tab row. Platform admins only
+ * (the server checks too).
+ */
 export function AdminLayout() {
   const { me } = useSession();
+  const { pathname } = useLocation();
   if (me?.kind !== 'user' || !me.platformPermissions.includes('platform.users.manage')) return <Navigate to="/" replace />;
+  const here = SECTIONS.find((s) => pathname.startsWith(`/admin/${s.to}`));
   return (
     <>
-      <div className="page-head">
-        <h1>Admin</h1>
-      </div>
-      <nav className="subnav" aria-label="Admin sections">
-        <NavLink to="accounts">Accounts</NavLink>
-        <NavLink to="log">Activity log</NavLink>
-        <NavLink to="demo">Demo camps</NavLink>
+      <Breadcrumbs trail={[{ to: '/admin', label: 'Administration' }, { label: here?.label ?? '' }]} />
+      <nav className="subnav subnav-section" aria-label="Administration sections">
+        {SECTIONS.map((s) => (
+          <NavLink key={s.to} to={s.to}>
+            {s.label}
+          </NavLink>
+        ))}
       </nav>
       <Outlet />
     </>

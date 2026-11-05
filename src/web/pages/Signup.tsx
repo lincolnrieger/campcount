@@ -8,7 +8,7 @@ import { SessionBoard, SignupPanel } from '../components/SignupPanel';
 import type { SignupSession, SignupView } from '../components/SignupPanel';
 import { Field, formatDateRange, Loading, Notice, SkeletonList } from '../components/ui';
 import { createDetector } from '../scan/decoder';
-import { useTitle } from '../useTitle';
+import { useTitle } from '../shell';
 
 /** Back to the start screen after this long without a tap, so the next person starts fresh. */
 const IDLE_MS = 90_000;

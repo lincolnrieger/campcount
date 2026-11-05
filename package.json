@@ -12,7 +12,6 @@
     "deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy"
   },
   "dependencies": {
-    "@fontsource-variable/atkinson-hyperlegible-next": "^5.3.0",
     "hono": "^4.13.13",
     "jsqr": "^1.4.0",
     "pdf-lib": "^1.17.1",

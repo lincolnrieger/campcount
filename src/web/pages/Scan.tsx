@@ -1,4 +1,4 @@
-import { useTitle } from '../useTitle';
+import { useTitle } from '../shell';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useLocation, useParams } from 'react-router';

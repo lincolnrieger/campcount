@@ -5,7 +5,7 @@ import { ApiFailure, api } from '../api';
 import { BackLink, Field, Notice } from '../components/ui';
 import { useToast } from '../components/Toast';
 import { useSession } from '../session';
-import { useTitle } from '../useTitle';
+import { useTitle } from '../shell';
 
 export function SetPassword() {
   useTitle('Password');

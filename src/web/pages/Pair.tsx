@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router';
 import { ApiFailure, api } from '../api';
 import { Field, Notice } from '../components/ui';
 import { useSession } from '../session';
-import { useTitle } from '../useTitle';
+import { useTitle } from '../shell';
 
 /** Turn this device into a station. The code can also arrive in the URL fragment from the pairing QR. */
 export function Pair() {

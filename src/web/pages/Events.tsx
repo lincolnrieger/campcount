@@ -2,52 +2,62 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { ApiFailure, api } from '../api';
-import { BackLink, EventStatusBadge, Field, formatDateRange, Loading, LoadError, Notice, SkeletonList } from '../components/ui';
+import { BackLink, EventStatusBadge, Field, formatDateRange, Loading, LoadError, Notice, PageHeader, SkeletonTable } from '../components/ui';
+import { SortHeader, sortRows, useSort } from '../components/Table';
+import { matchesSearch } from '../../shared/search';
 import { useSession } from '../session';
-import { Icon } from '../components/Icon';
-import type { Me } from '../types';
 import type { EventSummary } from '../types';
 import { useApi } from '../useApi';
 import { FEATURE_COPY } from './featureCopy';
 import type { EventFeatures } from '../../shared/schemas';
-import { useTitle } from '../useTitle';
+import { useTitle } from '../shell';
 import { useToast } from '../components/Toast';
 
-function greeting(me: Me | null): string {
-  const first = me?.kind === 'user' ? me.user.displayName.split(' ')[0] : '';
-  const hour = Number(new Date().toLocaleString('en-AU', { hour: 'numeric', hour12: false, timeZone: 'Australia/Adelaide' }));
-  const part = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-  return first ? `${part}, ${first}` : part;
-}
+type Filter = 'current' | 'past' | 'all';
+const CURRENT = new Set(['draft', 'open']);
 
+/** Events: every event you're on, current ones first. */
 export function Events() {
-  useTitle('Home');
+  useTitle('Events');
   const { me } = useSession();
   const { data, error, loading, reload } = useApi<{ events: EventSummary[] }>('/events');
   const canCreate = me?.kind === 'user' && me.platformPermissions.includes('platform.events.create');
+  const [q, setQ] = useState('');
+  const [filter, setFilter] = useState<Filter>('current');
+  const { sort, toggle } = useSort<'name' | 'dates' | 'status'>('dates');
+  const all = data?.events ?? [];
+  const inFilter = all.filter((e) => (filter === 'all' ? true : filter === 'current' ? CURRENT.has(e.status) : !CURRENT.has(e.status)));
+  const shown = sortRows(
+    inFilter.filter((e) => matchesSearch(q, e.name, e.location)),
+    (e) => (sort.key === 'name' ? e.name : sort.key === 'status' ? e.status : e.startsOn),
+    sort.dir,
+  );
+  const counts = { current: all.filter((e) => CURRENT.has(e.status)).length, past: all.filter((e) => !CURRENT.has(e.status)).length, all: all.length };
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>{greeting(me)}</h1>
-        </div>
-        {canCreate && (
-          <Link className="btn" to="/events/new">
-            Create event
-          </Link>
-        )}
-      </div>
-      {loading && (
+      <PageHeader
+        level={1}
+        title="Events"
+        sub={data && `${counts.current} current, ${counts.past} past`}
+        actions={
+          canCreate && (
+            <Link className="btn" to="/events/new">
+              Create event
+            </Link>
+          )
+        }
+      />
+      {loading && !data && (
         <Loading label="Loading your events">
-          <SkeletonList rows={3} aside="tag" />
+          <SkeletonTable rows={4} cols={3} />
         </Loading>
       )}
       {error && <LoadError error={error} onRetry={reload} />}
-      {data && data.events.length === 0 && (
+      {data && all.length === 0 && (
         <div className="empty">
           <p>
-            <strong>You're not assigned to any events yet.</strong>
+            <strong>You're not on any events yet.</strong>
           </p>
           <p className="lede">
             {canCreate
@@ -61,27 +71,84 @@ export function Events() {
           )}
         </div>
       )}
-      {data && data.events.length > 0 && (
-        <ul className="event-rows">
-          {data.events.map((e) => (
-            <li key={e.id}>
-              <Link to={`/events/${e.id}`} className="event-row">
-                <span className="event-row-main">
-                  <strong>{e.name}</strong>
-                  <span className="event-row-meta">
-                    {formatDateRange(e.startsOn, e.endsOn)}
-                    {e.location && `, ${e.location}`}
-                  </span>
-                </span>
-                <span className="event-row-side">
-                  {e.isDemo && <span className="badge-demo">Demo</span>}
-                  <EventStatusBadge status={e.status} />
-                  <Icon name="chevron" />
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
+      {data && all.length > 0 && (
+        <>
+          <div className="toolbar">
+            <input
+              className="input input-search toolbar-search"
+              type="search"
+              aria-label="Search events"
+              placeholder="Search events"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+            <div className="segmented" role="group" aria-label="Show">
+              {(
+                [
+                  ['current', `Current (${counts.current})`],
+                  ['past', `Past (${counts.past})`],
+                  ['all', 'All'],
+                ] as const
+              ).map(([k, label]) => (
+                <button key={k} type="button" aria-pressed={filter === k} onClick={() => setFilter(k)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <SortHeader label="Event" column="name" sort={sort} onSort={toggle} />
+                  <SortHeader label="Dates" column="dates" sort={sort} onSort={toggle} className="hide-sm" />
+                  <th scope="col" className="hide-md">
+                    Location
+                  </th>
+                  <SortHeader label="Status" column="status" sort={sort} onSort={toggle} />
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((e) => (
+                  <tr key={e.id}>
+                    <td>
+                      <Link to={`/events/${e.id}`} className="row-link">
+                        {e.name}
+                      </Link>{' '}
+                      {e.isDemo && <span className="badge-demo">Demo</span>}
+                      <span className="cell-sub show-sm">
+                        {formatDateRange(e.startsOn, e.endsOn)}
+                        {e.location && `, ${e.location}`}
+                      </span>
+                    </td>
+                    <td className="hide-sm nowrap">{formatDateRange(e.startsOn, e.endsOn)}</td>
+                    <td className="hide-md muted">{e.location}</td>
+                    <td>
+                      <EventStatusBadge status={e.status} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {shown.length === 0 && (
+              <div className="empty">
+                <p className="flush">
+                  {q ? `No events match "${q}".` : filter === 'current' ? 'No current events.' : 'No past events.'}{' '}
+                  <button
+                    type="button"
+                    className="btn-link"
+                    onClick={() => {
+                      setQ('');
+                      setFilter('all');
+                    }}
+                  >
+                    Show all events
+                  </button>
+                </p>
+              </div>
+            )}
+          </div>
+        </>
       )}
     </>
   );
@@ -100,15 +167,17 @@ export function FeatureChecklist({
   value,
   onChange,
   disabled,
+  hideLegend = false,
 }: {
   value: EventFeatures;
   onChange: (next: EventFeatures) => void;
   disabled?: boolean;
+  hideLegend?: boolean;
 }) {
   return (
     <fieldset className="field fieldset-plain">
-      <legend>What will this event use?</legend>
-      <span className="field-hint">You can change this until the event closes.</span>
+      <legend className={hideLegend ? 'visually-hidden' : undefined}>What will this event use?</legend>
+      {!hideLegend && <span className="field-hint">You can change this until the event closes.</span>}
       {(Object.keys(FEATURE_COPY) as (keyof EventFeatures)[]).map((key) => (
         <label className="check" key={key}>
           <input

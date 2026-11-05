@@ -13,7 +13,7 @@ export type MenuItem =
  * returns focus to the ⋯ button. Destructive items are listed last, after
  * a divider.
  */
-export function Menu({ label, items }: { label: string; items: (MenuItem | false | null | undefined)[] }) {
+export function Menu({ label, items, quiet = false }: { label: string; items: (MenuItem | false | null | undefined)[]; quiet?: boolean }) {
   const [open, setOpen] = useState(false);
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
@@ -74,7 +74,7 @@ export function Menu({ label, items }: { label: string; items: (MenuItem | false
   );
 
   return (
-    <div className="menu" ref={root}>
+    <div className={quiet ? 'menu menu-quiet' : 'menu'} ref={root}>
       <button ref={button} type="button" className="menu-button" aria-expanded={open} aria-controls={id} aria-label={label} onClick={() => setOpen(!open)}>
         <Icon name="more" size={20} />
       </button>

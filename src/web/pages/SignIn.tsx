@@ -1,3 +1,4 @@
+import { BrandMark } from '../components/Layout';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { useNavigate } from 'react-router';
@@ -5,13 +6,16 @@ import { ApiFailure, api } from '../api';
 import { Field, Loading, Notice, Skeleton, SkeletonHeading } from '../components/ui';
 import { useSession } from '../session';
 import type { Me } from '../types';
-import { useTitle } from '../useTitle';
+import { useTitle } from '../shell';
 
 function SignInFrame({ children }: { children: ReactNode }) {
   return (
     <div className="signin">
       <header className="signin-band">
-        <p className="wordmark">CampCount</p>
+        <p className="wordmark">
+          <BrandMark />
+          CampCount
+        </p>
         <p>Attendance, meals and activities for Scouts SA camps.</p>
       </header>
       <main className="signin-body">{children}</main>

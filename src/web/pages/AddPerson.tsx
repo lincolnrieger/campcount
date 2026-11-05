@@ -3,7 +3,7 @@ import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { ApiFailure, api } from '../api';
 import { useToast } from '../components/Toast';
-import { useTitle } from '../useTitle';
+import { useTitle } from '../shell';
 import { EMPTY_PERSON, PersonFields, personBody, personReady } from '../components/PersonFields';
 import type { PersonForm } from '../components/PersonFields';
 import { BackLink, Notice } from '../components/ui';
