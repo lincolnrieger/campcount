@@ -3,26 +3,35 @@ import type { FormEvent, ReactNode } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import { parseCredentialPayload } from '../../shared/credentials';
 import { ApiFailure, api } from '../api';
-import { Icon } from '../components/Icon';
 import { SessionBoard, SignupPanel } from '../components/SignupPanel';
 import type { SignupSession, SignupView } from '../components/SignupPanel';
-import { Field, formatDateRange, Loading, Notice, SkeletonList } from '../components/ui';
 import { createDetector } from '../scan/decoder';
 import { useTitle } from '../shell';
+import { useSiteEvent } from '../site';
+import { BrandMark } from '../ui/AppShell';
+import { SiteLogo } from '../ui/SiteShell';
+import { Button, Field, Icon, Loading, Notice, SkeletonRows, formatDateRange } from '../ui';
 
 /** Back to the start screen after this long without a tap, so the next person starts fresh. */
 const IDLE_MS = 90_000;
 
 const message = (err: unknown) => (err instanceof ApiFailure ? err.message : 'Something went wrong. Please try again.');
 
-function Frame({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
+/** Full screen, no app frame: the event's logo, a big title, then the content. */
+function Frame({ title, subtitle, children, kiosk = false }: { title: string; subtitle?: string; children: ReactNode; kiosk?: boolean }) {
+  const siteEvent = useSiteEvent();
   return (
-    <div className="signup-page">
-      <header className="signup-band">
-        <h1 className="wordmark">{title}</h1>
-        {subtitle && <p>{subtitle}</p>}
+    <div className={kiosk ? 'signup-page signup-kiosk' : 'signup-page'}>
+      <header className="signup-head">
+        {siteEvent ? <SiteLogo size={40} /> : <BrandMark size={40} />}
+        <div>
+          <h1>{title}</h1>
+          {subtitle && <p className="signup-sub">{subtitle}</p>}
+        </div>
       </header>
-      <main className="signup-body">{children}</main>
+      <main className="signup-body" id="main">
+        {children}
+      </main>
     </div>
   );
 }
@@ -123,8 +132,8 @@ export function SignupKiosk() {
 
   if (missing) {
     return (
-      <Frame title="Activity sign-up">
-        <Notice tone="warn" title="This sign-up link doesn't work">
+      <Frame title="Activity sign-up" kiosk>
+        <Notice tone="warning" title="This sign-up link doesn't work">
           <p>Ask the event team for the current link or poster.</p>
         </Notice>
       </Frame>
@@ -132,10 +141,8 @@ export function SignupKiosk() {
   }
   if (!board) {
     return (
-      <Frame title="Activity sign-up">
-        <Loading label="Loading activities">
-          <SkeletonList rows={4} aside="tag" heading />
-        </Loading>
+      <Frame title="Activity sign-up" kiosk>
+        <Loading what="activities" rows={4} />
       </Frame>
     );
   }
@@ -144,32 +151,36 @@ export function SignupKiosk() {
 
   if (person.view) {
     return (
-      <Frame title={`Hi ${person.view.person.name}`} subtitle={person.view.person.groupName || subtitle}>
-        {error && <Notice tone="stop">{error}</Notice>}
-        {person.done && <Notice tone="ok">{person.done}</Notice>}
+      <Frame title={`Hi ${person.view.person.name}`} subtitle={person.view.person.groupName || subtitle} kiosk>
+        {error && <Notice tone="error">{error}</Notice>}
+        {person.done && (
+          <Notice tone="success" live>
+            <p>{person.done}</p>
+          </Notice>
+        )}
         <SignupPanel view={person.view} highlight={highlight} busy={person.busy} onBook={(s) => person.book(s)} onCancel={(id) => person.cancel(id)} />
-        <button className="btn btn-block btn-done" onClick={reset}>
+        <Button kind="primary" block onClick={reset}>
           Finish and clear screen
-        </button>
+        </Button>
       </Frame>
     );
   }
 
   return (
-    <Frame title="Activity sign-up" subtitle={subtitle}>
+    <Frame title="Activity sign-up" subtitle={subtitle} kiosk>
       {!board.open ? (
-        <Notice tone="warn" title="Sign-up isn't open right now">
+        <Notice tone="warning" title="Sign-up isn't open right now">
           <p>Check with a leader.</p>
         </Notice>
       ) : (
         <div className="kiosk">
-          <section className="kiosk-scan">
+          <section className="kiosk-scan" aria-labelledby="kiosk-scan-heading">
             {wanted && (
-              <p className="wanted flush">
-                Signing up for <strong>{wanted.name}</strong>. Scan your lanyard to book.
-              </p>
+              <Notice title={`Signing up for ${wanted.name}`}>
+                <p>Scan your lanyard to book.</p>
+              </Notice>
             )}
-            <h2>Scan your lanyard</h2>
+            <h2 id="kiosk-scan-heading">Scan your lanyard</h2>
             <LanyardCamera onToken={(token) => void identify({ token })} />
             <form
               className="kiosk-type"
@@ -179,28 +190,25 @@ export function SignupKiosk() {
               }}
             >
               <Field id="kiosk-code" label="Or type the code under the QR on your card">
-                <div className="inline-form">
-                  <input
-                    id="kiosk-code"
-                    className="input input-code"
-                    autoCapitalize="characters"
-                    autoComplete="off"
-                    spellCheck={false}
-                    maxLength={9}
-                    placeholder="K7QM-3XRP"
-                    value={typed}
-                    onChange={(e) => setTyped(e.target.value.toUpperCase())}
-                  />
-                  <button className="btn" disabled={typed.replace(/-/g, '').length !== 8}>
-                    Look up code
-                  </button>
-                </div>
+                <input
+                  className="input input-code"
+                  autoCapitalize="characters"
+                  autoComplete="off"
+                  spellCheck={false}
+                  maxLength={9}
+                  placeholder="K7QM-3XRP"
+                  value={typed}
+                  onChange={(e) => setTyped(e.target.value.toUpperCase())}
+                />
               </Field>
+              <Button type="submit" kind="primary" disabled={typed.replace(/-/g, '').length !== 8}>
+                Look up code
+              </Button>
             </form>
-            {error && <Notice tone="stop">{error}</Notice>}
+            {error && <Notice tone="error">{error}</Notice>}
           </section>
-          <section className="kiosk-board">
-            <h2>What's on</h2>
+          <section className="kiosk-board" aria-labelledby="kiosk-board-heading">
+            <h2 id="kiosk-board-heading">What's on</h2>
             <SessionBoard sessions={board.sessions} tz={board.event.timezone} highlight={highlight} />
           </section>
         </div>
@@ -264,9 +272,10 @@ function LanyardCamera({ onToken }: { onToken: (token: string) => void }) {
           {state === 'blocked' ? (
             <p>The camera is blocked. Type the code from your card below.</p>
           ) : (
-            <button className="btn btn-light" onClick={() => void start()} disabled={state === 'starting'}>
-              <Icon name="camera" /> {state === 'starting' ? 'Starting camera…' : 'Start camera'}
-            </button>
+            <Button kind="primary" onClick={() => void start()} busy={state === 'starting'} busyLabel="Starting camera…">
+              <Icon name="camera" />
+              Start camera
+            </Button>
           )}
         </div>
       )}
@@ -300,8 +309,8 @@ export function MyActivities() {
 
   if (failed) {
     return (
-      <Frame title="CampCount">
-        <Notice tone="warn" title="This card isn't active">
+      <Frame title="Your activities">
+        <Notice tone="warning" title="This card isn't active">
           <p>It may have been replaced. Ask a leader for help.</p>
         </Notice>
       </Frame>
@@ -309,10 +318,10 @@ export function MyActivities() {
   }
   if (!person.view) {
     return (
-      <Frame title="CampCount">
-        <Loading label="Loading your activities">
-          <SkeletonList rows={2} aside="none" heading />
-          <SkeletonList rows={4} aside="button" heading />
+      <Frame title="Your activities">
+        <Loading what="your activities">
+          <SkeletonRows rows={2} />
+          <SkeletonRows rows={4} action />
         </Loading>
       </Frame>
     );
@@ -320,8 +329,12 @@ export function MyActivities() {
   const v = person.view;
   return (
     <Frame title={v.person.name} subtitle={`${v.event.name} · ${formatDateRange(v.event.startsOn, v.event.endsOn)}`}>
-      {error && <Notice tone="stop">{error}</Notice>}
-      {person.done && <Notice tone="ok">{person.done}</Notice>}
+      {error && <Notice tone="error">{error}</Notice>}
+      {person.done && (
+        <Notice tone="success" live>
+          <p>{person.done}</p>
+        </Notice>
+      )}
       <SignupPanel view={v} busy={person.busy} onBook={(s) => person.book(s)} onCancel={(id) => person.cancel(id)} />
     </Frame>
   );

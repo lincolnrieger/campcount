@@ -1,17 +1,32 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 import { ApiFailure, api } from '../api';
-import { Icon } from '../components/Icon';
-import { Menu } from '../components/Menu';
-import { useToast } from '../components/Toast';
-import { BackLink, Loading, LoadError, Notice, Skeleton, SkeletonHeading, SkeletonList, SkeletonTiles } from '../components/ui';
 import { deleteContext } from '../confirmDelete';
 import { recordByHand } from '../scan/manual';
-import { useTitle } from '../shell';
 import { useApi } from '../useApi';
-import { useEvent } from './EventLayout';
 import { matchesSearch, searchRank } from '../../shared/search';
 import { dayInZone, dayLabel, timeInZone, timeRange } from '../../shared/time';
+import {
+  Badge,
+  Button,
+  ButtonLink,
+  EmptyState,
+  Icon,
+  LoadError,
+  Loading,
+  Menu,
+  Notice,
+  PageHeader,
+  SearchField,
+  Segmented,
+  Sheet,
+  SkeletonHeader,
+  SkeletonRows,
+  useConfirm,
+  useToast,
+} from '../ui';
+import type { MenuItem } from '../ui';
+import { useEvent } from './EventLayout';
 
 interface RosterPerson {
   id: string;
@@ -46,50 +61,51 @@ interface Attendance {
   everyone: { id: string; name: string; groupName: string }[];
 }
 
+type Show = 'tocome' | 'here' | 'all';
 
 /**
- * An activity's roster for its leaders (and event managers): who's booked,
- * who's here, check people in and out with a tap, and add walk-ins.
+ * One activity, for its leaders and event managers: who's booked, who's
+ * here, check people in and out with a tap, and add walk-ins.
  */
 export function ActivityRoster() {
-  const { event, can } = useEvent();
+  const { event, can, base } = useEvent();
   const { activityId } = useParams() as { activityId: string };
   const navigate = useNavigate();
   const toast = useToast();
+  const confirm = useConfirm();
   const path = `/events/${event.id}/activities/${activityId}`;
   const { data, error, loading, reload } = useApi<Attendance>(`${path}/attendance`);
-  useTitle(data?.activity.name ?? 'Activity');
   const manage = can('activities.manage') && (event.status === 'draft' || event.status === 'open');
-  const [show, setShow] = useState<'booked' | 'here' | 'all'>('booked');
+  const [show, setShow] = useState<Show>('tocome');
   const [q, setQ] = useState('');
-  const [adding, setAdding] = useState('');
-  const [message, setMessage] = useState<{ tone: 'ok' | 'warn' | 'stop'; text: string } | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [find, setFind] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const tz = event.timezone;
+  const list = `${base}/activities`;
 
   useEffect(() => {
     const t = setInterval(() => void reload(), 20_000);
     return () => clearInterval(t);
   }, [reload]);
 
-  // Start on whichever list has people in it.
+  // Nobody booked: start on everyone involved, so the list isn't empty.
   const hasBookings = (data?.people ?? []).some((p) => p.booked);
   useEffect(() => {
     if (data && !hasBookings) setShow('all');
   }, [data, hasBookings]);
 
+  const fail = (err: unknown, offline = 'No connection. Check your signal and try again.') => toast(err instanceof ApiFailure ? err.message : offline, { tone: 'error' });
+
   async function checkIn(p: { id: string; name: string }, direction: 'in' | 'out') {
     setBusy(p.id);
-    setMessage(null);
     try {
       const r = await recordByHand(event.id, { contextType: 'activity', contextId: activityId, direction, registrationId: p.id });
-      setMessage({
-        tone: r.outcome === 'accepted' ? (r.warning ? 'warn' : 'ok') : r.outcome === 'duplicate' ? 'warn' : 'stop',
-        text: `${p.name}: ${r.message}${r.warning ? ` ${r.warning}` : ''}`,
-      });
+      if (r.outcome === 'accepted') toast(`${p.name} ${direction === 'in' ? 'signed in' : 'signed out'}${r.warning ? `. ${r.warning}` : ''}`);
+      else toast(`${p.name}: ${r.message}`, { tone: 'error' });
       await reload();
     } catch (err) {
-      setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'No connection. Use the scanner, which works offline.' });
+      fail(err, 'No connection. Use the scanner, which works offline.');
     } finally {
       setBusy(null);
     }
@@ -97,12 +113,12 @@ export function ActivityRoster() {
 
   async function booking(p: { id: string; name: string }, add: boolean) {
     setBusy(p.id);
-    setMessage(null);
     try {
       if (add) await api(`${path}/bookings`, { body: { registrationId: p.id } });
       else await api(`${path}/bookings/${p.id}`, { method: 'DELETE' });
+      await reload();
       toast(
-        add ? `Booked ${p.name}.` : `Removed ${p.name}'s booking.`,
+        add ? `${p.name} booked` : `${p.name}'s booking removed`,
         add
           ? {}
           : {
@@ -112,9 +128,8 @@ export function ActivityRoster() {
               },
             },
       );
-      await reload();
     } catch (err) {
-      setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
+      fail(err);
     } finally {
       setBusy(null);
     }
@@ -124,240 +139,232 @@ export function ActivityRoster() {
     try {
       await api(path, { method: 'PATCH', body: { status } });
       await reload();
-      toast(status === 'cancelled' ? 'Activity cancelled.' : 'Activity restored.', status === 'cancelled' ? { undo: () => changeStatus('active') } : {});
+      toast(status === 'cancelled' ? 'Activity cancelled' : 'Activity restored', status === 'cancelled' ? { undo: () => changeStatus('active') } : {});
     } catch (err) {
-      setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
+      fail(err);
     }
   }
 
-  async function remove() {
-    try {
-      if (await deleteContext(event.id, 'activities', activityId, data!.activity.name)) {
-        navigate('..', { relative: 'path', replace: true });
-        toast(`Deleted ${data!.activity.name}.`);
-      }
-    } catch (err) {
-      setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'Something went wrong.' });
-    }
-  }
+  const involved = useMemo(() => new Set((data?.people ?? []).filter((p) => p.booked || p.visits > 0).map((p) => p.id)), [data]);
 
-  const involved = useMemo(() => new Set((data?.people ?? []).map((p) => p.id)), [data]);
   if (loading && !data)
     return (
-      <Loading label="Loading activity">
-        <Skeleton width="5.5rem" height="1rem" className="skeleton-gap" />
-        <SkeletonHeading width="12rem" />
-        <SkeletonTiles />
-        <Skeleton width="100%" height="72px" radius="var(--radius)" className="skeleton-gap" />
-        <SkeletonList rows={5} aside="button" />
+      <Loading what="activity">
+        <SkeletonHeader />
+        <SkeletonRows rows={6} action />
       </Loading>
     );
   if (error)
     return (
       <>
-        <BackLink to=".." label="Activities" />
-        <LoadError error={error} onRetry={reload} message={error.status === 404 || error.status === 403 ? "This activity has been deleted, or you don't run it." : undefined} />
+        <PageHeader title="Activity" back={{ to: list, label: 'Activities' }} />
+        <LoadError
+          error={error}
+          onRetry={reload}
+          what="this activity"
+          message={error.status === 404 || error.status === 403 ? "This activity has been deleted, or you don't run it." : undefined}
+        />
       </>
     );
   if (!data) return null;
   const a = data.activity;
+  const hereCount = a.trackSignOut ? data.presentNow : data.people.filter((p) => p.visits > 0).length;
   const booked = data.people.filter((p) => p.booked);
-  const notYet = booked.filter((p) => p.visits === 0);
-  const list = data.people
-    .filter((p) => (show === 'booked' ? p.booked : show === 'here' ? p.present : true))
+  const toCome = booked.filter((p) => p.visits === 0);
+  const shown = data.people
+    .filter((p) => (show === 'tocome' ? p.booked && p.visits === 0 : show === 'here' ? (a.trackSignOut ? p.present : p.visits > 0) : p.booked || p.visits > 0))
     .filter((p) => matchesSearch(q, p.name, p.groupName))
-    .sort((x, y) => Number(y.present) - Number(x.present) || x.name.localeCompare(y.name));
-  const walkIns = adding.trim()
+    .sort((x, y) => Number(x.visits > 0) - Number(y.visits > 0) || x.name.localeCompare(y.name));
+  const walkIns = find.trim()
     ? data.everyone
-        .filter((p) => !involved.has(p.id) && matchesSearch(adding, p.name, p.groupName))
-        .sort((x, y) => searchRank(adding, x.name) - searchRank(adding, y.name))
-        .slice(0, 8)
+        .filter((p) => !involved.has(p.id) && matchesSearch(find, p.name, p.groupName))
+        .sort((x, y) => searchRank(find, x.name) - searchRank(find, y.name))
+        .slice(0, 12)
     : [];
+  const when = a.startsAt ? `${dayLabel(dayInZone(a.startsAt, tz))}, ${timeRange(a.startsAt, a.endsAt, tz)}` : 'Runs all camp';
+  const canScan = data.canCheckIn && event.status === 'open' && a.status === 'active';
+
+  const menu: MenuItem[] = manage
+    ? [
+        { label: 'Edit activity', to: `${list}/${a.id}/edit` },
+        { label: 'Add another session', to: `${list}/new?from=${a.id}` },
+        { label: 'Print this list', onSelect: () => window.print() },
+        a.status === 'active'
+          ? {
+              label: 'Cancel activity',
+              onSelect: async () => {
+                const ok = await confirm({
+                  title: `Cancel ${a.name}?`,
+                  body: <p>It stops showing on scanners and the sign-up kiosk. Scans and bookings are kept, and you can restore it.</p>,
+                  confirm: 'Cancel activity',
+                });
+                if (ok) await changeStatus('cancelled');
+              },
+            }
+          : { label: 'Restore activity', onSelect: () => void changeStatus('active') },
+        {
+          label: 'Delete activity…',
+          danger: true,
+          onSelect: async () => {
+            try {
+              if (await deleteContext(confirm, event.id, 'activities', a.id, a.name)) {
+                toast(`Deleted ${a.name}`);
+                navigate(list, { replace: true });
+              }
+            } catch (err) {
+              fail(err);
+            }
+          },
+        },
+      ]
+    : [{ label: 'Print this list', onSelect: () => window.print() }];
+
+  const status = (p: RosterPerson) =>
+    p.present ? (
+      <Badge tone="success">Here since {p.lastAt ? timeInZone(p.lastAt, tz) : ''}</Badge>
+    ) : p.visits > 0 ? (
+      <Badge>
+        {a.trackSignOut ? 'Left' : 'Signed in'} {p.lastAt ? timeInZone(p.lastAt, tz) : ''}
+      </Badge>
+    ) : p.booked ? (
+      <Badge tone="warning">To come</Badge>
+    ) : null;
 
   return (
-    <div className="activity-roster">
-      <BackLink to=".." label="Activities" />
-      <div className="title-row">
-        <h2 className="person-name">{a.name}</h2>
-        <div className="page-actions">
-        {data.canCheckIn && (
-          <Link to={`/events/${event.id}/scan/activity/${a.id}`} className="btn hide-sm">
-            <Icon name="scan" size={18} /> Open scanner
-          </Link>
+    <>
+      <PageHeader
+        title={a.name}
+        back={{ to: list, label: 'Activities' }}
+        summary={
+          <>
+            <span className="sep">{when}</span>
+            {a.location && <span className="sep">{a.location}</span>}
+            {a.status === 'cancelled' && <Badge tone="neutral">Cancelled</Badge>}
+          </>
+        }
+        primary={
+          canScan && (
+            <ButtonLink to={`/events/${event.id}/scan/activity/${a.id}`} kind="primary">
+              <Icon name="scan" />
+              Scan
+            </ButtonLink>
+          )
+        }
+        menu={menu}
+        menuLabel={`More actions for ${a.name}`}
+      />
+      <div className="sections">
+        {a.status === 'cancelled' && (
+          <Notice tone="warning">
+            <p>This activity is cancelled. It doesn't show on scanners or the sign-up kiosk.</p>
+          </Notice>
         )}
-        {manage && (
-          <Menu
-            label={`More actions for ${a.name}`}
-            items={[
-              { label: 'Edit activity', to: 'edit' },
-              { label: 'Print this list', onSelect: () => window.print() },
-              { label: 'Add another session', to: `../new?from=${a.id}` },
-              a.status === 'active'
-                ? {
-                    label: 'Cancel activity',
-                    onSelect: () => {
-                      if (!window.confirm(`Cancel ${a.name}? It stops showing on scanners and the sign-up screen. Scans and bookings are kept.`)) return;
-                      void changeStatus('cancelled');
-                    },
-                  }
-                : { label: 'Restore activity', onSelect: () => void changeStatus('active') },
-              { label: 'Delete activity…', danger: true, onSelect: () => void remove() },
+        {a.instructions && (
+          <Notice title="Instructions for leaders">
+            <p className="pre-line">{a.instructions}</p>
+          </Notice>
+        )}
+
+        <p className="activity-counts num">
+          <strong>{booked.length}</strong> booked · <strong>{hereCount}</strong> {a.trackSignOut ? 'here now' : 'signed in'}
+          {a.capacity ? ` of ${a.capacity} places` : ''} · <strong>{toCome.length}</strong> to come
+        </p>
+
+        <div className="toolbar">
+          <Segmented
+            label="Show"
+            value={show}
+            onChange={setShow}
+            options={[
+              { value: 'tocome', label: `To come (${toCome.length})` },
+              { value: 'here', label: `Here (${hereCount})` },
+              { value: 'all', label: 'All' },
             ]}
           />
-        )}
+          {(data.canCheckIn || data.canBook) && (
+            <Button onClick={() => setAdding(true)}>
+              <Icon name="plus" />
+              Add someone
+            </Button>
+          )}
         </div>
-      </div>
-      {a.status === 'cancelled' && <Notice tone="warn">This activity is cancelled. It doesn't show on scanners or the sign-up screen.</Notice>}
-      <p className="lede flush">
-        {[a.startsAt ? `${dayLabel(dayInZone(a.startsAt, tz), 'long')}, ${timeRange(a.startsAt, a.endsAt, tz)}` : 'Runs all camp', a.location || null]
-          .filter(Boolean)
-          .join(' · ')}
-      </p>
-      {a.instructions && <Notice title="Instructions">{a.instructions}</Notice>}
+        {data.people.length > 12 && <SearchField id="activity-q" label="Search this list" value={q} onChange={setQ} />}
 
-      <div className="tiles section-gap-sm">
-        <div className="tile tile-on">
-          <strong>
-            {a.trackSignOut ? data.presentNow : data.people.filter((p) => p.visits > 0).length}
-            {a.capacity ? <small> / {a.capacity}</small> : null}
-          </strong>
-          <span>{a.trackSignOut ? 'Here now' : 'Checked in'}</span>
-        </div>
-        <div className="tile">
-          <strong>{booked.length}</strong>
-          <span>Booked</span>
-        </div>
-        <div className="tile tile-off">
-          <strong>{notYet.length}</strong>
-          <span>Booked, not here</span>
-        </div>
-      </div>
-
-      {data.canCheckIn && (
-        <Link to={`/events/${event.id}/scan/activity/${a.id}`} className="scan-cta show-sm">
-          <Icon name="scan" size={26} />
-          <span>
-            <strong>Open scanner</strong>
-            <span>Scan lanyards as people arrive{a.trackSignOut ? ' and leave' : ''}</span>
-          </span>
-          <Icon name="chevron" />
-        </Link>
-      )}
-
-      {message && <Notice tone={message.tone}>{message.text}</Notice>}
-
-      <div className="toolbar">
-        <input
-          className="input input-search toolbar-search"
-          type="search"
-          aria-label="Search this list"
-          placeholder="Search names"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-        <div className="segmented" role="group" aria-label="Show">
-          {(
-            [
-              ['booked', `Booked ${booked.length}`],
-              ['here', `${a.trackSignOut ? 'Here' : 'Checked in'} ${a.trackSignOut ? data.presentNow : data.people.filter((p) => p.visits > 0).length}`],
-              ['all', `Everyone ${data.people.length}`],
-            ] as const
-          ).map(([k, label]) => (
-            <button key={k} type="button" aria-pressed={show === k} onClick={() => setShow(k)}>
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <ul className="list">
-        {list.map((p) => (
-          <li key={p.id} className="list-row roster-person">
-            <span className="list-main">
-              <strong>
-                {p.name}
-                {p.noPhotos && <span className="tag tag-stop roster-flag">No photos</span>}
-              </strong>
-              <span>
-                {p.groupName}
-                {p.groupName && ', '}
-                {p.section}
-              </span>
-            </span>
-            <span className={`place ${p.present ? 'place-on' : p.visits > 0 ? 'place-off' : 'place-never'}`}>
-              {p.present
-                ? `Here since ${p.lastAt ? timeInZone(p.lastAt, tz) : ''}`
-                : p.visits > 0
-                  ? a.trackSignOut
-                    ? `Left ${p.lastAt ? timeInZone(p.lastAt, tz) : ''}`
-                    : `Checked in ${p.lastAt ? timeInZone(p.lastAt, tz) : ''}`
-                  : p.booked
-                    ? 'Not here yet'
-                    : 'Not booked'}
-            </span>
-            <span className="row-actions">
-              {data.canCheckIn &&
-                (p.present && a.trackSignOut ? (
-                  <button className="btn btn-secondary btn-small" disabled={busy === p.id} onClick={() => void checkIn(p, 'out')}>
-                    Check out<span className="visually-hidden"> {p.name}</span>
-                  </button>
-                ) : (
-                  !(p.visits > 0 && !a.trackSignOut) && (
-                    <button className="btn btn-small" disabled={busy === p.id} onClick={() => void checkIn(p, 'in')}>
-                      Check in<span className="visually-hidden"> {p.name}</span>
-                    </button>
-                  )
-                ))}
-              {data.canBook && p.booked && !p.present && (
-                <button className="btn-link text-stop" disabled={busy === p.id} onClick={() => void booking(p, false)}>
-                  Remove booking<span className="visually-hidden"> for {p.name}</span>
-                </button>
-              )}
-              {data.canBook && !p.booked && (
-                <button className="btn-link" disabled={busy === p.id} onClick={() => void booking(p, true)}>
-                  Add booking<span className="visually-hidden"> for {p.name}</span>
-                </button>
-              )}
-            </span>
-          </li>
-        ))}
-      </ul>
-      {list.length === 0 && (
-        <p className="field-hint">
-          {show === 'booked' ? 'No one has booked yet.' : show === 'here' ? 'No one is checked in right now.' : 'No one yet.'}
-        </p>
-      )}
-
-      {(data.canCheckIn || data.canBook) && (
-        <section className="list-section section-gap">
-          <h3 className="list-heading">Add someone</h3>
-          <input className="input" type="search" aria-label="Find someone on the camp roster" placeholder="Anyone on camp: type a name" value={adding} onChange={(e) => setAdding(e.target.value)} />
-          {walkIns.length > 0 && (
-            <ul className="list section-gap-sm">
-              {walkIns.map((p) => (
-                <li key={p.id} className="list-row roster-person">
-                  <span className="list-main">
-                    <strong>{p.name}</strong>
-                    <span>{p.groupName}</span>
+        {shown.length === 0 ? (
+          <EmptyState title={q ? `No one matches "${q}"` : show === 'tocome' ? 'Everyone booked is here' : show === 'here' ? 'No one is here right now' : 'No one yet'}>
+            {!q && show === 'all' && (data.canCheckIn || data.canBook) ? 'Use Add someone to book or sign in a walk-in.' : undefined}
+          </EmptyState>
+        ) : (
+          <ul className="list activity-list">
+            {shown.map((p) => {
+              const out = p.present && a.trackSignOut;
+              const done = p.visits > 0 && !a.trackSignOut;
+              return (
+                <li key={p.id} className="row">
+                  <span className="row-main">
+                    <span className="row-title">{p.name}</span>
+                    <span className="row-meta">{[p.section, p.groupName].filter(Boolean).join(' · ')}</span>
+                    <span className="activity-badges">
+                      {status(p)}
+                      {p.noPhotos && <Badge tone="error">No photos</Badge>}
+                    </span>
                   </span>
-                  <span className="row-actions">
-                    {data.canCheckIn && (
-                      <button className="btn btn-small" disabled={busy === p.id} onClick={() => void checkIn(p, 'in').then(() => setAdding(''))}>
-                        Check in<span className="visually-hidden"> {p.name}</span>
-                      </button>
+                  <span className="row-side">
+                    {data.canCheckIn && !done && (
+                      <Button small kind={out ? 'secondary' : 'primary'} busy={busy === p.id} busyLabel="Saving…" onClick={() => void checkIn(p, out ? 'out' : 'in')}>
+                        {out ? 'Sign out' : 'Check in'}
+                        <span className="visually-hidden"> {p.name}</span>
+                      </Button>
                     )}
-                    {data.canBook && (
-                      <button className="btn-link" disabled={busy === p.id} onClick={() => void booking(p, true).then(() => setAdding(''))}>
-                        Add booking<span className="visually-hidden"> for {p.name}</span>
-                      </button>
+                    {data.canBook && p.booked && !p.present && (
+                      <Menu label={`More for ${p.name}`} items={[{ label: 'Remove booking', danger: true, onSelect: () => void booking(p, false) }]} />
                     )}
                   </span>
                 </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
-    </div>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      <Sheet
+        open={adding}
+        title="Add someone"
+        onClose={() => {
+          setAdding(false);
+          setFind('');
+        }}
+      >
+        <SearchField id="walkin-q" label="Anyone on camp: type a name" value={find} onChange={setFind} autoFocus />
+        {find.trim() === '' ? (
+          <p className="meta">{data.canCheckIn ? 'Sign in a walk-in, or book someone for this session.' : 'Book someone for this session.'}</p>
+        ) : walkIns.length === 0 ? (
+          <p className="meta">No one else on camp matches "{find}".</p>
+        ) : (
+          <ul className="list">
+            {walkIns.map((p) => (
+              <li key={p.id} className="row">
+                <span className="row-main">
+                  <span className="row-title">{p.name}</span>
+                  <span className="row-meta">{p.groupName}</span>
+                </span>
+                <span className="row-side">
+                  {data.canBook && (
+                    <Button small busy={busy === p.id} onClick={() => void booking(p, true)}>
+                      Book<span className="visually-hidden"> {p.name}</span>
+                    </Button>
+                  )}
+                  {canScan && (
+                    <Button small kind="primary" busy={busy === p.id} onClick={() => void checkIn(p, 'in')}>
+                      Check in<span className="visually-hidden"> {p.name}</span>
+                    </Button>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Sheet>
+    </>
   );
 }

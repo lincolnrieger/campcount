@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { ApiFailure, api } from '../api';
-import { ActionButton, Loading, Notice, PageHeader, SkeletonTable } from '../components/ui';
+import { Badge, Button, EmptyState, Loading, Notice, PageHeader, SearchField, Segmented, SkeletonRows } from '../ui';
+import type { Tone } from '../ui';
 import type { EventSummary } from '../types';
 import { useApi } from '../useApi';
 import { scanVerb } from '../model';
-import { useTitle } from '../shell';
 
 interface ScanEntry {
   kind: 'scan';
@@ -126,15 +126,15 @@ function describeDetail(e: ChangeEntry): string {
   return bits.join(', ');
 }
 
-const OUTCOME: Record<string, { label: string; tone: string } | undefined> = {
-  duplicate: { label: 'Repeat', tone: 'tag' },
-  review: { label: 'To check', tone: 'tag tag-warn' },
-  rejected: { label: 'Refused', tone: 'tag tag-stop' },
-  void: { label: 'Undo', tone: 'tag' },
+const OUTCOME: Record<string, { label: string; tone: Tone } | undefined> = {
+  duplicate: { label: 'Repeat, not counted', tone: 'neutral' },
+  review: { label: 'To check', tone: 'warning' },
+  rejected: { label: 'Refused', tone: 'error' },
+  void: { label: 'Undone', tone: 'neutral' },
 };
 
+/** Admin › Activity log: every scan and every change, newest first, as plain sentences. */
 export function AdminLog() {
-  useTitle('Activity log');
   const events = useApi<{ events: EventSummary[] }>('/events');
   const [eventId, setEventId] = useState('');
   const [kind, setKind] = useState<'all' | 'scans' | 'changes'>('all');
@@ -176,153 +176,120 @@ export function AdminLog() {
   for (const e of entries ?? []) days.set(dayOf(e.at), [...(days.get(dayOf(e.at)) ?? []), e]);
 
   return (
-    <div className="log">
-      <PageHeader level={1} title="Activity log" titleOn="desktop" sub="Every scan and every change. Times are Adelaide time." />
-      <div className="toolbar">
-        <input
-          className="input input-search toolbar-search"
-          type="search"
-          aria-label="Search the log"
-          placeholder="Person, place, staff member or action"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-        <select className="input" aria-label="Event" value={eventId} onChange={(e) => setEventId(e.target.value)}>
-          <option value="">All events</option>
-          {events.data?.events.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.name}
-            </option>
-          ))}
-        </select>
-        <div className="segmented" role="group" aria-label="Show">
-          {(
-            [
-              ['all', 'Everything'],
-              ['scans', 'Scans'],
-              ['changes', 'Changes'],
-            ] as const
-          ).map(([k, label]) => (
-            <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)}>
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-      {error && (
-        <Notice tone="stop" title="This didn't load">
-          <p>{error}</p>
-          <ActionButton
-            className="btn btn-secondary btn-small"
-            busyLabel="Trying again…"
-            onAction={async () => {
-              setError(null);
-              await load(entries && entries.length ? next : null).catch(() => setError('Could not load the log. Check your signal.'));
-            }}
-          >
-            Try again
-          </ActionButton>
-        </Notice>
-      )}
-      {!entries && !error && (
-        <Loading label="Loading the log">
-          <SkeletonTable rows={10} cols={3} />
-        </Loading>
-      )}
-      {entries && entries.length === 0 && (
-        <div className="empty">
-          <p className="flush">Nothing recorded{query ? ` matching "${query}"` : ''}.</p>
-        </div>
-      )}
-      {entries && entries.length > 0 && (
-        <div className="table-wrap">
-          <table className="table">
-            <thead>
-              <tr>
-                <th scope="col" className="nowrap">
-                  Time
-                </th>
-                <th scope="col">What happened</th>
-                {!eventId && (
-                  <th scope="col" className="hide-md">
-                    Event
-                  </th>
-                )}
-                <th scope="col" className="hide-sm">
-                  Result
-                </th>
-              </tr>
-            </thead>
-            {[...days].map(([day, items]) => (
-              <tbody key={day}>
-                <tr className="group-row">
-                  <th scope="colgroup" colSpan={eventId ? 3 : 4}>
-                    {day}
-                  </th>
-                </tr>
-                {items.map((e) => (
-                  <tr key={e.id}>
-                    <td className="nowrap meta">
-                      <time dateTime={e.at}>{timeOf(e.at)}</time>
-                    </td>
-                    <td>
-                      <span className={`log-mark log-mark-${e.kind === 'scan' ? e.contextType : 'change'}`} aria-hidden="true" />
-                      {e.kind === 'scan' ? (
-                        <>
-                          <strong>
-                            {e.registrationId && e.eventId ? <Link to={`/events/${e.eventId}/people/${e.registrationId}`}>{e.person}</Link> : e.person}
-                          </strong>
-                          <span className="log-verb"> {scanVerb(e.contextType, e.direction).toLowerCase()}</span>{' '}
-                          {e.contextType === 'meal' ? 'at' : e.contextType === 'site' ? 'at the' : e.direction === 'in' ? 'to' : 'of'} {e.place}
-                          <span className="cell-sub">
-                            {e.actor ? `Scanned by ${e.actor}` : 'Scanned'}
-                            {e.method === 'manual' && ', entered by hand'}
-                            {e.method === 'code' && ', typed code'}
-                            {e.method === 'correction' && ', correction'}
-                            {e.note && `. ${e.note}`}
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <strong>{e.actor || 'Someone'}</strong> <span className="log-verb">{ACTIONS[e.action] ?? e.action.replace(/[._]/g, ' ')}</span> {e.target}
-                          {describeDetail(e) && <span className="cell-sub">{describeDetail(e)}</span>}
-                        </>
-                      )}
-                      {!eventId && e.eventName && <span className="cell-sub show-md">{e.eventName}</span>}
-                      {e.kind === 'scan' && OUTCOME[e.outcome] && (
-                        <span className="show-sm">
-                          <span className={OUTCOME[e.outcome]!.tone}>{OUTCOME[e.outcome]!.label}</span>
-                        </span>
-                      )}
-                    </td>
-                    {!eventId && <td className="hide-md meta">{e.eventName}</td>}
-                    <td className="hide-sm">
-                      {e.kind === 'scan' ? (
-                        OUTCOME[e.outcome] ? <span className={OUTCOME[e.outcome]!.tone}>{OUTCOME[e.outcome]!.label}</span> : <span className="meta">Recorded</span>
-                      ) : (
-                        <span className="meta">Change</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
+    <>
+      <PageHeader title="Activity log" back={{ to: '/admin', label: 'Admin' }} summary="Every scan and every change. Times are Adelaide time." />
+      <div className="sections">
+        <div className="toolbar">
+          <SearchField id="log-q" label="Search person, place, staff member or action" value={q} onChange={setQ} />
+          <select className="select" aria-label="Camp" value={eventId} onChange={(e) => setEventId(e.target.value)}>
+            <option value="">All camps</option>
+            {events.data?.events.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.name}
+              </option>
             ))}
-          </table>
+          </select>
+          <Segmented
+            label="Show"
+            value={kind}
+            onChange={setKind}
+            options={[
+              { value: 'all', label: 'Everything' },
+              { value: 'scans', label: 'Scans' },
+              { value: 'changes', label: 'Changes' },
+            ]}
+          />
         </div>
-      )}
-      {next && (
-        <button
-          className="btn btn-secondary"
-          disabled={loadingMore}
-          onClick={async () => {
-            setLoadingMore(true);
-            await load(next).catch(() => setError('Could not load more.'));
-            setLoadingMore(false);
-          }}
-        >
-          {loadingMore ? 'Loading…' : 'Show older'}
-        </button>
-      )}
-    </div>
+        {error && (
+          <Notice tone="error" title="Couldn't load the log">
+            <p>{error}</p>
+            <Button
+              small
+              busyLabel="Trying again…"
+              onAction={async () => {
+                setError(null);
+                await load(entries && entries.length ? next : null).catch(() => setError('Check your signal and try again.'));
+              }}
+            >
+              Try again
+            </Button>
+          </Notice>
+        )}
+        {!entries && !error && (
+          <Loading what="the log">
+            <SkeletonRows rows={10} />
+          </Loading>
+        )}
+        {entries && entries.length === 0 && <EmptyState title={`Nothing recorded${query ? ` matching "${query}"` : ''}`}>{query ? 'Try another search.' : undefined}</EmptyState>}
+        {entries &&
+          [...days].map(([day, items]) => (
+            <div key={day} className="list">
+              <h2 className="list-group-heading">{day}</h2>
+              <ol>
+                {items.map((e) => {
+                  const outcome = e.kind === 'scan' ? OUTCOME[e.outcome] : undefined;
+                  const detail = e.kind === 'change' ? describeDetail(e) : null;
+                  return (
+                    <li key={e.id} className={outcome ? 'row is-muted' : 'row'}>
+                      <time className="history-time num" dateTime={e.at}>
+                        {timeOf(e.at)}
+                      </time>
+                      <span className="row-main">
+                        {e.kind === 'scan' ? (
+                          <span>
+                            <strong>{e.registrationId && e.eventId ? <Link to={`/events/${e.eventId}/people/${e.registrationId}`}>{e.person}</Link> : e.person}</strong>{' '}
+                            {scanVerb(e.contextType, e.direction).toLowerCase()}{' '}
+                            {e.contextType === 'meal' ? 'at' : e.contextType === 'site' ? 'at the' : e.direction === 'in' ? 'to' : 'of'} {e.contextType === 'site' ? 'gate' : e.place}
+                          </span>
+                        ) : (
+                          <span>
+                            <strong>{e.actor || 'Someone'}</strong> {ACTIONS[e.action] ?? e.action.replace(/[._]/g, ' ')} {e.target}
+                          </span>
+                        )}
+                        <span className="row-meta">
+                          {[
+                            e.kind === 'scan'
+                              ? [
+                                  e.actor ? `scanned by ${e.actor}` : 'scanned',
+                                  e.method === 'manual' ? 'by hand' : e.method === 'code' ? 'typed code' : e.method === 'correction' ? 'correction' : null,
+                                  e.note || null,
+                                ]
+                                  .filter(Boolean)
+                                  .join(', ')
+                              : detail,
+                            !eventId ? e.eventName : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
+                        {outcome && (
+                          <span>
+                            <Badge tone={outcome.tone}>{outcome.label}</Badge>
+                          </span>
+                        )}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+          ))}
+        {next && (
+          <div>
+            <Button
+              busy={loadingMore}
+              busyLabel="Loading…"
+              onClick={async () => {
+                setLoadingMore(true);
+                await load(next).catch(() => setError("Couldn't load more. Check your signal."));
+                setLoadingMore(false);
+              }}
+            >
+              Load more
+            </Button>
+          </div>
+        )}
+      </div>
+    </>
   );
 }

@@ -1,13 +1,12 @@
-import { useTitle } from '../shell';
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router';
+import { useNavigate } from 'react-router';
 import { parseDelimited } from '../../shared/csv';
 import type { ColumnMapping, PreparedRow, TargetField } from '../../shared/myscout';
 import { TARGET_FIELDS, autoMap, flagDuplicates, missingRequired, normaliseDietaryText, prepareRows } from '../../shared/myscout';
 import type { DietaryEntryInput, ImportRow } from '../../shared/schemas';
 import { ApiFailure, api } from '../api';
 import { DietaryEditor } from '../components/DietaryEditor';
-import { BackLink, LoadError, Loading, Notice, Skeleton } from '../components/ui';
+import { Badge, Button, ButtonLink, Choice, CountTile, Icon, LoadError, Loading, Notice, PageHeader, Section, Skeleton, Stepper, plural, useToast } from '../ui';
 import { readFirstSheet } from '../import/xlsx';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
@@ -51,9 +50,14 @@ function downloadCsv(filename: string, rows: string[][]) {
   URL.revokeObjectURL(url);
 }
 
+const STEPS: Step[] = ['file', 'map', 'check', 'dietary', 'done'];
+const STEP_LABEL: Record<Step, string> = { file: 'Choose file', map: 'Match columns', check: 'Check', dietary: 'Dietary review', done: 'Done' };
+
+/** People › Import from MyScout: a step-by-step import that reads the file in the browser. */
 export function Import() {
-  useTitle('Import from MyScout');
-  const { event } = useEvent();
+  const { event, base } = useEvent();
+  const navigate = useNavigate();
+  const toast = useToast();
   const context = useApi<ImportContext>(`/events/${event.id}/import/context`);
   const [step, setStep] = useState<Step>('file');
   const [fileName, setFileName] = useState('');
@@ -127,7 +131,7 @@ export function Import() {
       const res = await api<{ plan: Plan }>(`/events/${event.id}/import/preview`, { body: { rows: built, withdrawMissing: withdraw } });
       setPlan(res.plan);
     } catch (err) {
-      setError(err instanceof ApiFailure ? err.message : 'Something went wrong.');
+      setError(err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.');
     } finally {
       setBusy(false);
     }
@@ -143,300 +147,296 @@ export function Import() {
       });
       setResult(res.counts);
       setStep('done');
+      toast(`Imported ${plural(res.counts.create + res.counts.update, 'person', 'people')}`);
     } catch (err) {
-      setError(err instanceof ApiFailure ? err.message : 'Something went wrong.');
+      setError(err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.');
     } finally {
       setBusy(false);
     }
   }
 
+  const back = { to: `${base}/people`, label: 'People' };
+  const header = <PageHeader title="Import from MyScout" back={back} />;
   if (context.loading && !context.data)
     return (
-      <Loading label="Loading import">
-        <Skeleton width="100%" height="9rem" radius="var(--radius)" />
-      </Loading>
+      <>
+        {header}
+        <Loading what="import">
+          <Skeleton width="100%" height="9rem" className="" />
+        </Loading>
+      </>
     );
-  if (context.error) return <LoadError error={context.error} onRetry={context.reload} />;
+  if (context.error)
+    return (
+      <>
+        {header}
+        <LoadError error={context.error} onRetry={context.reload} what="the import" />
+      </>
+    );
   const mappedCount = Object.keys(mapping).length;
+  const missing = missingRequired(mapping);
 
   return (
-    <div className="import">
-      <BackLink to=".." label="People" />
-      <ol className="steps" aria-label="Import steps">
-        {(['file', 'map', 'check', 'dietary', 'done'] as Step[]).map((s, i) => (
-          <li key={s} aria-current={step === s ? 'step' : undefined}>
-            <span>{i + 1}</span> {{ file: 'Choose file', map: 'Match columns', check: 'Check', dietary: 'Dietary review', done: 'Done' }[s]}
-          </li>
-        ))}
-      </ol>
-      {error && <Notice tone="stop">{error}</Notice>}
-
-      {step === 'file' && (
-        <section className="narrow">
-          <h2>Import from MyScout</h2>
-          <p>
-            Use the participant export from MyScout, as an Excel workbook (.xlsx) or CSV. Include adults; CampCount works out who is
-            youth and who is a leader.
-          </p>
-          <Notice tone="ok" title="Your file stays on this device">
-            <p>
-              CampCount reads the file here in your browser and only sends names, membership numbers, group, role and photo consent.
-              Addresses, contact details, Medicare numbers, guardian details and medical notes are never uploaded.
-            </p>
+    <>
+      {header}
+      <div className="sections import">
+        <Stepper steps={STEPS.map((s) => STEP_LABEL[s])} current={STEPS.indexOf(step)} />
+        {error && (
+          <Notice tone="error" title="That didn't work">
+            <p>{error}</p>
           </Notice>
-          <label className="dropzone">
-            <strong>{busy ? 'Reading…' : 'Choose a file'}</strong>
-            <span>.xlsx, .csv or tab-separated text</span>
-            <input
-              type="file"
-              accept=".xlsx,.csv,.tsv,.txt,text/csv"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void loadFile(f);
-              }}
-            />
-          </label>
-        </section>
-      )}
+        )}
 
-      {step === 'map' && table && (
-        <section>
-          <h2>Match columns</h2>
-          <p className="lede">
-            {fileName}: {table.rows.length} people, {table.headers.length} columns. Only the {mappedCount} columns below are used;
-            the other {table.headers.length - mappedCount} are ignored and never leave this device.
-          </p>
-          <div className="sheet-wrap">
-            <table className="sheet">
-              <thead>
-                <tr>
-                  <th scope="col">CampCount needs</th>
-                  <th scope="col">Column in your file</th>
-                  <th scope="col">First row</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(Object.keys(TARGET_FIELDS) as TargetField[]).map((field) => {
-                  const def = TARGET_FIELDS[field];
-                  const index = mapping[field];
-                  const sample = index === undefined || field === 'dietaryText' ? '' : (table.rows[0]?.[index] ?? '');
-                  return (
-                    <tr key={field}>
-                      <td>
-                        <label htmlFor={`map-${field}`}>
-                          {def.label}
-                          {def.required && <span className="field-hint"> (required)</span>}
-                        </label>
-                      </td>
-                      <td>
-                        <select
-                          id={`map-${field}`}
-                          className="input"
-                          value={index ?? ''}
-                          onChange={(e) => {
-                            const next = { ...mapping };
-                            if (e.target.value === '') delete next[field];
-                            else next[field] = Number(e.target.value);
-                            setMapping(next);
-                          }}
-                        >
-                          <option value="">Not in this file</option>
-                          {table.headers.map((h, i) => (
-                            <option key={i} value={i}>
-                              {h || `Column ${i + 1}`}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="field-hint">{sample}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          {mapping.dietaryText !== undefined && !reviewing && (
-            <Notice tone="warn">
+        {step === 'file' && (
+          <Section title="Choose file" id="file">
+            <div className="prose">
               <p>
-                {context.data?.dietaryEnabled
-                  ? 'You can import the roster. Dietary notes will be flagged for an event manager to review.'
-                  : 'Dietary requirements are switched off for this event, so this column will be ignored.'}
+                Use the participant export from MyScout, as an Excel workbook (.xlsx) or a CSV file. Include adults: CampCount works out who is youth and who is
+                a leader.
               </p>
-            </Notice>
-          )}
-          {missingRequired(mapping).length > 0 && (
-            <Notice tone="stop">Choose a column for: {missingRequired(mapping).map((f) => TARGET_FIELDS[f].label).join(', ')}.</Notice>
-          )}
-          <div className="actions">
-            <button className="btn" disabled={missingRequired(mapping).length > 0} onClick={() => void check()}>
-              Check rows
-            </button>
-            <button className="btn btn-secondary" onClick={() => setStep('file')}>
-              Choose a different file
-            </button>
-          </div>
-        </section>
-      )}
+              <p className="meta">The file stays on this computer. Only the columns CampCount needs are sent.</p>
+            </div>
+            <label className="dropzone">
+              <Icon name="download" size={24} />
+              <strong>{busy ? 'Reading…' : 'Choose a file'}</strong>
+              <span className="meta">.xlsx, .csv or tab-separated text</span>
+              <input
+                type="file"
+                accept=".xlsx,.csv,.tsv,.txt,text/csv"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void loadFile(f);
+                }}
+              />
+            </label>
+          </Section>
+        )}
 
-      {step === 'check' && (
-        <section>
-          <h2>Check</h2>
-          {invalid.length > 0 && (
-            <Notice tone="warn" title={`${invalid.length} ${invalid.length === 1 ? 'row has' : 'rows have'} problems and will be skipped`}>
-              <ul>
-                {invalid.slice(0, 8).map((p) => (
-                  <li key={p.line}>
-                    Line {p.line}
-                    {p.row.memberNumber && ` (member ${p.row.memberNumber})`}: {p.errors.join('; ')}
+        {step === 'map' && table && (
+          <Section title="Match columns" id="map">
+            <p className="meta">
+              {fileName}: {plural(table.rows.length, 'person', 'people')}, {plural(table.headers.length, 'column')}. Only the {mappedCount} matched columns are
+              used; the other {table.headers.length - mappedCount} never leave this computer.
+            </p>
+            <ul className="list">
+              {(Object.keys(TARGET_FIELDS) as TargetField[]).map((field) => {
+                const def = TARGET_FIELDS[field];
+                const index = mapping[field];
+                const sample = index === undefined || field === 'dietaryText' ? '' : (table.rows[0]?.[index] ?? '');
+                return (
+                  <li key={field} className="row map-row">
+                    <span className="row-main">
+                      <label htmlFor={`map-${field}`} className="row-title">
+                        {def.label}
+                        {!def.required && <span className="field-optional"> (optional)</span>}
+                      </label>
+                      {sample && <span className="row-meta">First row: {sample}</span>}
+                    </span>
+                    <select
+                      id={`map-${field}`}
+                      className="select map-select"
+                      value={index ?? ''}
+                      onChange={(e) => {
+                        const next = { ...mapping };
+                        if (e.target.value === '') delete next[field];
+                        else next[field] = Number(e.target.value);
+                        setMapping(next);
+                      }}
+                    >
+                      <option value="">Not in this file</option>
+                      {table.headers.map((h, i) => (
+                        <option key={i} value={i}>
+                          {h || `Column ${i + 1}`}
+                        </option>
+                      ))}
+                    </select>
                   </li>
-                ))}
-              </ul>
-              <button
-                className="btn-link"
-                onClick={() =>
-                  downloadCsv('campcount-import-problems.csv', [
-                    ['Line', 'Membership number', 'Problem'],
-                    ...invalid.map((p) => [String(p.line), p.row.memberNumber, p.errors.join('; ')]),
-                  ])
-                }
-              >
-                Download the list of problems
-              </button>
-            </Notice>
-          )}
-          {!plan && (
-            <>
-              <p>{valid.length} people are ready to check against this event's roster. Nothing is saved yet.</p>
-              <button className="btn" disabled={busy || valid.length === 0} onClick={() => void preview()}>
-                {busy ? 'Checking…' : 'Compare with roster'}
-              </button>
-            </>
-          )}
-          {plan && (
-            <>
-              <dl className="facts">
-                <dt>New</dt>
-                <dd>{plan.counts.create}</dd>
-                <dt>Changed</dt>
-                <dd>{plan.counts.update}</dd>
-                <dt>No change</dt>
-                <dd>{plan.counts.unchanged}</dd>
-                {reviewing && (
-                  <>
-                    <dt>Dietary to review</dt>
-                    <dd>{plan.counts.dietaryPending}</dd>
-                  </>
-                )}
-              </dl>
-              <label className="check">
-                <input
-                  type="checkbox"
+                );
+              })}
+            </ul>
+            {mapping.dietaryText !== undefined && !reviewing && (
+              <Notice tone="warning">
+                <p>
+                  {context.data?.dietaryEnabled
+                    ? 'You can import the people. Dietary notes will be flagged for an event manager to review.'
+                    : 'Dietary needs are switched off for this event, so this column is ignored.'}
+                </p>
+              </Notice>
+            )}
+            {missing.length > 0 && (
+              <Notice tone="warning">
+                <p>Choose a column for: {missing.map((f) => TARGET_FIELDS[f].label).join(', ')}.</p>
+              </Notice>
+            )}
+            <div className="btn-row">
+              <Button kind="primary" disabled={missing.length > 0} onClick={() => void check()}>
+                Next
+              </Button>
+              <Button onClick={() => setStep('file')}>Back</Button>
+            </div>
+          </Section>
+        )}
+
+        {step === 'check' && (
+          <Section title="Check" id="check">
+            {!plan ? (
+              <>
+                <p>{plural(valid.length, 'person is', 'people are')} ready to compare with this event's list. Nothing is saved yet.</p>
+                {invalid.length > 0 && <Problems invalid={invalid} />}
+                <div className="btn-row">
+                  <Button kind="primary" busy={busy} busyLabel="Checking…" disabled={valid.length === 0} onClick={() => void preview()}>
+                    Next
+                  </Button>
+                  <Button onClick={() => setStep('map')}>Back</Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className={reviewing ? 'tiles import-tiles-4' : 'tiles'}>
+                  <CountTile value={plan.counts.create} label="New" tone="success" />
+                  <CountTile value={plan.counts.update} label="Changed" tone="info" />
+                  <CountTile value={plan.counts.unchanged} label="No change" />
+                  {reviewing && <CountTile value={plan.counts.dietaryPending} label="Dietary to review" tone="warning" />}
+                </div>
+                {invalid.length > 0 && <Problems invalid={invalid} />}
+                <Choice
                   checked={withdrawMissing}
                   onChange={(e) => {
                     setWithdrawMissing(e.target.checked);
                     void preview(e.target.checked);
                   }}
+                  label={<strong>Mark people not in this file as withdrawn</strong>}
+                  description={`Use this when the file is the complete, current list.${withdrawMissing ? ` ${plural(plan.counts.withdraw, 'person', 'people')} will be withdrawn. Their records are kept.` : ''}`}
                 />
-                <div>
-                  <strong>Mark people not in this file as withdrawn</strong>
-                  <span>
-                    Use this when the file is the complete, current list.
-                    {withdrawMissing && ` ${plan.counts.withdraw} will be marked withdrawn. Their records are kept.`}
-                  </span>
-                </div>
-              </label>
-              {plan.counts.update > 0 && (
-                <details className="section-gap">
-                  <summary>See what changed</summary>
-                  <ul>
-                    {plan.rows
-                      .filter((r) => r.action === 'update')
-                      .map((r) => (
-                        <li key={r.memberNumber}>
-                          {valid[r.index]!.row.firstName} {valid[r.index]!.row.lastName}: {r.changes.join(', ')}
-                        </li>
-                      ))}
-                  </ul>
-                </details>
-              )}
-              <div className="actions">
-                {reviewing && pending.length > 0 ? (
-                  <button className="btn" onClick={() => setStep('dietary')}>
-                    Review dietary requirements
-                  </button>
-                ) : (
-                  <button className="btn" disabled={busy} onClick={() => void commit()}>
-                    {busy ? 'Importing…' : `Import ${plan.counts.create + plan.counts.update} people`}
-                  </button>
+                {plan.counts.update > 0 && (
+                  <details className="more-options">
+                    <summary>
+                      <Icon name="chevron" />
+                      See what changed
+                    </summary>
+                    <ul className="list import-changes">
+                      {plan.rows
+                        .filter((r) => r.action === 'update')
+                        .map((r) => (
+                          <li key={r.memberNumber} className="row">
+                            <span className="row-main">
+                              <span className="row-title">
+                                {valid[r.index]!.row.firstName} {valid[r.index]!.row.lastName}
+                              </span>
+                              <span className="row-meta">{r.changes.join(', ')}</span>
+                            </span>
+                          </li>
+                        ))}
+                    </ul>
+                  </details>
                 )}
-              </div>
-            </>
-          )}
-        </section>
-      )}
+                <div className="btn-row">
+                  {reviewing && pending.length > 0 ? (
+                    <Button kind="primary" onClick={() => setStep('dietary')}>
+                      Next
+                    </Button>
+                  ) : (
+                    <Button kind="primary" busy={busy} busyLabel="Importing…" onClick={() => void commit()}>
+                      Import {plural(plan.counts.create + plan.counts.update, 'person', 'people')}
+                    </Button>
+                  )}
+                  <Button
+                    onClick={() => {
+                      setPlan(null);
+                      setRows([]);
+                      setStep('map');
+                    }}
+                  >
+                    Back
+                  </Button>
+                </div>
+              </>
+            )}
+          </Section>
+        )}
 
-      {step === 'dietary' && plan && (
-        <section>
-          <h2>Dietary review</h2>
-          <p>
-            Turn each note into dietary requirements. Record food needs only. Leave out other medical information; it stays in MyScout.
-            The notes themselves are not saved.
-          </p>
-          <ul className="review-list">
-            {pending.map(({ source }) => {
-              const key = source.row.memberNumber;
-              const decided = dietary[key];
-              return (
-                <li key={key} className={decided ? 'is-done' : undefined}>
-                  <div className="review-head">
-                    <strong>
-                      {source.row.preferredName || source.row.firstName} {source.row.lastName}
-                    </strong>
-                    <span className="field-hint">
-                      {source.row.groupName}, member {key}
-                    </span>
-                  </div>
-                  <blockquote className="source-note">{source.dietaryText || 'The note was removed in the new file.'}</blockquote>
-                  <DietaryEditor
-                    value={decided}
-                    onChange={(entries) => setDietary({ ...dietary, [key]: entries })}
-                    labelPrefix={`${source.row.firstName} ${source.row.lastName}`}
-                  />
-                </li>
-              );
-            })}
-          </ul>
-          <div className="actions sticky-actions">
-            <button className="btn" disabled={busy} onClick={() => void commit()}>
-              {busy ? 'Importing…' : 'Import'}
-            </button>
-            <span className="field-hint">
-              {pending.filter((p) => dietary[p.source.row.memberNumber]).length} of {pending.length} reviewed. Anyone not reviewed stays
-              flagged for next time.
-            </span>
-          </div>
-        </section>
-      )}
-
-      {step === 'done' && result && (
-        <section className="narrow">
-          <Notice tone="ok" title="Import complete">
-            <p>
-              {result.create} added, {result.update} updated, {result.unchanged} unchanged
-              {result.withdraw > 0 && `, ${result.withdraw} marked withdrawn`}.
-              {invalid.length > 0 && ` ${invalid.length} rows were skipped because of problems.`}
+        {step === 'dietary' && plan && (
+          <Section title="Dietary review" id="dietary">
+            <p className="prose">
+              Turn each note into dietary needs. Record food needs only; other medical information stays in MyScout. The notes themselves are not saved.
             </p>
-          </Notice>
-          <div className="actions">
-            <Link className="btn" to={`/events/${event.id}/people`}>
-              View people
-            </Link>
-            <Link className="btn btn-secondary" to={`/events/${event.id}/people/lanyards`}>
-              Print lanyards
-            </Link>
-          </div>
-        </section>
-      )}
-    </div>
+            <ul className="review-list">
+              {pending.map(({ source }) => {
+                const key = source.row.memberNumber;
+                const decided = dietary[key];
+                return (
+                  <li key={key} className="panel panel-pad review-item">
+                    <div className="review-head">
+                      <strong>
+                        {source.row.preferredName || source.row.firstName} {source.row.lastName}
+                      </strong>
+                      <span className="meta">
+                        {[source.row.groupName, `member ${key}`].filter(Boolean).join(' · ')}
+                      </span>
+                      {decided && <Badge tone="success">Reviewed</Badge>}
+                    </div>
+                    <blockquote className="source-note">{source.dietaryText || 'The note was removed in the new file.'}</blockquote>
+                    <DietaryEditor value={decided} onChange={(entries) => setDietary({ ...dietary, [key]: entries })} labelPrefix={`${source.row.firstName} ${source.row.lastName}`} />
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="meta">
+              {pending.filter((p) => dietary[p.source.row.memberNumber]).length} of {pending.length} reviewed. Anyone not reviewed stays flagged for next time.
+            </p>
+            <div className="btn-row">
+              <Button kind="primary" busy={busy} busyLabel="Importing…" onClick={() => void commit()}>
+                Import
+              </Button>
+              <Button onClick={() => setStep('check')}>Back</Button>
+            </div>
+          </Section>
+        )}
+
+        {step === 'done' && result && (
+          <Section title="Done" id="done">
+            <Notice tone="success" title="Import complete">
+              <p>
+                {result.create} added, {result.update} updated, {result.unchanged} unchanged
+                {result.withdraw > 0 && `, ${result.withdraw} withdrawn`}.{invalid.length > 0 && ` ${plural(invalid.length, 'row was', 'rows were')} skipped because of problems.`}
+              </p>
+            </Notice>
+            <div className="btn-row">
+              <Button kind="primary" onClick={() => navigate(`${base}/people`)}>
+                View people
+              </Button>
+              <ButtonLink to={`${base}/people/lanyards`}>Print lanyards</ButtonLink>
+            </div>
+          </Section>
+        )}
+      </div>
+    </>
+  );
+}
+
+/** Rows that can't be imported, with a download of the full list. */
+function Problems({ invalid }: { invalid: PreparedRow[] }) {
+  return (
+    <Notice tone="warning" title={`${plural(invalid.length, 'row has', 'rows have')} problems and will be skipped`}>
+      <ul className="problem-list">
+        {invalid.slice(0, 8).map((p) => (
+          <li key={p.line}>
+            Line {p.line}
+            {p.row.memberNumber && ` (member ${p.row.memberNumber})`}: {p.errors.join('; ')}
+          </li>
+        ))}
+      </ul>
+      <Button
+        small
+        onClick={() =>
+          downloadCsv('campcount-import-problems.csv', [
+            ['Line', 'Membership number', 'Problem'],
+            ...invalid.map((p) => [String(p.line), p.row.memberNumber, p.errors.join('; ')]),
+          ])
+        }
+      >
+        Download the list of problems
+      </Button>
+    </Notice>
   );
 }
