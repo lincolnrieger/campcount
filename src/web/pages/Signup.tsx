@@ -11,7 +11,7 @@ import { useTitle } from '../shell';
 import { useSiteEvent } from '../site';
 import { BrandMark } from '../ui/AppShell';
 import { SiteLogo } from '../ui/SiteShell';
-import { Badge, Button, Field, Icon, Loading, Notice, SkeletonRows, formatDateRange } from '../ui';
+import { Badge, Button, Field, Icon, Loading, Notice, Segmented, SkeletonRows, formatDateRange } from '../ui';
 
 /** Back to the start screen after this long without a tap, so the next person starts fresh. */
 const IDLE_MS = 90_000;
@@ -297,6 +297,7 @@ export function MyActivities() {
   const [failed, setFailed] = useState(false);
   const person = usePerson(setError);
   const { setView } = person;
+  const [chosenTab, setChosenTab] = useState<'bookings' | 'programme' | null>(null);
 
   useEffect(() => {
     if (!/^[A-Za-z0-9_-]{22}$/.test(token)) {
@@ -328,6 +329,9 @@ export function MyActivities() {
     );
   }
   const v = person.view;
+  // Start where there's something to do: bookings when there are any (or any to make), otherwise the programme.
+  const tab = chosenTab ?? (v.bookings.length || (v.open && v.sessions.length) ? 'bookings' : 'programme');
+  const setTab = (t: 'bookings' | 'programme') => setChosenTab(t);
   return (
     <Frame title={v.person.name} subtitle={`${v.event.name} · ${formatDateRange(v.event.startsOn, v.event.endsOn)}`}>
       {error && <Notice tone="error">{error}</Notice>}
@@ -336,9 +340,24 @@ export function MyActivities() {
           <p>{person.done}</p>
         </Notice>
       )}
-      <OnNow items={v.programme ?? []} tz={v.event.timezone} />
-      <SignupPanel view={v} busy={person.busy} onBook={(s) => person.book(s)} onCancel={(id) => person.cancel(id)} />
-      <Programme items={v.programme ?? []} tz={v.event.timezone} />
+      <Segmented
+        block
+        label="Show"
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: 'bookings', label: v.bookings.length ? `Bookings (${v.bookings.length})` : 'Bookings' },
+          { value: 'programme', label: 'Programme' },
+        ]}
+      />
+      {tab === 'bookings' ? (
+        <SignupPanel view={v} busy={person.busy} onBook={(s) => person.book(s)} onCancel={(id) => person.cancel(id)} />
+      ) : (
+        <>
+          <OnNow items={v.programme ?? []} tz={v.event.timezone} />
+          <Programme items={v.programme ?? []} tz={v.event.timezone} />
+        </>
+      )}
     </Frame>
   );
 }
@@ -418,7 +437,7 @@ function Programme({ items, tz }: { items: ProgrammeItem[]; tz: string }) {
           </ul>
         </div>
       )}
-      {items.some((i) => i.bookingRequired) && <p className="meta">Activities marked "Book first" need a booking. Book them above, or at the sign-up screen.</p>}
+      {items.some((i) => i.bookingRequired) && <p className="meta">Activities marked "Book first" need a booking. Book them on the Bookings tab, or at the sign-up screen.</p>}
     </section>
   );
 }

@@ -107,7 +107,7 @@ for (const size of SIZES) {
         [...document.querySelectorAll('a[href], button, input, select, textarea, summary, [role="button"]')]
           .filter((el) => {
             // Links and link-style buttons inside a sentence are exempt (WCAG 2.5.8 inline exception).
-            if (getComputedStyle(el).display === 'inline' && (el.closest('p, li, td, dd, div')?.textContent ?? '').trim().length > (el.textContent ?? '').trim().length) return false;
+            if (getComputedStyle(el).display.startsWith('inline') && el.closest('p') && (el.closest('p, li, td, dd, div')?.textContent ?? '').trim().length > (el.textContent ?? '').trim().length) return false;
             const r = el.getBoundingClientRect();
             if (r.width === 0 || r.height === 0 || r.bottom < 0) return false; // hidden, or off screen until focused (skip link)
             if (el.closest('.row-link, tr.row-link')) return false; // the whole row is the link's hit area

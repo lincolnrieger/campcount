@@ -1160,3 +1160,31 @@ button.tile:hover {
 .is-struck {
   text-decoration: line-through;
 }
+
+/* A button that reads as a link inside a sentence ("Not listed? Add someone new"). */
+.link-button {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  font-weight: var(--weight-bold);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  cursor: pointer;
+}
+.link-button:hover {
+  color: var(--brand-hover);
+}
+
+/* ---------- Dietary needs editor ---------- */
+.dietary-editor {
+  display: grid;
+  gap: var(--space-3);
+}
+.quick-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}

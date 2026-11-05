@@ -592,7 +592,7 @@ function SessionPanel({
         </form>
       )}
       <div className="btn-row">
-        {a && (
+        {a && !it.program && (
           <ButtonLink to={`${base}/activities/${a.id}`}>
             Open activity
             <Icon name="chevron" />
