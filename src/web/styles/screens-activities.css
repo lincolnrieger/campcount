@@ -322,3 +322,16 @@
   border-color: var(--border-control);
   background: var(--surface-sunken);
 }
+
+.activity-time {
+  display: grid;
+  flex: none;
+  align-self: flex-start;
+  width: 4.5rem;
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+.activity-capacity {
+  display: grid;
+  gap: var(--space-4);
+}

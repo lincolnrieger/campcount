@@ -39,7 +39,7 @@ import { useSite } from './site';
 import type { SiteInfo } from './site';
 import { SiteShell } from './ui/SiteShell';
 import { More } from './pages/More';
-import { scanOnly } from './pages/EventLayout';
+import { eventSections, hasHome, scanOnly } from './pages/EventLayout';
 import { useEvent } from './pages/EventLayout';
 import { PageHeader, EmptyState } from './ui';
 
@@ -129,8 +129,19 @@ function SiteHome() {
     const { contextType, contextId } = me.station;
     return <Navigate to={`/events/${event.id}/scan/${contextType}${contextId ? `/${contextId}` : ''}`} replace />;
   }
-  if (scanOnly(event)) return <Navigate to="/scan" replace />;
-  return <EventHome />;
+  if (hasHome(event, true)) return <EventHome />;
+  // Nothing for them on Home: open their first section instead (Scan, Activities…).
+  const first = eventSections(event, true)[0];
+  if (scanOnly(event) || !first) return <Navigate to="/scan" replace />;
+  return <Navigate to={`/${first.to}`} replace />;
+}
+
+/** Main site: an event's Home, or its first section when Home has nothing for this person. */
+function PlatformEventHome() {
+  const { event, base } = useEvent();
+  if (hasHome(event, false)) return <EventHome />;
+  const first = eventSections(event, false).find((s) => s.to !== '');
+  return first ? <Navigate to={`${base}/${first.to}`} replace /> : <EventHome />;
 }
 
 /**
@@ -237,7 +248,7 @@ function PlatformApp() {
           <Route path="camps/new" element={<NewCamp />} />
           <Route path="camps/:campId" element={<CampPage />} />
           <Route path="events/:eventId" element={<EventLayout />}>
-            <Route index element={<EventHome />} />
+            <Route index element={<PlatformEventHome />} />
             <Route path="people" element={<Roster />} />
             <Route path="people/add" element={<AddPerson />} />
             <Route path="people/import" element={<Import />} />

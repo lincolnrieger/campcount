@@ -31,12 +31,25 @@ export function scanOnly(event: EventSummary): boolean {
   return !can('reports.view') && !can('roster.view') && !can('activity.view_roster') && !can('event.configure') && !can('staff.manage') && !can('stations.manage') && !can('meals.manage');
 }
 
+/**
+ * Does Home have anything for this person? Event managers see who's where,
+ * and the setup checklist on a draft. For others, Home was just a pointer
+ * elsewhere, so it's left out and they land on their first real section.
+ */
+export function hasHome(event: EventSummary, onSite: boolean): boolean {
+  const can = (p: Permission) => event.permissions.includes(p);
+  if (can('reports.view')) return true;
+  if (event.status === 'draft' && can('event.configure')) return true;
+  // On the main site, Home holds the way into the scanner.
+  return !onSite && event.status === 'open' && (['site.scan', 'meal.scan', 'activity.scan'] as const).some((p) => can(p));
+}
+
 /** The sections of an event this person can open, most used first. On the event's own site, Scan is one of them. */
 export function eventSections(event: EventSummary, onSite = false) {
   const can = (p: Permission) => event.permissions.includes(p);
   const scans = event.status === 'open' && (['site.scan', 'meal.scan', 'activity.scan'] as const).some((p) => can(p));
   return [
-    { to: '', label: 'Home', show: !scanOnly(event) || !onSite },
+    { to: '', label: 'Home', show: hasHome(event, onSite) },
     { to: 'scan', label: 'Scan', show: onSite && scans },
     { to: 'people', label: 'People', show: can('roster.view') },
     { to: 'activities', label: 'Activities', show: event.features.activities && (can('activities.manage') || can('activity.view_roster')) },

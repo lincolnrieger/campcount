@@ -10,6 +10,7 @@ import {
   Badge,
   Button,
   ButtonLink,
+  CountTile,
   EmptyState,
   Icon,
   LoadError,
@@ -49,6 +50,7 @@ interface Attendance {
     startsAt: string | null;
     endsAt: string | null;
     capacity: number | null;
+    capacityPolicy: 'warn' | 'block';
     trackSignOut: boolean;
     signupOpen: boolean;
     bookingRequired: boolean;
@@ -101,13 +103,26 @@ export function ActivityRoster() {
     setBusy(p.id);
     try {
       const r = await recordByHand(event.id, { contextType: 'activity', contextId: activityId, direction, registrationId: p.id });
-      if (r.outcome === 'accepted') toast(`${p.name} ${direction === 'in' ? 'signed in' : 'signed out'}${r.warning ? `. ${r.warning}` : ''}`);
+      if (r.outcome === 'accepted')
+        toast(`${p.name} ${direction === 'in' ? 'checked in' : 'signed out'}${r.warning ? `. ${r.warning}` : ''}`, direction === 'in' ? { undo: () => moveBack(p, true) } : {});
       else toast(`${p.name}: ${r.message}`, { tone: 'error' });
       await reload();
     } catch (err) {
       fail(err, 'No connection. Use the scanner, which works offline.');
     } finally {
       setBusy(null);
+    }
+  }
+
+  /** Undo their check-ins here: back to "To come" (or off the list, for a walk-in). */
+  async function moveBack(p: { id: string; name: string }, quiet = false) {
+    try {
+      await api(`${path}/attendance/${p.id}/reset`, { method: 'POST' });
+      if (!quiet) toast(`${p.name} moved back to To come`);
+      await reload();
+    } catch (err) {
+      fail(err);
+      if (quiet) throw err;
     }
   }
 
@@ -265,10 +280,25 @@ export function ActivityRoster() {
           </Notice>
         )}
 
-        <p className="activity-counts num">
-          <strong>{booked.length}</strong> booked · <strong>{hereCount}</strong> {a.trackSignOut ? 'here now' : 'signed in'}
-          {a.capacity ? ` of ${a.capacity} places` : ''} · <strong>{toCome.length}</strong> to come
-        </p>
+        <div className="tiles">
+          <CountTile value={a.capacity ? `${booked.length}/${a.capacity}` : booked.length} label={a.capacity ? 'Places booked' : 'Booked'} />
+          <CountTile value={hereCount} label={a.trackSignOut ? 'Here now' : 'Checked in'} tone="success" />
+          <CountTile value={toCome.length} label="To come" tone="warning" />
+        </div>
+        {a.capacity !== null && (
+          <p className="meta">
+            {booked.length >= a.capacity ? (
+              <Badge tone="warning">Full</Badge>
+            ) : (
+              <Badge tone="success">{`${a.capacity - booked.length} ${a.capacity - booked.length === 1 ? 'place' : 'places'} left`}</Badge>
+            )}{' '}
+            {a.capacity} places. When it's full, people can't book themselves.
+            {a.trackSignOut &&
+              (a.capacityPolicy === 'block'
+                ? ` Check-ins stop at ${a.capacity} here at once.`
+                : ` More than ${a.capacity} here at once can still be checked in, with a warning.`)}
+          </p>
+        )}
 
         <div className="toolbar">
           <Segmented
@@ -316,8 +346,14 @@ export function ActivityRoster() {
                         <span className="visually-hidden"> {p.name}</span>
                       </Button>
                     )}
-                    {data.canBook && p.booked && !p.present && (
-                      <Menu label={`More for ${p.name}`} items={[{ label: 'Remove booking', danger: true, onSelect: () => void booking(p, false) }]} />
+                    {((data.canCheckIn && p.visits > 0 && event.status === 'open') || (data.canBook && p.booked && !p.present)) && (
+                      <Menu
+                        label={`More for ${p.name}`}
+                        items={[
+                          data.canCheckIn && p.visits > 0 && event.status === 'open' && { label: p.booked ? 'Move back to To come' : 'Undo check-in', onSelect: () => void moveBack(p) },
+                          data.canBook && p.booked && !p.present && { label: 'Remove booking', danger: true, onSelect: () => void booking(p, false) },
+                        ]}
+                      />
                     )}
                   </span>
                 </li>

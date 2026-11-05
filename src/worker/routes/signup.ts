@@ -437,7 +437,7 @@ signupRoutes.get('/activities/:activityId/attendance', async (c) => {
   const principal = requirePermission(c, 'activity.view_roster', { eventId, activityId: activityId.data });
   const ctx = await loadContext(c.env.DB, eventId, 'activity', activityId.data);
   const [activity, people, bookings, state] = await Promise.all([
-    c.env.DB.prepare(`SELECT name, location, instructions, starts_at, ends_at, capacity, track_sign_out, signup_open, booking_required, status FROM activities WHERE id = ?`)
+    c.env.DB.prepare(`SELECT name, location, instructions, starts_at, ends_at, capacity, capacity_policy, track_sign_out, signup_open, booking_required, status FROM activities WHERE id = ?`)
       .bind(activityId.data)
       .first<Record<string, string | number | null>>(),
     c.env.DB.prepare(
@@ -478,6 +478,7 @@ signupRoutes.get('/activities/:activityId/attendance', async (c) => {
       startsAt: activity!.starts_at,
       endsAt: activity!.ends_at,
       capacity: activity!.capacity,
+      capacityPolicy: activity!.capacity_policy,
       trackSignOut: activity!.track_sign_out === 1,
       signupOpen: activity!.signup_open === 1,
       bookingRequired: activity!.booking_required === 1,
@@ -489,4 +490,50 @@ signupRoutes.get('/activities/:activityId/attendance', async (c) => {
     people: [...involved].filter((id) => byId.has(id)).map(row),
     everyone: people.results.map((p) => ({ id: p.id, name: `${p.preferred_name || p.first_name} ${p.last_name}`, groupName: p.group_name })),
   });
+});
+
+/**
+ * Undo someone's check-ins at this activity, so they're back in "To come".
+ * Scans are never changed or deleted: each one gets a void correction, like
+ * "Undo this scan" on the person page. Activity leaders can do this for their
+ * own activity; the audit log records who did it.
+ */
+signupRoutes.post('/activities/:activityId/attendance/:registrationId/reset', async (c) => {
+  const eventId = c.req.param('eventId')!;
+  const activityId = z.uuid().safeParse(c.req.param('activityId'));
+  const registrationId = z.uuid().safeParse(c.req.param('registrationId'));
+  if (!activityId.success || !registrationId.success) throw notFound();
+  const principal = requirePermission(c, 'activity.scan', { eventId, activityId: activityId.data });
+  const user = requireUser(c);
+  const event = await c.env.DB.prepare(`SELECT status FROM events WHERE id = ?`).bind(eventId).first<{ status: string }>();
+  if (!event) throw notFound();
+  if (event.status !== 'open') throw conflict('Check-ins can only be changed while the event is open.');
+  const { results } = await c.env.DB.prepare(
+    `SELECT s.id, s.direction FROM scans s
+      WHERE s.event_id = ? AND s.context_type = 'activity' AND s.context_id = ? AND s.registration_id = ?
+        AND s.outcome IN ('accepted', 'duplicate', 'review')
+        AND NOT EXISTS (SELECT 1 FROM scans c WHERE c.supersedes_id = s.id)`,
+  )
+    .bind(eventId, activityId.data, registrationId.data)
+    .all<{ id: string; direction: string }>();
+  if (results.length === 0) return c.json({ undone: 0 });
+  const now = nowIso();
+  await c.env.DB.batch([
+    ...results.map((s) =>
+      c.env.DB.prepare(
+        `INSERT INTO scans (id, event_id, context_type, context_id, registration_id, direction, method, device_time, server_time,
+            device_id, actor_user_id, outcome, supersedes_id, correction_reason)
+         VALUES (?, ?, 'activity', ?, ?, ?, 'correction', ?, ?, 'server', ?, 'void', ?, 'Moved back to To come')`,
+      ).bind(crypto.randomUUID(), eventId, activityId.data, registrationId.data, s.direction, now, now, user.userId, s.id),
+    ),
+    auditStatement(c.env.DB, {
+      actor: { type: 'user', id: user.userId },
+      action: 'attendance.reset',
+      eventId,
+      targetType: 'activity',
+      targetId: activityId.data,
+      detail: { scans: results.length, via: can(principal, 'attendance.correct', { eventId }) ? 'manager' : 'leader' },
+    }),
+  ]);
+  return c.json({ undone: results.length });
 });

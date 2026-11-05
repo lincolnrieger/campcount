@@ -95,7 +95,10 @@ export function buildTargets(event: EventSummary, meals: Meal[], activities: Act
     }
   }
   if (event.features.activities && can('activity.scan')) {
-    for (const a of activities.filter((a) => a.status === 'active' && a.kind !== 'program')) {
+    // Programme items are never scanned. Drop-in activities with no set time (Soccer, Climbing…)
+    // aren't either, unless they need booking or track who's there.
+    const scanned = (a: Activity) => a.status === 'active' && a.kind !== 'program' && (a.startsAt !== null || a.bookingRequired || a.trackSignOut);
+    for (const a of activities.filter(scanned)) {
       targets.push({
         key: `activity:${a.id}`,
         to: `${base}/activity/${a.id}`,

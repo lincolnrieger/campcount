@@ -21,3 +21,14 @@
 .list > .row + ul > li {
   border-top: var(--border-width) solid var(--divider);
 }
+
+.staff-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.staff-choose {
+  flex: none;
+  color: var(--brand);
+  font-weight: var(--weight-bold);
+}

@@ -173,6 +173,14 @@ describe('activity leaders', () => {
     expect(by('200')).toMatchObject({ booked: false, visits: 1 });
     expect(roster.everyone).toHaveLength(3);
 
+    // Undo the walk-in's check-in: they're back to not here, and the scan is voided, not deleted.
+    const reset = await json(await api(`/events/${c.eventId}/activities/${c.kayak9}/attendance/${c.card('200').registrationId}/reset`, { cookie: leader.cookie, method: 'POST' }));
+    expect(reset).toEqual({ undone: 1 });
+    const after = await json(await api(`/events/${c.eventId}/activities/${c.kayak9}/attendance`, { cookie: leader.cookie }));
+    expect(after.people.find((p: { id: string }) => p.id === c.card('200').registrationId)).toBeUndefined();
+    expect(await json(await api(`/events/${c.eventId}/activities/${c.kayak9}/attendance/${c.card('200').registrationId}/reset`, { cookie: leader.cookie, method: 'POST' }))).toEqual({ undone: 0 });
+    expect((await api(`/events/${c.eventId}/activities/${c.archery10}/attendance/${c.card('200').registrationId}/reset`, { cookie: leader.cookie, method: 'POST' })).status).toBe(403);
+
     // Nothing for other activities, people pages or reports.
     expect((await api(`/events/${c.eventId}/activities/${c.archery10}/attendance`, { cookie: leader.cookie })).status).toBe(403);
     expect((await api(`/events/${c.eventId}/activities/${c.archery10}/bookings`, { cookie: leader.cookie, body: { registrationId: c.card('100').registrationId } })).status).toBe(403);
