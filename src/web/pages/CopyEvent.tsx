@@ -2,13 +2,10 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { ApiFailure, api } from '../api';
-import { BackLink, Field, Notice } from '../components/ui';
-import { useToast } from '../components/Toast';
+import type { Activity, Meal } from '../model';
 import { useSession } from '../session';
-import { useTitle } from '../shell';
 import type { EventSummary } from '../types';
-import type { Activity } from './Activities';
-import type { Meal } from './Meals';
+import { Button, Choice, Field, Icon, Notice, PageHeader, useToast } from '../ui';
 import { useEvent } from './EventLayout';
 import { clockInZone, dayInZone, weekdayName, zonedIso } from '../../shared/time';
 
@@ -28,8 +25,7 @@ function shift(iso: string | null, n: number, tz: string): string | null {
  * and meals. People, cards, scans and staff are not copied.
  */
 export function CopyEvent() {
-  useTitle('Copy event');
-  const { event } = useEvent();
+  const { event, base, onSite } = useEvent();
   const { me } = useSession();
   const navigate = useNavigate();
   const toast = useToast();
@@ -100,8 +96,8 @@ export function CopyEvent() {
           await api(`/events/${copy.id}/meals`, { body: { name: mealName, location: m.location, startsAt, endsAt: shift(m.endsAt, offset, tz) } });
         }
       }
-      toast(`Created ${copy.name}. Add staff and people, then open it.`);
-      navigate(`/events/${copy.id}`);
+      toast(`Created ${copy.name}. Give it an address, add staff and people, then open it.`);
+      navigate(`/camps/${copy.id}`);
     } catch (err) {
       setFailure(
         `${err instanceof ApiFailure ? err.message : 'Something went wrong. Check your signal and try again.'}${progress && !progress.startsWith('Creating') ? ' The new event was created but not everything was copied: check it before using it.' : ''}`,
@@ -110,56 +106,66 @@ export function CopyEvent() {
     }
   }
 
-  if (!canCreate) return <Notice tone="stop">Only administrators can create events.</Notice>;
+  const back = { to: `${base}/settings`, label: 'Settings' };
+  if (onSite)
+    return (
+      <>
+        <PageHeader title="Copy event" back={back} />
+        <Notice title="Copy events from the admin console">
+          <p>Copying creates a new camp, which is done at the main CampCount address by an administrator.</p>
+        </Notice>
+      </>
+    );
+  if (!canCreate)
+    return (
+      <>
+        <PageHeader title="Copy event" back={back} />
+        <Notice tone="warning">
+          <p>Only administrators can create events.</p>
+        </Notice>
+      </>
+    );
 
   return (
-    <form onSubmit={submit} noValidate className="narrow">
-      <BackLink to=".." label="Settings" />
-      <h2>Copy event</h2>
-      <p className="lede">Start a new event from this one. You'll be its event manager. People, lanyards, scans and other staff stay with this event.</p>
-      {failure && <Notice tone="stop">{failure}</Notice>}
-      <Field id="copy-name" label="New event name">
-        <input id="copy-name" className="input" value={name} onChange={(e) => setName(e.target.value)} />
-      </Field>
-      <Field id="copy-start" label="First day" hint={`Runs ${length + 1} day${length ? 's' : ''}, like this event. Activity and meal times move to the new dates.`}>
-        <input id="copy-start" className="input input-time" type="date" value={startsOn} onChange={(e) => setStartsOn(e.target.value)} />
-      </Field>
-      <fieldset className="fieldset-plain">
-        <legend className="field-legend">Copy</legend>
-        <label className="check">
-          <input type="checkbox" checked disabled />
-          <div>
-            <strong>Details and features</strong>
-            <span>Location, notes for staff and which features are switched on</span>
+    <>
+      <PageHeader title="Copy event" back={back} summary="Start a new event from this one. You'll be its event manager." />
+      <form onSubmit={submit} noValidate className="form">
+        {failure && (
+          <Notice tone="error" title="Couldn't copy everything">
+            <p>{failure}</p>
+          </Notice>
+        )}
+        <Field id="copy-name" label="New event name">
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
+        </Field>
+        <Field id="copy-start" label="First day" hint={`Runs ${length + 1} day${length ? 's' : ''}, like this event. Activity and meal times move to the new dates.`}>
+          <input className="input input-time" type="date" value={startsOn} onChange={(e) => setStartsOn(e.target.value)} />
+        </Field>
+        <fieldset className="field">
+          <legend className="field-label">Copy</legend>
+          <div className="choices">
+            <Choice checked disabled label={<strong>Details and features</strong>} description="Location, notes for staff and which features are on" />
+            {event.features.activities && (
+              <Choice checked={copyActivities} onChange={(e) => setCopyActivities(e.target.checked)} label={<strong>Activities</strong>} description="With their times, places and limits" />
+            )}
+            {event.features.meals && <Choice checked={copyMeals} onChange={(e) => setCopyMeals(e.target.checked)} label={<strong>Meals</strong>} />}
           </div>
-        </label>
-        <label className="check">
-          <input type="checkbox" checked={copyActivities} onChange={(e) => setCopyActivities(e.target.checked)} />
-          <div>
-            <strong>Activities</strong>
-            <span>With their times, places and limits</span>
-          </div>
-        </label>
-        <label className="check">
-          <input type="checkbox" checked={copyMeals} onChange={(e) => setCopyMeals(e.target.checked)} />
-          <div>
-            <strong>Meals</strong>
-          </div>
-        </label>
-      </fieldset>
-      {progress && (
-        <p className="field-hint" role="status">
-          {progress}
-        </p>
-      )}
-      <div className="actions">
-        <button className="btn" disabled={!!progress || !name.trim() || !startsOn}>
-          {progress ? 'Copying…' : 'Copy event'}
-        </button>
-        <button type="button" className="btn btn-secondary" onClick={() => navigate('..', { relative: 'path' })} disabled={!!progress}>
-          Cancel
-        </button>
-      </div>
-    </form>
+        </fieldset>
+        <p className="meta">People, lanyards, scans and other staff stay with this event.</p>
+        {progress && (
+          <p className="meta" role="status">
+            <Icon name="sync" size={16} /> {progress}
+          </p>
+        )}
+        <div className="btn-row">
+          <Button type="submit" kind="primary" busy={!!progress} busyLabel="Copying…" disabled={!name.trim() || !startsOn}>
+            Copy event
+          </Button>
+          <Button onClick={() => navigate(back.to)} disabled={!!progress}>
+            Cancel
+          </Button>
+        </div>
+      </form>
+    </>
   );
 }
