@@ -9,7 +9,7 @@ import { useSession } from '../session';
 import { useShell } from '../shell';
 import { useSiteEvent } from '../site';
 
-const ICONS: Record<string, IconName> = { '': 'home', scan: 'scan', people: 'user', activities: 'events', meals: 'events', reports: 'download', settings: 'admin', more: 'more', account: 'user' };
+const ICONS: Record<string, IconName> = { '': 'home', scan: 'scan', people: 'user', activities: 'events', schedule: 'events', meals: 'events', reports: 'download', settings: 'admin', more: 'more', account: 'user' };
 
 /** The event's own logo (or the CampCount mark when it has none). */
 export function SiteLogo({ size = 32 }: { size?: number }) {

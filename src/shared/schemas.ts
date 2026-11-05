@@ -238,6 +238,14 @@ export const mealInputSchema = z.strictObject({
 });
 export const mealPatchSchema = z.strictObject(mealFields).partial().extend({ status: z.enum(['active', 'cancelled']).optional() });
 
+/** A whole programme at once (Activities › Import programme). Saved all together, or not at all. */
+export const programImportSchema = z
+  .strictObject({
+    activities: z.array(activityInputSchema).max(400).default([]),
+    meals: z.array(mealInputSchema).max(150).default([]),
+  })
+  .refine((p) => p.activities.length + p.meals.length > 0, { message: 'There is nothing to import' });
+
 export const stationInputSchema = z.strictObject({
   name: trimmed(60).min(1),
   contextType: z.enum(['activity', 'meal', 'site']),

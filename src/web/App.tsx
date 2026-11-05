@@ -23,6 +23,8 @@ import { ActivityRoster } from './pages/ActivityRoster';
 import { Activities } from './pages/Activities';
 import { ActivityEdit } from './pages/ActivityEdit';
 import { Meals } from './pages/Meals';
+import { ProgramImport } from './pages/ProgramImport';
+import { Schedule } from './pages/Schedule';
 import { Pair } from './pages/Pair';
 import { ScanHub } from './pages/ScanHub';
 import { Stations } from './pages/Stations';
@@ -175,6 +177,8 @@ function EventSiteApp({ site }: { site: Extract<SiteInfo, { kind: 'event' }> }) 
             <Route path="people/:registrationId/edit" element={<PersonEdit />} />
             <Route path="activities" element={<Activities />} />
             <Route path="activities/new" element={<ActivityEdit />} />
+            <Route path="activities/import" element={<ProgramImport />} />
+            <Route path="schedule" element={<Schedule />} />
             <Route path="activities/signup" element={<SignupScreen />} />
             <Route path="activities/:activityId" element={<ActivityRoster />} />
             <Route path="activities/:activityId/edit" element={<ActivityEdit />} />
@@ -243,6 +247,8 @@ function PlatformApp() {
             <Route path="people/:registrationId/edit" element={<PersonEdit />} />
             <Route path="activities" element={<Activities />} />
             <Route path="activities/new" element={<ActivityEdit />} />
+            <Route path="activities/import" element={<ProgramImport />} />
+            <Route path="schedule" element={<Schedule />} />
             <Route path="activities/signup" element={<SignupScreen />} />
             <Route path="activities/:activityId" element={<ActivityRoster />} />
             <Route path="activities/:activityId/edit" element={<ActivityEdit />} />
