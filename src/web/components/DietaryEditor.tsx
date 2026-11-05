@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { DietaryEntryInput } from '../../shared/schemas';
+import { Badge, Button, Choice, Field } from '../ui';
 
 export const CATEGORY_LABEL: Record<DietaryEntryInput['category'], string> = {
   allergy: 'Allergy',
@@ -38,6 +39,7 @@ export function DietaryEditor({
 }) {
   const [draft, setDraft] = useState<DietaryEntryInput>({ category: 'allergy', item: '', severity: 'standard', note: '' });
   const entries = value ?? [];
+  const id = labelPrefix.replace(/\W+/g, '-').toLowerCase();
   const add = (e: DietaryEntryInput) => {
     if (!entries.some((x) => x.category === e.category && x.item.toLowerCase() === e.item.toLowerCase())) onChange([...entries, e]);
   };
@@ -45,113 +47,82 @@ export function DietaryEditor({
   return (
     <div className="dietary-editor">
       {entries.length > 0 && (
-        <ul className="chips" aria-label={`Dietary requirements for ${labelPrefix}`}>
+        <ul className="list" aria-label={`Dietary needs for ${labelPrefix}`}>
           {entries.map((e, i) => (
-            <li key={i} className={e.category === 'allergy' ? 'chip chip-alert' : 'chip'}>
-              {describeEntry(e)}
-              {e.category === 'allergy' && (
-                <button
-                  type="button"
-                  className="btn-link"
-                  onClick={() =>
-                    onChange(
-                      entries.map((x, j) =>
-                        j === i ? { ...x, severity: x.severity === 'anaphylactic' ? 'standard' : 'anaphylactic' } : x,
-                      ),
-                    )
-                  }
-                >
-                  {e.severity === 'anaphylactic' ? 'Not anaphylactic' : 'Mark anaphylactic'}
-                </button>
-              )}
-              <button
-                type="button"
-                className="btn-link"
-                aria-label={`Remove ${describeEntry(e)}`}
-                onClick={() => onChange(entries.filter((_, j) => j !== i))}
-              >
-                Remove
-              </button>
+            <li key={i} className="row">
+              {e.category === 'allergy' && <Badge tone="error">{e.severity === 'anaphylactic' ? 'Anaphylactic' : 'Allergy'}</Badge>}
+              <span className="row-main">{describeEntry(e)}</span>
+              <span className="row-side">
+                {e.category === 'allergy' && (
+                  <Button
+                    small
+                    kind="ghost"
+                    onClick={() => onChange(entries.map((x, j) => (j === i ? { ...x, severity: x.severity === 'anaphylactic' ? 'standard' : 'anaphylactic' } : x)))}
+                  >
+                    {e.severity === 'anaphylactic' ? 'Not anaphylactic' : 'Anaphylactic'}
+                  </Button>
+                )}
+                <Button small kind="ghost" aria-label={`Remove ${describeEntry(e)}`} onClick={() => onChange(entries.filter((_, j) => j !== i))}>
+                  Remove
+                </Button>
+              </span>
             </li>
           ))}
         </ul>
       )}
-      {value !== undefined && entries.length === 0 && <p className="field-hint">Reviewed: no dietary requirement.</p>}
+      {value !== undefined && entries.length === 0 && <p className="meta">Checked: no dietary needs.</p>}
 
-      <div className="quick-picks" role="group" aria-label={`Common requirements for ${labelPrefix}`}>
+      <div className="quick-picks" role="group" aria-label={`Common needs for ${labelPrefix}`}>
         {QUICK.map((q) => (
-          <button key={q.item} type="button" className="btn btn-secondary btn-small" onClick={() => add(q)}>
+          <Button key={q.item} small onClick={() => add(q)}>
             {q.item}
-          </button>
+          </Button>
         ))}
-        <button type="button" className="btn btn-secondary btn-small" onClick={() => onChange([])}>
-          No dietary requirement
-        </button>
+        <Button small onClick={() => onChange([])}>
+          No dietary needs
+        </Button>
       </div>
 
-      <details>
+      <details className="more-options">
         <summary>Add something else</summary>
-        <div className="row">
-          <div className="field">
-            <label htmlFor={`${labelPrefix}-cat`}>Type</label>
-            <select
-              id={`${labelPrefix}-cat`}
-              className="input"
-              value={draft.category}
-              onChange={(e) => setDraft({ ...draft, category: e.target.value as DietaryEntryInput['category'] })}
-            >
-              {Object.entries(CATEGORY_LABEL).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
+        <div className="form">
+          <div className="field-pair">
+            <Field id={`${id}-cat`} label="Type">
+              <select className="select" value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value as DietaryEntryInput['category'] })}>
+                {Object.entries(CATEGORY_LABEL).map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field id={`${id}-item`} label="Food">
+              <input className="input" maxLength={60} value={draft.item} onChange={(e) => setDraft({ ...draft, item: e.target.value })} />
+            </Field>
           </div>
-          <div className="field">
-            <label htmlFor={`${labelPrefix}-item`}>Food</label>
-            <input
-              id={`${labelPrefix}-item`}
-              className="input"
-              maxLength={60}
-              value={draft.item}
-              onChange={(e) => setDraft({ ...draft, item: e.target.value })}
-            />
-          </div>
-        </div>
-        <div className="field">
-          <label htmlFor={`${labelPrefix}-note`}>Note for the kitchen (optional)</label>
-          <input
-            id={`${labelPrefix}-note`}
-            className="input"
-            maxLength={80}
-            value={draft.note}
-            onChange={(e) => setDraft({ ...draft, note: e.target.value })}
-          />
-        </div>
-        {draft.category === 'allergy' && (
-          <label className="check">
-            <input
-              type="checkbox"
+          <Field id={`${id}-note`} label="Note for the kitchen" optional>
+            <input className="input" maxLength={80} value={draft.note} onChange={(e) => setDraft({ ...draft, note: e.target.value })} />
+          </Field>
+          {draft.category === 'allergy' && (
+            <Choice
+              label="Anaphylactic"
+              description="Shown as a high-priority alert at every meal scan"
               checked={draft.severity === 'anaphylactic'}
               onChange={(e) => setDraft({ ...draft, severity: e.target.checked ? 'anaphylactic' : 'standard' })}
             />
-            <div>
-              <strong>Anaphylactic</strong>
-              <span>Shown as a high-priority alert at every meal scan.</span>
-            </div>
-          </label>
-        )}
-        <button
-          type="button"
-          className="btn btn-secondary"
-          disabled={!draft.item.trim()}
-          onClick={() => {
-            add({ ...draft, item: draft.item.trim(), note: draft.note.trim() });
-            setDraft({ category: 'allergy', item: '', severity: 'standard', note: '' });
-          }}
-        >
-          Add dietary need
-        </button>
+          )}
+          <div>
+            <Button
+              disabled={!draft.item.trim()}
+              onClick={() => {
+                add({ ...draft, item: draft.item.trim(), note: draft.note.trim() });
+                setDraft({ category: 'allergy', item: '', severity: 'standard', note: '' });
+              }}
+            >
+              Add dietary need
+            </Button>
+          </div>
+        </div>
       </details>
     </div>
   );

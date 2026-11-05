@@ -1,60 +1,55 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import type { DietaryEntryInput } from '../../shared/schemas';
 import { ApiFailure, api } from '../api';
-import { ActionButton, Loading, LoadError, Notice, PageHeader, Skeleton, SkeletonTable } from '../components/ui';
-import { SortHeader, sortRows, useSort } from '../components/Table';
-import { Menu } from '../components/Menu';
-import { useToast } from '../components/Toast';
-import { useTitle } from '../shell';
+import type { Registration } from '../model';
 import { useApi } from '../useApi';
-import { useEvent } from './EventLayout';
 import { matchesSearch } from '../../shared/search';
+import {
+  Badge,
+  Button,
+  ButtonLink,
+  EmptyState,
+  LoadError,
+  Loading,
+  PageHeader,
+  SearchField,
+  SkeletonRows,
+  SortHeader,
+  sortRows,
+  useConfirm,
+  useSort,
+  useToast,
+  useWide,
+} from '../ui';
+import { useEvent } from './EventLayout';
 
-export interface Registration {
-  id: string;
-  memberNumber: string;
-  firstName: string;
-  preferredName: string;
-  lastName: string;
-  displayName: string;
-  kind: 'youth' | 'adult';
-  section: string;
-  groupName: string;
-  position: string;
-  status: 'active' | 'withdrawn';
-  shortCode: string | null;
-  photoConsent?: 'yes' | 'no' | 'unknown';
-  dietary?: DietaryEntryInput[];
-  dietaryFingerprint?: string | null;
-}
-
-type Status = 'active' | 'withdrawn' | 'all';
+type Filter = 'all' | 'youth' | 'adult' | 'nocard' | 'withdrawn';
 type Column = 'name' | 'group' | 'section' | 'card';
 
 const fullName = (r: Registration) => `${r.preferredName || r.firstName} ${r.lastName}`;
 const roleOf = (r: Registration) => (r.kind === 'adult' ? r.position || 'Leader' : r.section);
 
-/** People: everyone on the event's roster, as a sortable, filterable table. */
+/** People: everyone on the event, searchable and sortable. */
 export function Roster() {
-  useTitle('People');
   const { event, can } = useEvent();
   const toast = useToast();
+  const confirm = useConfirm();
+  const wide = useWide();
   const { data, error, loading, reload } = useApi<{ registrations: Registration[] }>(`/events/${event.id}/registrations`);
   const [query, setQuery] = useState('');
-  const [section, setSection] = useState('');
-  const [status, setStatus] = useState<Status>('active');
-  const [message, setMessage] = useState<{ tone: 'ok' | 'stop'; text: string } | null>(null);
+  const [filter, setFilter] = useState<Filter>('all');
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [busy, setBusy] = useState(false);
   const { sort, toggle } = useSort<Column>('name');
 
   const all = useMemo(() => data?.registrations ?? [], [data]);
-  const sections = useMemo(() => [...new Set(all.map((r) => (r.kind === 'adult' ? 'Leaders' : r.section)))].sort(), [all]);
+  const active = all.filter((r) => r.status === 'active');
+  const withoutCard = active.filter((r) => !r.shortCode).length;
   const filtered = all.filter((r) => {
-    if (status !== 'all' && r.status !== status) return false;
-    if (section && (r.kind === 'adult' ? 'Leaders' : r.section) !== section) return false;
+    if (filter === 'withdrawn' ? r.status !== 'withdrawn' : r.status !== 'active') return false;
+    if (filter === 'youth' && r.kind !== 'youth') return false;
+    if (filter === 'adult' && r.kind !== 'adult') return false;
+    if (filter === 'nocard' && r.shortCode) return false;
     return matchesSearch(query, fullName(r), r.firstName, r.memberNumber, r.shortCode, r.groupName);
   });
   const shown = sortRows(
@@ -62,51 +57,76 @@ export function Roster() {
     (r) => (sort.key === 'name' ? `${r.lastName} ${r.preferredName || r.firstName}` : sort.key === 'group' ? r.groupName : sort.key === 'card' ? r.shortCode : roleOf(r)),
     sort.dir,
   );
-  const active = all.filter((r) => r.status === 'active');
-  const withdrawn = all.length - active.length;
-  const withoutCard = active.filter((r) => !r.shortCode).length;
-  const filteredOut = shown.length !== all.filter((r) => status === 'all' || r.status === status).length;
 
   async function deleteSelected() {
     const people = all.filter((r) => selected.has(r.id));
     const n = people.length;
-    if (
-      !window.confirm(
-        `Delete ${n === 1 ? fullName(people[0]!) : `${n} people`} from ${event.name}? Their cards, dietary details and scans are deleted too. This can't be undone. To keep the records, withdraw people instead (open their page).`,
-      )
-    )
-      return;
-    setBusy(true);
+    const ok = await confirm({
+      title: n === 1 ? `Delete ${fullName(people[0]!)}?` : `Delete ${n} people?`,
+      body: <p>Their lanyards, dietary needs and scans are deleted too. This can't be undone. To keep the records, withdraw people instead from their page.</p>,
+      confirm: n === 1 ? 'Delete person' : `Delete ${n} people`,
+      danger: true,
+    });
+    if (!ok) return;
     let done = 0;
     try {
       for (const r of people) {
         await api(`/events/${event.id}/registrations/${r.id}`, { method: 'DELETE' });
         done++;
       }
-      setMessage(null);
-      toast(n === 1 ? `Deleted ${fullName(people[0]!)}.` : `Deleted ${n} people.`);
+      toast(n === 1 ? `Deleted ${fullName(people[0]!)}` : `Deleted ${n} people`);
       setSelected(new Set());
       setSelecting(false);
     } catch (err) {
-      setMessage({ tone: 'stop', text: `${done ? `Deleted ${done} of ${n}. ` : ''}${err instanceof ApiFailure ? err.message : 'Something went wrong.'}` });
+      toast(`${done ? `Deleted ${done} of ${n}. ` : ''}${err instanceof ApiFailure ? err.message : 'No connection. Try again.'}`, { tone: 'error' });
     } finally {
-      setBusy(false);
       await reload();
     }
   }
 
+  const header = (
+    <PageHeader
+      title="People"
+      summary={
+        all.length > 0 && (
+          <span>
+            {active.length} on the event: {active.filter((r) => r.kind === 'youth').length} youth, {active.filter((r) => r.kind === 'adult').length} leaders
+          </span>
+        )
+      }
+      primary={
+        can('roster.edit') && (
+          <ButtonLink to="add" kind="primary">
+            Add person
+          </ButtonLink>
+        )
+      }
+      menu={[
+        can('roster.import') && { label: 'Import from MyScout', to: 'import' },
+        can('credentials.manage') && active.length > 0 && { label: withoutCard > 0 ? `Print lanyards (${withoutCard} new)` : 'Print lanyards', to: 'lanyards' },
+        active.length > 0 && { label: 'Print roll sheet', to: 'roll-sheet' },
+        can('roster.edit') && all.length > 0 && !selecting && { label: 'Select people to delete…', onSelect: () => setSelecting(true), danger: true },
+      ]}
+      menuLabel="More people actions"
+    />
+  );
+
   if (loading && !data)
     return (
-      <Loading label="Loading people">
-        <div className="skeleton-actions">
-          <Skeleton width="12rem" height="1rem" />
-          <Skeleton width="7rem" height="var(--control)" radius="var(--radius-control)" />
-        </div>
-        <Skeleton width="100%" height="var(--control)" radius="var(--radius-control)" className="skeleton-gap" />
-        <SkeletonTable rows={8} cols={4} />
-      </Loading>
+      <>
+        {header}
+        <Loading what="people">
+          <SkeletonRows rows={8} />
+        </Loading>
+      </>
     );
-  if (error) return <LoadError error={error} onRetry={reload} />;
+  if (error)
+    return (
+      <>
+        {header}
+        <LoadError error={error} onRetry={reload} what="people" />
+      </>
+    );
 
   const toggleOne = (id: string) =>
     setSelected((prev) => {
@@ -117,184 +137,171 @@ export function Roster() {
     });
   const allShownSelected = shown.length > 0 && shown.every((r) => selected.has(r.id));
 
+  const flags = (r: Registration) => (
+    <>
+      {r.status === 'withdrawn' && <Badge>Withdrawn</Badge>}
+      {event.features.photo && r.photoConsent === 'no' && <Badge tone="error">No photos</Badge>}
+      {r.dietary?.some((d) => d.category === 'allergy') && <Badge tone="error">Allergy</Badge>}
+      {r.status === 'active' && !r.shortCode && <Badge tone="warning">No lanyard</Badge>}
+    </>
+  );
+
   return (
     <>
-      {message && <Notice tone={message.tone}>{message.text}</Notice>}
-      <PageHeader
-        title="People"
-        titleOn="desktop"
-        sub={
-          all.length > 0 &&
-          `${active.length} ${active.length === 1 ? 'person' : 'people'}: ${active.filter((r) => r.kind === 'youth').length} youth, ${active.filter((r) => r.kind === 'adult').length} adults${withdrawn ? `. ${withdrawn} withdrawn` : ''}`
-        }
-        actions={
-          <>
-            {can('roster.edit') && (
-              <Link className="btn" to="add">
-                Add person
-              </Link>
-            )}
-            <Menu
-              label="More people actions"
-              items={[
-                can('roster.import') && { label: 'Import from MyScout', to: 'import' },
-                can('credentials.manage') && active.length > 0 && { label: withoutCard > 0 ? `Print lanyards (${withoutCard} new)` : 'Print lanyards', to: 'lanyards' },
-                active.length > 0 && { label: 'Print roll sheet', to: 'roll-sheet' },
-                can('roster.edit') && all.length > 0 && !selecting && { label: 'Select people to delete…', onSelect: () => setSelecting(true), danger: true },
-              ]}
-            />
-          </>
-        }
-      />
-
+      {header}
       {all.length === 0 ? (
-        <div className="empty">
-          <p>
-            <strong>No one on the roster yet.</strong>
-          </p>
-          <p className="lede">Import the MyScout participant export, or add people one at a time.</p>
-          <div className="actions">
-            {can('roster.import') && (
-              <Link className="btn" to="import">
-                Import from MyScout
-              </Link>
-            )}
-            {can('roster.edit') && (
-              <Link className="btn btn-secondary" to="add">
-                Add person
-              </Link>
-            )}
-          </div>
-        </div>
+        <EmptyState
+          title="No one on this event yet"
+          actions={
+            <>
+              {can('roster.import') && (
+                <ButtonLink to="import" kind="primary">
+                  Import from MyScout
+                </ButtonLink>
+              )}
+              {can('roster.edit') && <ButtonLink to="add">Add person</ButtonLink>}
+            </>
+          }
+        >
+          Import the MyScout participant export, or add people one at a time.
+        </EmptyState>
       ) : (
-        <>
+        <div className="section">
           <div className="toolbar">
-            <input
-              className="input input-search toolbar-search"
-              type="search"
-              aria-label="Search people"
-              placeholder="Search name, member number or card"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            <select className="input" aria-label="Section" value={section} onChange={(e) => setSection(e.target.value)}>
-              <option value="">All sections</option>
-              {sections.map((s) => (
-                <option key={s}>{s}</option>
-              ))}
+            <SearchField id="people-q" label="Search name, member number or lanyard code" value={query} onChange={setQuery} />
+            <label htmlFor="people-filter" className="visually-hidden">
+              Show
+            </label>
+            <select id="people-filter" className="select" value={filter} onChange={(e) => setFilter(e.target.value as Filter)}>
+              <option value="all">Everyone</option>
+              <option value="youth">Youth</option>
+              <option value="adult">Leaders</option>
+              <option value="nocard">No lanyard</option>
+              <option value="withdrawn">Withdrawn</option>
             </select>
-            {withdrawn > 0 && (
-              <select className="input" aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value as Status)}>
-                <option value="active">On the event</option>
-                <option value="withdrawn">Withdrawn</option>
-                <option value="all">Everyone</option>
-              </select>
-            )}
             <p className="toolbar-count" aria-live="polite">
-              {filteredOut ? `${shown.length} of ${all.length}` : `${shown.length} shown`}
+              {shown.length} {shown.length === 1 ? 'person' : 'people'}
             </p>
           </div>
 
           {selecting && (
-            <div className="toolbar panel-bar">
+            <div className="panel panel-pad select-bar">
               <strong>{selected.size} selected</strong>
-              <ActionButton className="btn btn-danger btn-small" disabled={selected.size === 0 || busy} busyLabel="Deleting…" onAction={deleteSelected}>
-                Delete selected
-              </ActionButton>
-              <button
-                className="btn btn-secondary btn-small"
-                onClick={() => {
-                  setSelecting(false);
-                  setSelected(new Set());
-                }}
-              >
-                Cancel
-              </button>
+              <div className="btn-row">
+                <Button kind="danger" small disabled={selected.size === 0} busyLabel="Deleting…" onAction={deleteSelected}>
+                  Delete selected
+                </Button>
+                <Button
+                  small
+                  onClick={() => {
+                    setSelecting(false);
+                    setSelected(new Set());
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
           )}
 
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  {selecting && (
-                    <th scope="col" className="col-check">
-                      <input
-                        type="checkbox"
-                        className="check-input"
-                        aria-label="Select all shown"
-                        checked={allShownSelected}
-                        onChange={() => setSelected(allShownSelected ? new Set() : new Set(shown.map((r) => r.id)))}
-                      />
-                    </th>
-                  )}
-                  <SortHeader label="Name" column="name" sort={sort} onSort={toggle} />
-                  <SortHeader label="Group" column="group" sort={sort} onSort={toggle} className="hide-sm" />
-                  <SortHeader label="Section or role" column="section" sort={sort} onSort={toggle} className="hide-sm" />
-                  <SortHeader label="Card" column="card" sort={sort} onSort={toggle} className="hide-md" />
-                  <th scope="col">
-                    <span className="hide-sm">Notes</span>
-                    <span className="visually-hidden show-sm">Notes</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map((r) => {
-                  const name = fullName(r);
-                  const allergy = r.dietary?.some((d) => d.category === 'allergy');
-                  return (
-                    <tr key={r.id} className={[r.status === 'withdrawn' ? 'is-muted' : '', selected.has(r.id) ? 'is-selected' : ''].join(' ').trim() || undefined}>
-                      {selecting && (
-                        <td className="col-check col-actions">
-                          <input type="checkbox" className="check-input" aria-label={`Select ${name}`} checked={selected.has(r.id)} onChange={() => toggleOne(r.id)} />
-                        </td>
-                      )}
-                      <td>
-                        {selecting ? (
-                          <strong>{name}</strong>
-                        ) : (
-                          <Link to={r.id} className="row-link">
-                            {name}
-                          </Link>
+          {shown.length === 0 ? (
+            <EmptyState
+              title="No one matches"
+              actions={
+                <Button
+                  onClick={() => {
+                    setQuery('');
+                    setFilter('all');
+                  }}
+                >
+                  Clear search and filter
+                </Button>
+              }
+            />
+          ) : wide ? (
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    {selecting && (
+                      <th scope="col" className="cell-check">
+                        <input
+                          type="checkbox"
+                          className="check-input"
+                          aria-label="Select all shown"
+                          checked={allShownSelected}
+                          onChange={() => setSelected(allShownSelected ? new Set() : new Set(shown.map((r) => r.id)))}
+                        />
+                      </th>
+                    )}
+                    <SortHeader label="Name" column="name" sort={sort} onSort={toggle} />
+                    <SortHeader label="Section" column="section" sort={sort} onSort={toggle} />
+                    <SortHeader label="Scout group" column="group" sort={sort} onSort={toggle} />
+                    <SortHeader label="Lanyard" column="card" sort={sort} onSort={toggle} />
+                    <th scope="col">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {shown.map((r) => {
+                    const name = fullName(r);
+                    return (
+                      <tr key={r.id} className={selecting ? (selected.has(r.id) ? 'is-selected' : undefined) : 'row-link'}>
+                        {selecting && (
+                          <td className="cell-check">
+                            <input type="checkbox" className="check-input" aria-label={`Select ${name}`} checked={selected.has(r.id)} onChange={() => toggleOne(r.id)} />
+                          </td>
                         )}
-                        <span className="cell-sub show-sm">
-                          {[r.groupName, roleOf(r)].filter(Boolean).join(', ')}
-                        </span>
-                      </td>
-                      <td className="hide-sm">{r.groupName}</td>
-                      <td className="hide-sm">{roleOf(r)}</td>
-                      <td className="hide-md mono meta">{r.shortCode ?? 'None'}</td>
-                      <td>
-                        <span className="cell-flags">
-                          {r.status === 'withdrawn' && <span className="tag">Withdrawn</span>}
-                          {event.features.photo && r.photoConsent === 'no' && <span className="tag tag-stop">No photos</span>}
-                          {allergy && <span className="tag tag-stop">Allergy</span>}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            {shown.length === 0 && (
-              <div className="empty">
-                <p className="flush">
-                  No one matches.{' '}
-                  <button
-                    className="btn-link"
-                    onClick={() => {
-                      setQuery('');
-                      setSection('');
-                      setStatus('all');
-                    }}
-                  >
-                    Clear filters
-                  </button>
-                </p>
-              </div>
-            )}
-          </div>
-        </>
+                        <td>
+                          {selecting ? (
+                            <strong>{name}</strong>
+                          ) : (
+                            <Link to={r.id} className="cell-link">
+                              {name}
+                            </Link>
+                          )}
+                        </td>
+                        <td>{roleOf(r)}</td>
+                        <td>{r.groupName}</td>
+                        <td className="code-cell">{r.shortCode ?? '—'}</td>
+                        <td>
+                          <span className="badges">{flags(r)}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <ul className="list">
+              {shown.map((r) => {
+                const name = fullName(r);
+                const meta = [roleOf(r), r.groupName].filter(Boolean).join(' · ');
+                return selecting ? (
+                  <li key={r.id}>
+                    <label className={selected.has(r.id) ? 'row row-select is-highlight' : 'row row-select'}>
+                      <input type="checkbox" className="check-input" checked={selected.has(r.id)} onChange={() => toggleOne(r.id)} />
+                      <span className="row-main">
+                        <span className="row-title">{name}</span>
+                        <span className="row-meta">{meta}</span>
+                      </span>
+                    </label>
+                  </li>
+                ) : (
+                  <li key={r.id} className={r.status === 'withdrawn' ? 'row row-link is-muted' : 'row row-link'}>
+                    <span className="row-main">
+                      <span className="row-title">
+                        <Link to={r.id}>{name}</Link>
+                      </span>
+                      <span className="row-meta">{meta}</span>
+                      <span className="badges">{flags(r)}</span>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
       )}
     </>
   );

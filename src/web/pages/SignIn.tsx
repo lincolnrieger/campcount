@@ -1,25 +1,34 @@
-import { BrandMark } from '../components/Layout';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { ApiFailure, api } from '../api';
-import { Field, Loading, Notice, Skeleton, SkeletonHeading } from '../components/ui';
+import { Button, Choice, Field, Loading, Notice, Segmented, Skeleton } from '../ui';
+import { BrandMark } from '../ui/AppShell';
 import { useSession } from '../session';
 import type { Me } from '../types';
 import { useTitle } from '../shell';
 
-function SignInFrame({ children }: { children: ReactNode }) {
+/** The public card for sign-in pages: the CampCount mark and one task. */
+export function PublicFrame({ children }: { children: ReactNode }) {
   return (
-    <div className="signin">
-      <header className="signin-band">
-        <p className="wordmark">
+    <main className="public" id="main">
+      <div className="public-card">
+        <p className="public-brand">
           <BrandMark />
           CampCount
         </p>
-        <p>Attendance, meals and activities for Scouts SA camps.</p>
-      </header>
-      <main className="signin-body">{children}</main>
-    </div>
+        {children}
+      </div>
+    </main>
+  );
+}
+const SignInFrame = PublicFrame;
+
+function ErrorText({ children }: { children: ReactNode }) {
+  return (
+    <Notice tone="error">
+      <p>{children}</p>
+    </Notice>
   );
 }
 
@@ -146,20 +155,27 @@ export function SignIn() {
   return (
     <SignInFrame>
       {step !== 'code' && (
-        <div className="auth-tabs" role="group" aria-label="Sign in or create an account">
-          <button type="button" aria-pressed={step === 'password'} onClick={() => { setStep('password'); setError(null); }}>
-            Sign in
-          </button>
-          <button type="button" aria-pressed={step === 'signup'} onClick={() => { setStep('signup'); setError(null); }}>
-            Create account
-          </button>
-        </div>
+        <Segmented
+          block
+          label="Sign in or create an account"
+          value={step}
+          onChange={(v) => {
+            setStep(v);
+            setError(null);
+          }}
+          options={[
+            { value: 'password', label: 'Sign in' },
+            { value: 'signup', label: 'Create account' },
+          ]}
+        />
       )}
       {step === 'signup' ? (
-        <form onSubmit={signUp} noValidate>
-          <h1>Create your account</h1>
-          <p className="lede">Then we'll email you a code to confirm your address. Once you're in, an event manager can add you to their camp.</p>
-          {error && <Notice tone="stop">{error}</Notice>}
+        <form className="form" onSubmit={signUp} noValidate>
+          <div className="stack-tight">
+            <h1>Create your account</h1>
+            <p className="meta">We'll email you a code to confirm your address. Then an event manager can add you to their camp.</p>
+          </div>
+          {error && <ErrorText>{error}</ErrorText>}
           <Field id="name" label="Your name">
             <input id="name" className="input" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
@@ -185,21 +201,16 @@ export function SignIn() {
               onChange={(e) => setNewPassword(e.target.value)}
             />
           </Field>
-          <label className="check check-compact">
-            <input type="checkbox" checked={showPassword} onChange={(e) => setShowPassword(e.target.checked)} />
-            <div>
-              <strong>Show password</strong>
-            </div>
-          </label>
-          <button className="btn btn-block section-gap-sm" disabled={busy || name.trim().length < 2 || !email.includes('@') || newPassword.length < 10}>
-            {busy ? 'Creating…' : 'Create account'}
-          </button>
+          <Choice label="Show password" checked={showPassword} onChange={(e) => setShowPassword(e.target.checked)} />
+          <Button type="submit" kind="primary" block busy={busy} busyLabel="Creating…" disabled={name.trim().length < 2 || !email.includes('@') || newPassword.length < 10}>
+            Create account
+          </Button>
         </form>
       ) : step === 'password' ? (
         <>
-          <form onSubmit={signInWithPassword} noValidate>
-            <h1>Welcome back</h1>
-            {error && <Notice tone="stop">{error}</Notice>}
+          <form className="form" onSubmit={signInWithPassword} noValidate>
+            <h1>Sign in</h1>
+            {error && <ErrorText>{error}</ErrorText>}
             <Field id="email" label="Email address">
               <input
                 id="email"
@@ -222,21 +233,21 @@ export function SignIn() {
                 onChange={(e) => setPassword(e.target.value)}
               />
             </Field>
-            <button className="btn btn-block" disabled={busy || !email || !password}>
-              {busy ? 'Signing in…' : 'Sign in'}
-            </button>
+            <Button type="submit" kind="primary" block busy={busy} busyLabel="Signing in…" disabled={!email || !password}>
+              Sign in
+            </Button>
           </form>
           <div className="signin-alt">
-            <p>Forgot your password, or never set one?</p>
-            <button type="button" className="btn btn-secondary btn-block" disabled={busy} onClick={emailCode}>
-              Email me a sign-in code
-            </button>
+            <p className="meta">Forgot your password, or never set one?</p>
+            <Button block disabled={busy} onClick={emailCode}>
+              Email me a code
+            </Button>
           </div>
         </>
       ) : (
-        <form onSubmit={verifyCode} noValidate>
+        <form className="form" onSubmit={verifyCode} noValidate>
           <h1>{reason === 'confirm' ? 'Confirm your email' : 'Check your email'}</h1>
-          <p className="lede">
+          <p>
             {reason === 'confirm' ? (
               <>
                 We've sent a 6-digit code to <strong>{email}</strong>. Enter it here, or tap the link in the email. It expires in 10 minutes.
@@ -248,7 +259,7 @@ export function SignIn() {
             )}{' '}
             Check your junk folder too.
           </p>
-          {error && <Notice tone="stop">{error}</Notice>}
+          {error && <ErrorText>{error}</ErrorText>}
           <Field id="code" label={reason === 'confirm' ? 'Code' : 'Sign-in code'}>
             <input
               ref={codeInput}
@@ -262,13 +273,12 @@ export function SignIn() {
               onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
             />
           </Field>
-          <button className="btn btn-block" disabled={busy || code.length !== 6}>
-            {busy ? 'Checking…' : reason === 'confirm' ? 'Confirm and sign in' : 'Sign in'}
-          </button>
-          <div className="actions">
-            <button
-              type="button"
-              className="btn-link"
+          <Button type="submit" kind="primary" block busy={busy} busyLabel="Checking…" disabled={code.length !== 6}>
+            {reason === 'confirm' ? 'Confirm and sign in' : 'Sign in'}
+          </Button>
+          <div>
+            <Button
+              kind="ghost"
               onClick={() => {
                 clearPending();
                 setStep('password');
@@ -276,8 +286,8 @@ export function SignIn() {
                 setError(null);
               }}
             >
-              Back
-            </button>
+              Use a different email
+            </Button>
           </div>
         </form>
       )}
@@ -314,17 +324,19 @@ export function VerifyLink() {
   return (
     <SignInFrame>
       <h1>Sign in to CampCount</h1>
-      {error && <Notice tone="stop">{error}</Notice>}
+      {error && <ErrorText>{error}</ErrorText>}
       {token ? (
-        <button className="btn btn-block" onClick={() => void confirm()} disabled={busy}>
-          {busy ? 'Signing in…' : 'Sign in'}
-        </button>
+        <Button kind="primary" block busy={busy} busyLabel="Signing in…" onClick={() => void confirm()}>
+          Sign in
+        </Button>
       ) : (
-        <Notice tone="warn">This link is incomplete. Copy the whole link from the email, or enter the code instead.</Notice>
+        <Notice tone="warning">
+          <p>This link is incomplete. Copy the whole link from the email, or enter the code instead.</p>
+        </Notice>
       )}
-      <div className="actions">
+      <p>
         <a href="/sign-in">Enter a code instead</a>
-      </div>
+      </p>
     </SignInFrame>
   );
 }
@@ -373,21 +385,23 @@ export function PasswordLink() {
     return (
       <SignInFrame>
         <h1>Link not working</h1>
-        <Notice tone="warn">{fatal}</Notice>
-        <div className="actions">
-          <a className="btn" href="/sign-in">
+        <Notice tone="warning">
+          <p>{fatal}</p>
+        </Notice>
+        <p>
+          <a className="btn btn-primary" href="/sign-in">
             Go to sign in
           </a>
-        </div>
+        </p>
       </SignInFrame>
     );
   }
   if (!target) {
     return (
       <SignInFrame>
-        <Loading label="Checking your link">
-          <SkeletonHeading />
-          <Skeleton width="100%" height="48px" radius="var(--radius-control)" />
+        <Loading what="your link">
+          <Skeleton className="skeleton-title" />
+          <Skeleton width="100%" height="var(--control)" className="" />
         </Loading>
       </SignInFrame>
     );
@@ -395,14 +409,14 @@ export function PasswordLink() {
   const first = target.displayName.split(/\s+/)[0];
   return (
     <SignInFrame>
-      <form onSubmit={submit} noValidate>
+      <form className="form" onSubmit={submit} noValidate>
         <h1>{target.purpose === 'reset' ? 'Choose a new password' : `Welcome, ${first}`}</h1>
-        <p className="lede">
+        <p className="meta">
           {target.purpose === 'reset'
             ? 'This signs you out on your other devices.'
             : 'Choose a password for your CampCount account. You will use it with your email to sign in.'}
         </p>
-        {error && <Notice tone="stop">{error}</Notice>}
+        {error && <ErrorText>{error}</ErrorText>}
         <Field id="link-email" label="Email address">
           <input id="link-email" className="input" type="email" autoComplete="username" value={target.email} readOnly />
         </Field>
@@ -416,15 +430,10 @@ export function PasswordLink() {
             onChange={(e) => setPassword(e.target.value)}
           />
         </Field>
-        <label className="check check-compact">
-          <input type="checkbox" checked={show} onChange={(e) => setShow(e.target.checked)} />
-          <div>
-            <strong>Show password</strong>
-          </div>
-        </label>
-        <button className="btn btn-block section-gap-sm" disabled={busy || password.length < 10}>
-          {busy ? 'Saving…' : 'Save password and sign in'}
-        </button>
+        <Choice label="Show password" checked={show} onChange={(e) => setShow(e.target.checked)} />
+        <Button type="submit" kind="primary" block busy={busy} busyLabel="Saving…" disabled={password.length < 10}>
+          Save password and sign in
+        </Button>
       </form>
     </SignInFrame>
   );
