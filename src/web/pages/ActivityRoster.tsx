@@ -6,6 +6,7 @@ import { Menu } from '../components/Menu';
 import { useToast } from '../components/Toast';
 import { BackLink, Loading, LoadError, Notice, Skeleton, SkeletonHeading, SkeletonList, SkeletonTiles } from '../components/ui';
 import { deleteContext } from '../confirmDelete';
+import { recordByHand } from '../scan/manual';
 import { useTitle } from '../shell';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
@@ -45,8 +46,6 @@ interface Attendance {
   everyone: { id: string; name: string; groupName: string }[];
 }
 
-/** One id per browser tab, so check-ins made here are grouped as one device in reports. */
-const DEVICE_ID = `web-roster-${crypto.randomUUID().slice(0, 12)}`;
 
 /**
  * An activity's roster for its leaders (and event managers): who's booked,
@@ -83,13 +82,7 @@ export function ActivityRoster() {
     setBusy(p.id);
     setMessage(null);
     try {
-      const res = await api<{ results: { outcome: string; message: string; warning: string | null }[] }>(`/events/${event.id}/scans`, {
-        body: {
-          deviceId: DEVICE_ID,
-          scans: [{ id: crypto.randomUUID(), contextType: 'activity', contextId: activityId, direction, deviceTime: new Date().toISOString(), method: 'manual', registrationId: p.id }],
-        },
-      });
-      const r = res.results[0]!;
+      const r = await recordByHand(event.id, { contextType: 'activity', contextId: activityId, direction, registrationId: p.id });
       setMessage({
         tone: r.outcome === 'accepted' ? (r.warning ? 'warn' : 'ok') : r.outcome === 'duplicate' ? 'warn' : 'stop',
         text: `${p.name}: ${r.message}${r.warning ? ` ${r.warning}` : ''}`,
@@ -197,6 +190,7 @@ export function ActivityRoster() {
             label={`More actions for ${a.name}`}
             items={[
               { label: 'Edit activity', to: 'edit' },
+              { label: 'Print this list', onSelect: () => window.print() },
               { label: 'Add another session', to: `../new?from=${a.id}` },
               a.status === 'active'
                 ? {

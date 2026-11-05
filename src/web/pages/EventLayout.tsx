@@ -50,8 +50,7 @@ function EventShell({ event, reload }: { event: EventSummary; reload: () => Prom
   const can = (p: Permission) => event.permissions.includes(p);
   // Ordered by how often they're used during camp; setup lives in Settings.
   const tabs = [
-    { to: '', label: 'Overview', show: true },
-    { to: 'live', label: 'Live', show: can('reports.view') && event.status !== 'draft' },
+    { to: '', label: 'Dashboard', show: true },
     { to: 'people', label: 'People', show: can('roster.view') },
     { to: 'activities', label: 'Activities', show: event.features.activities && (can('activities.manage') || can('activity.view_roster')) },
     { to: 'meals', label: 'Meals', show: event.features.meals && can('meals.manage') },
@@ -88,7 +87,7 @@ function EventShell({ event, reload }: { event: EventSummary; reload: () => Prom
       </div>
       <nav className="subnav subnav-section" aria-label="Event sections" ref={navRef} hidden={tabs.length < 2}>
         {tabs.map((t) => (
-          <NavLink key={t.to} to={t.to} end={t.to === '' || t.to === 'live'}>
+          <NavLink key={t.to} to={t.to} end={t.to === ''}>
             {t.label}
           </NavLink>
         ))}

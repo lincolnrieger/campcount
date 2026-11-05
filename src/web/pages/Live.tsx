@@ -4,8 +4,10 @@ import { Icon } from '../components/Icon';
 import { matchesSearch, searchRank } from '../../shared/search';
 import { timeInZone } from '../../shared/time';
 import type { Where } from './Person';
-import { Loading, LoadError, Notice, PageHeader, Skeleton, SkeletonList, SkeletonTiles } from '../components/ui';
-import { useTitle } from '../shell';
+import { ApiFailure } from '../api';
+import { recordByHand } from '../scan/manual';
+import { Loading, LoadError, Notice, Skeleton, SkeletonList, SkeletonTiles } from '../components/ui';
+import { useToast } from '../components/Toast';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 
@@ -81,6 +83,8 @@ function groupPeople(people: WherePerson[], by: GroupBy, data: WhereData): Peopl
   const make = (key: string, title: string, list: WherePerson[], tone: string, note = ''): PeopleGroup => ({ key, title, note, count: list.length, tone, people: list });
   if (by === 'where') {
     const groups: PeopleGroup[] = [];
+    // Who hasn't arrived is what needs doing, so it comes first.
+    if (data.siteTracked) groups.push(make('never', 'Not arrived', people.filter((p) => p.activities.length === 0 && p.site === 'never'), 'dot-never'));
     for (const a of data.activities.filter((x) => x.trackSignOut)) {
       const here = people.filter((p) => p.activities.some((x) => x.key === a.key));
       if (here.length) groups.push(make(a.key, a.name, here, 'dot-activity', a.capacity ? `${a.presentNow} of ${a.capacity} places` : ''));
@@ -89,7 +93,6 @@ function groupPeople(people: WherePerson[], by: GroupBy, data: WhereData): Peopl
     if (data.siteTracked) {
       groups.push(make('on', 'On site, not at an activity', free.filter((p) => p.site === 'on'), 'dot-on'));
       groups.push(make('off', 'Left camp', free.filter((p) => p.site === 'off'), 'dot-off'));
-      groups.push(make('never', 'Not arrived', free.filter((p) => p.site === 'never'), 'dot-never'));
     } else {
       groups.push(make('free', 'Not at an activity', free, 'dot-never'));
     }
@@ -107,9 +110,16 @@ function groupPeople(people: WherePerson[], by: GroupBy, data: WhereData): Peopl
   });
 }
 
-export function Live() {
-  useTitle('Live');
-  const { event } = useEvent();
+
+/**
+ * Where everyone is: the main panel of the event dashboard. Figures that
+ * double as filters, a search, and everyone grouped by place, Scout group
+ * or section. People not yet arrived come first, with a one-tap "Arrived"
+ * for latecomers who reach camp without their card.
+ */
+export function LiveBoard() {
+  const { event, can } = useEvent();
+  const toast = useToast();
   const { data, error, loading, reload } = useApi<LiveData>(`/events/${event.id}/live`);
   const where = useApi<WhereData>(`/events/${event.id}/whereabouts`);
   const reloadWhere = where.reload;
@@ -117,6 +127,7 @@ export function Live() {
   const [filter, setFilter] = useState<Filter>({ kind: 'all' });
   const [groupBy, setGroupBy] = useState<GroupBy>('where');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState<string | null>(null);
   useEffect(() => {
     const timer = setInterval(() => {
       void reload();
@@ -124,16 +135,29 @@ export function Live() {
     }, 30_000);
     return () => clearInterval(timer);
   }, [reload, reloadWhere]);
+  const canMark = event.status === 'open' && event.features.site && can('site.scan');
+
+  async function mark(p: WherePerson, direction: 'in' | 'out') {
+    setBusy(p.id);
+    try {
+      const r = await recordByHand(event.id, { contextType: 'site', contextId: null, direction, registrationId: p.id });
+      toast(r.outcome === 'accepted' ? `${p.fullName} ${direction === 'in' ? 'arrived' : 'left camp'}.` : `${p.fullName}: ${r.message}`, {
+        tone: r.outcome === 'accepted' ? 'ok' : 'stop',
+      });
+      await Promise.all([reload(), reloadWhere()]);
+    } catch (err) {
+      toast(err instanceof ApiFailure ? err.message : 'No connection. Use the scanner, which works offline.', { tone: 'stop' });
+    } finally {
+      setBusy(null);
+    }
+  }
 
   if ((loading && !data) || (where.loading && !where.data))
     return (
       <Loading label="Loading where everyone is">
-        <Skeleton width="80%" height="0.9rem" className="skeleton-gap" />
         <SkeletonTiles />
-        <Skeleton width="100%" height="48px" radius="12px" className="skeleton-gap" />
-        <Skeleton width="100%" height="48px" radius="var(--radius-control)" className="skeleton-gap" />
-        <SkeletonList rows={4} lines={2} aside="none" heading />
-        <SkeletonList rows={3} lines={2} aside="none" heading />
+        <Skeleton width="100%" height="var(--control)" radius="var(--radius-control)" className="skeleton-gap" />
+        <SkeletonList rows={5} lines={2} aside="button" heading />
       </Loading>
     );
   if (error || where.error)
@@ -148,7 +172,8 @@ export function Live() {
   if (!data || !where.data) return null;
   const tz = data.timezone;
   const at = new Date(data.generatedAt).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', timeZone: tz });
-  const meals = data.contexts.filter((c) => c.type === 'meal' && c.status === 'active');
+  const meals = data.contexts.filter((c) => c.type === 'meal' && c.status === 'active' && c.people > 0);
+  const atActivities = data.contexts.filter((c) => c.type === 'activity' && c.trackSignOut).reduce((n, c) => n + c.presentNow, 0);
   const people = where.data.people;
   const count = (v: 'on' | 'off' | 'never') => people.filter((p) => p.site === v).length;
   const shown = people
@@ -161,16 +186,16 @@ export function Live() {
 
   return (
     <div className="board">
-      <PageHeader title="Live" titleOn="desktop" sub={`Updated ${at}. Phones without signal upload when they reconnect.`} />
       {data.openItems > 0 && (
         <Notice tone="warn">
           <p>
-            {data.openItems} scan{data.openItems === 1 ? '' : 's'} to check (unknown cards or sign-outs without a sign-in). See <Link to="../reports" relative="path">Reports</Link>.
+            {data.openItems} scan{data.openItems === 1 ? '' : 's'} to check (unknown cards or sign-outs without a sign-in).{' '}
+            <Link to="reports">Sort them out</Link>
           </p>
         </Notice>
       )}
 
-      {where.data.siteTracked && (
+      {where.data.siteTracked ? (
         <div className="tiles">
           {(
             [
@@ -185,30 +210,33 @@ export function Live() {
             </button>
           ))}
         </div>
+      ) : (
+        <div className="tiles tiles-2">
+          <div className="tile">
+            <strong>{data.roster.active}</strong>
+            <span>Expected</span>
+          </div>
+          <div className="tile tile-on">
+            <strong>{atActivities}</strong>
+            <span>At activities now</span>
+          </div>
+        </div>
       )}
 
       <div className="toolbar">
         <input
           className="input input-search toolbar-search"
           type="search"
-          aria-label="Search people"
-          placeholder="Search names or groups"
+          aria-label="Find a person"
+          placeholder="Find a person"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <div className="segmented" role="group" aria-label="Group people by">
-          {(
-            [
-              ['where', 'By place'],
-              ['group', 'By Scout group'],
-              ['section', 'By section'],
-            ] as const
-          ).map(([k, label]) => (
-            <button key={k} type="button" aria-pressed={groupBy === k} onClick={() => setGroupBy(k)}>
-              {label}
-            </button>
-          ))}
-        </div>
+        <select className="input" aria-label="Group by" value={groupBy} onChange={(e) => setGroupBy(e.target.value as GroupBy)}>
+          <option value="where">By where they are</option>
+          <option value="group">By Scout group</option>
+          <option value="section">By section</option>
+        </select>
         {filter.kind !== 'all' && (
           <button className="filter-chip" onClick={() => setFilter({ kind: 'all' })}>
             {filter.value === 'on' ? 'On site' : filter.value === 'off' ? 'Left camp' : 'Not arrived'}
@@ -216,6 +244,7 @@ export function Live() {
             <span className="visually-hidden">Clear filter</span>
           </button>
         )}
+        <p className="toolbar-count">Updated {at}</p>
       </div>
 
       {groups.length === 0 && (
@@ -224,56 +253,62 @@ export function Live() {
         </div>
       )}
       <div className="board-groups">
-      {groups.map((g) => {
-        const closed = collapsed.has(g.key) && !query;
-        return (
-          <section key={g.key} className="board-group">
-            <button
-              type="button"
-              className="board-group-head"
-              aria-expanded={!closed}
-              onClick={() => {
-                const next = new Set(collapsed);
-                if (next.has(g.key)) next.delete(g.key);
-                else next.add(g.key);
-                setCollapsed(next);
-              }}
-            >
-              <span className={`board-group-dot ${g.tone}`} aria-hidden="true" />
-              <span className="board-group-title">
-                <strong>{g.title}</strong>
-                {g.note && <span>{g.note}</span>}
-              </span>
-              <span className="board-group-count">{g.count}</span>
-              <span className={closed ? 'board-chevron' : 'board-chevron is-open'} aria-hidden="true">
-                <Icon name="chevron" size={18} />
-              </span>
-            </button>
-            {!closed && (
-              <ul className="list">
-                {g.people.slice(0, 150).map((p) => {
-                  const place = placeOf(p, tz);
-                  return (
-                    <li key={p.id}>
-                      <Link to={`../people/${p.id}`} relative="path" className="list-row board-row">
+        {groups.map((g) => {
+          const closed = collapsed.has(g.key) && !query;
+          return (
+            <section key={g.key} className="board-group">
+              <button
+                type="button"
+                className="board-group-head"
+                aria-expanded={!closed}
+                onClick={() => {
+                  const next = new Set(collapsed);
+                  if (next.has(g.key)) next.delete(g.key);
+                  else next.add(g.key);
+                  setCollapsed(next);
+                }}
+              >
+                <span className={`board-group-dot ${g.tone}`} aria-hidden="true" />
+                <span className="board-group-title">
+                  <strong>{g.title}</strong>
+                  {g.note && <span>{g.note}</span>}
+                </span>
+                <span className="board-group-count">{g.count}</span>
+                <span className={closed ? 'board-chevron' : 'board-chevron is-open'} aria-hidden="true">
+                  <Icon name="chevron" size={18} />
+                </span>
+              </button>
+              {!closed && (
+                <ul className="list">
+                  {g.people.slice(0, 150).map((p) => {
+                    const place = placeOf(p, tz);
+                    return (
+                      <li key={p.id} className="list-row board-row">
                         <span className="list-main">
-                          <strong>{p.fullName}</strong>
+                          <Link to={`people/${p.id}`} className="person-link">
+                            {p.fullName}
+                          </Link>
                           <span>
                             {groupBy === 'group' ? (p.kind === 'adult' ? 'Leader' : p.section) : p.groupName}
                             {p.lastSeen && ` · ${p.lastSeen.contextName} ${timeInZone(p.lastSeen.at, tz)}`}
                           </span>
                         </span>
                         {groupBy !== 'where' && <span className={place.tone}>{place.label}</span>}
-                      </Link>
-                    </li>
-                  );
-                })}
-                {g.people.length > 150 && <li className="list-row field-hint">And {g.people.length - 150} more. Search to find someone.</li>}
-              </ul>
-            )}
-          </section>
-        );
-      })}
+                        {canMark && p.site !== null && (
+                          <button className="btn btn-secondary btn-small" disabled={busy === p.id} onClick={() => void mark(p, p.site === 'on' ? 'out' : 'in')}>
+                            {busy === p.id ? 'Saving…' : p.site === 'on' ? 'Left' : 'Arrived'}
+                            <span className="visually-hidden"> {p.fullName}</span>
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                  {g.people.length > 150 && <li className="list-row field-hint">And {g.people.length - 150} more. Search to find someone.</li>}
+                </ul>
+              )}
+            </section>
+          );
+        })}
       </div>
 
       {meals.length > 0 && (

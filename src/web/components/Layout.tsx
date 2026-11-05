@@ -72,7 +72,7 @@ function Sidebar({ isAdmin, canViewAs, onViewAs }: { isAdmin: boolean; canViewAs
             <ul className="nav-list" aria-label={`${event.name} sections`}>
               {event.sections.map((s) => (
                 <li key={s.to}>
-                  <NavLink to={`/events/${event.id}${s.to ? `/${s.to}` : ''}`} end={s.to === '' || s.to === 'live'}>
+                  <NavLink to={`/events/${event.id}${s.to ? `/${s.to}` : ''}`} end={s.to === ''}>
                     {s.label}
                   </NavLink>
                 </li>

@@ -19,6 +19,8 @@ const PATHS = {
   sortAsc: 'M12 19V5M7 10l5-5 5 5',
   sortDesc: 'M12 5v14M7 14l5 5 5-5',
   sort: 'M8 9l4-4 4 4M8 15l4 4 4-4',
+  sound: 'M4 9v6h4l5 4V5L8 9H4ZM16.5 9a4 4 0 0 1 0 6M19 6.5a7.5 7.5 0 0 1 0 11',
+  mute: 'M4 9v6h4l5 4V5L8 9H4ZM16.5 9.5l5 5M21.5 9.5l-5 5',
   more: 'M5 12h.5M11.75 12h.5M18.5 12h.5',
   plus: 'M12 5v14M5 12h14',
   camera: 'M4 8h3l2-3h6l2 3h3v11H4zM12 16.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z',

@@ -13,6 +13,7 @@ import { useToast } from '../components/Toast';
 import { LanyardCard } from '../components/LanyardCard';
 import type { Card } from '../lanyards/pdf';
 import { useApi } from '../useApi';
+import { recordByHand } from '../scan/manual';
 import { useEvent } from './EventLayout';
 import { dayInZone, dayLabel, timeInZone, timeRange } from '../../shared/time';
 
@@ -86,7 +87,7 @@ export function WhereNow({ where, tz }: { where: Where; tz: string }) {
 }
 
 export function Person() {
-  const { event } = useEvent();
+  const { event, can } = useEvent();
   const { registrationId } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
@@ -218,6 +219,27 @@ export function Person() {
             <section className="list-section">
               <h3 className="list-heading">Right now</h3>
               <WhereNow where={data.where} tz={tz} />
+          {event.status === 'open' && event.features.site && can('site.scan') && data.where.site && r.status === 'active' && (
+            <div className="actions flush-top section-gap-sm">
+              <ActionButton
+                className="btn btn-secondary btn-small"
+                busyLabel="Saving…"
+                onAction={async () => {
+                  const out = data.where!.site === 'on';
+                  try {
+                    const res = await recordByHand(event.id, { contextType: 'site', contextId: null, direction: out ? 'out' : 'in', registrationId: r.id });
+                    if (res.outcome === 'accepted') toast(`${fullName} ${out ? 'left camp' : 'arrived'}.`);
+                    else setMessage({ tone: 'stop', text: res.message });
+                    await reload();
+                  } catch (err) {
+                    setMessage({ tone: 'stop', text: err instanceof ApiFailure ? err.message : 'No connection. Use the scanner, which works offline.' });
+                  }
+                }}
+              >
+                {data.where.site === 'on' ? 'Mark as left camp' : 'Mark as arrived'}
+              </ActionButton>
+            </div>
+          )}
             </section>
           )}
 
