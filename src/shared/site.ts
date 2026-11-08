@@ -8,7 +8,7 @@ export const RESERVED_SUBDOMAINS = new Set([
 
 export const SUBDOMAIN_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/;
 
-/** "Super Splash 2026!" → "super-splash-2026" (a suggestion; the admin can change it). */
+/** "Summer Camp 2026!" → "summer-camp-2026" (a suggestion; the admin can change it). */
 export function suggestSubdomain(name: string): string {
   return name
     .toLowerCase()

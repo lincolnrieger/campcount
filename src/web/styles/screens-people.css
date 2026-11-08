@@ -260,6 +260,110 @@
 .card-back-badge .card-back-note {
   font-size: 2.6cqw;
 }
+/* Cards on the event's own artwork: overlays placed by the shared layout (percentages of the card). */
+.card-art {
+  position: relative;
+}
+.card-art-lanyard {
+  aspect-ratio: 90 / 120;
+}
+.card-art-badge {
+  aspect-ratio: 86 / 54;
+}
+.card-art-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+.card-art > :not(.card-art-image) {
+  position: absolute;
+  margin: 0;
+}
+.card-art-band {
+  padding: 0 5.5cqw;
+}
+.card-art-band.is-tag {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 8cqw;
+  font-weight: var(--weight-bold);
+}
+.card-art-tag,
+.card-art-band.is-tag .card-marker-text {
+  padding: 0.5cqw 1.5cqw;
+  background: #fff;
+  color: #000;
+}
+.card-art-text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.card-art-lanyard .card-name {
+  font-size: 10cqw;
+}
+.card-art-badge .card-art-text {
+  justify-content: flex-start;
+}
+.card-art-badge .card-name {
+  font-size: 7.5cqw;
+}
+.card-art-badge .card-group {
+  font-size: 3.2cqw;
+}
+.card-art-qr {
+  padding: 1.5cqw;
+  background: #fff;
+}
+.card-art-code span {
+  padding: 0 1.5cqw;
+  background: #fff;
+  font-size: 5cqw;
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.12em;
+}
+.card-art-badge .card-art-code span {
+  font-size: 4cqw;
+  letter-spacing: 0.05em;
+}
+.template-download {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: var(--border-width) solid var(--divider);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.artwork-sides {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 17rem));
+  gap: var(--space-4);
+}
+.artwork-sides-badge {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 20rem));
+}
+.artwork-side {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+}
+.artwork-side-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.file-button {
+  cursor: pointer;
+}
+.file-button:focus-within {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: 2px;
+}
 .lanyard-settings {
   display: grid;
   gap: var(--space-5);

@@ -9,7 +9,7 @@ the tokens are in `src/web/styles/tokens.css`.
 | Address | What it is | Who uses it |
 | --- | --- | --- |
 | `campcount.com` | **Admin console:** Camps (list, Create camp, each camp's address, colour and logo), Accounts, Activity log, Demo camps, Account | Platform admins. Staff who sign in here are sent to their camp's address. |
-| `<address>.campcount.com` (for example `supersplash.campcount.com`) | **One camp's own site**, in that camp's colour, logo and name. Only ever shows that camp; the server answers 404 for anything else. | The camp's staff |
+| `<address>.campcount.com` (for example `summercamp.campcount.com`) | **One camp's own site**, in that camp's colour, logo and name. Only ever shows that camp; the server answers 404 for anything else. | The camp's staff |
 
 Sign-ins are separate per address. Where addresses aren't set up (for
 example the workers.dev address), the main site falls back to the older

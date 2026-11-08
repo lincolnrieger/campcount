@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import { QrCode } from './QrCode';
-import type { Card, CardSize, PhotoMarkerStyle } from '../lanyards/pdf';
-import { bandColours, bandLabel } from '../lanyards/pdf';
+import type { Box, Card, CardSize, PhotoMarkerStyle } from '../lanyards/pdf';
+import { CARD_LAYOUT, CARD_SIZES, bandColours, bandLabel } from '../lanyards/pdf';
 
 /** The crossed-out camera printed on cards of people without photo consent. */
 export function NoCameraIcon({ size = '1em' }: { size?: string }) {
@@ -37,8 +37,56 @@ function frameStyle(card: Card, marker: PhotoMarkerStyle): { className: string; 
   return { className: '' };
 }
 
+/** A layout box as percentages of the card, for absolutely placed overlays. */
+function place(box: Box, size: CardSize): CSSProperties {
+  const spec = CARD_SIZES[size];
+  return { left: `${(box.x / spec.w) * 100}%`, top: `${(box.y / spec.h) * 100}%`, width: `${(box.w / spec.w) * 100}%`, height: `${(box.h / spec.h) * 100}%` };
+}
+
+/** A card front on the event's own artwork: what CampCount prints, placed where the PDF puts it. */
+function ArtworkFront({ card, size, marker, artwork, printBand }: { card: Card; size: CardSize; marker: PhotoMarkerStyle; artwork: string; printBand: boolean }) {
+  const L = CARD_LAYOUT[size];
+  const colours = bandColours(card);
+  const frame = frameStyle(card, marker);
+  return (
+    <article className={`card-preview card-art card-art-${size}${frame.className}`} style={frame.style}>
+      <img src={artwork} alt="" className="card-art-image" />
+      <div className={printBand ? 'card-band card-art-band' : 'card-art-band is-tag'} style={{ ...place(L.band, size), ...(printBand ? { background: colours.bg, color: colours.fg } : {}) }}>
+        <span className={printBand ? undefined : 'card-art-tag'}>{bandLabel(card)}</span>
+        <Marker card={card} marker={marker} />
+      </div>
+      <p className="card-name card-art-text" style={place(L.name, size)}>
+        {card.name}
+      </p>
+      <p className="card-group card-art-text" style={place(L.group, size)}>
+        {card.groupName}
+      </p>
+      <div className="card-art-qr" style={place(L.qr, size)}>
+        <QrCode value={card.qr} size="100%" label={`Scan code for ${card.name}`} />
+      </div>
+      <p className="card-art-text card-art-code" style={place(L.code, size)}>
+        <span>{card.shortCode}</span>
+      </p>
+    </article>
+  );
+}
+
 /** On-screen preview of one card's front, drawn to the same layout as the PDF. */
-export function LanyardCard({ card, size = 'lanyard', marker }: { card: Card; size?: CardSize; marker: PhotoMarkerStyle }) {
+export function LanyardCard({
+  card,
+  size = 'lanyard',
+  marker,
+  artwork,
+  printBand = true,
+}: {
+  card: Card;
+  size?: CardSize;
+  marker: PhotoMarkerStyle;
+  /** The event's uploaded front artwork, if any. */
+  artwork?: string | null;
+  printBand?: boolean;
+}) {
+  if (artwork) return <ArtworkFront card={card} size={size} marker={marker} artwork={artwork} printBand={printBand} />;
   const colours = bandColours(card);
   const band = { background: colours.bg, color: colours.fg };
   const frame = frameStyle(card, marker);
@@ -79,8 +127,29 @@ export function LanyardCard({ card, size = 'lanyard', marker }: { card: Card; si
 }
 
 /** The back of a card: the camp's logo, its name and what to do if found. */
-export function LanyardBack({ card, size = 'lanyard', marker, eventName, logoUrl }: { card: Card; size?: CardSize; marker: PhotoMarkerStyle; eventName: string; logoUrl: string | null }) {
+export function LanyardBack({
+  card,
+  size = 'lanyard',
+  marker,
+  eventName,
+  logoUrl,
+  artwork,
+}: {
+  card: Card;
+  size?: CardSize;
+  marker: PhotoMarkerStyle;
+  eventName: string;
+  logoUrl: string | null;
+  /** The event's uploaded back artwork, if any: it fills the back. */
+  artwork?: string | null;
+}) {
   const frame = frameStyle(card, marker);
+  if (artwork)
+    return (
+      <article className={`card-preview card-art card-art-${size}${frame.className}`} style={frame.style} aria-label={`Back of ${card.name}'s card`}>
+        <img src={artwork} alt="" className="card-art-image" />
+      </article>
+    );
   return (
     <article className={`card-preview card-back card-back-${size}${frame.className}`} style={frame.style} aria-label={`Back of ${card.name}'s card`}>
       <div className="card-back-inner">

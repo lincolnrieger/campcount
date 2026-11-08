@@ -144,3 +144,120 @@
   flex: 1 1 16rem;
   max-width: 24rem;
 }
+
+/* Sessions people can book: time · what and how full · Book. */
+.session-board {
+  display: grid;
+  gap: var(--space-3);
+}
+.session-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: var(--border-width) solid var(--divider);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.session {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--row-min);
+  padding: var(--space-3) var(--space-4);
+}
+.session + .session {
+  border-top: var(--border-width) solid var(--divider);
+}
+.session.is-highlight {
+  background: var(--brand-tint);
+}
+.session-time {
+  flex: none;
+  align-self: flex-start;
+  width: 5.25rem;
+  padding-top: 1px;
+  font-weight: var(--weight-bold);
+  white-space: nowrap;
+}
+.session-main {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.session-action {
+  flex: none;
+}
+.session.is-booked .session-time {
+  color: var(--success-fg);
+}
+.spots {
+  display: grid;
+  gap: var(--space-1);
+  max-width: 14rem;
+  font-size: var(--text-sm);
+  color: var(--ink-2);
+}
+.spots-bar {
+  display: block;
+  height: 0.375rem;
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+.spots-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--success-solid);
+}
+.spots.is-low {
+  color: var(--warning-fg);
+}
+.spots.is-low .spots-bar > span {
+  background: var(--warning-solid);
+}
+.spots.is-full {
+  color: var(--ink-3);
+}
+.spots.is-full .spots-bar > span {
+  background: var(--ink-3);
+}
+@media (max-width: 599.98px) {
+  .session {
+    gap: var(--space-2);
+    padding: var(--space-3);
+  }
+  .session-time {
+    width: 4.75rem;
+  }
+}
+.signup-status {
+  position: fixed;
+  inset: auto var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom));
+  z-index: var(--z-toast);
+  display: grid;
+  justify-items: center;
+  pointer-events: none;
+}
+.signup-status-msg {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: var(--form-max);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius);
+  background: var(--success-solid);
+  color: #fff;
+  font-weight: var(--weight-bold);
+  box-shadow: var(--shadow-overlay);
+}
+.signup-status-msg.is-error {
+  background: var(--error-solid);
+}
+.signup-kiosk .session-time {
+  width: 6.5rem;
+}
+.signup-kiosk .spots {
+  max-width: 18rem;
+  font-size: calc(var(--text-sm) * 1.25);
+}

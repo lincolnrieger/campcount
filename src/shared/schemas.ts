@@ -52,7 +52,12 @@ export const lanyardSettingsSchema = z.strictObject({
   photoMarkerColour: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Choose a colour like #B3261E'),
   /** Print a small "No photos" next to the section. */
   photoMarkerLabel: z.boolean(),
+  /** With uploaded front artwork: print the coloured section band over it (or only the section word). */
+  printBand: z.boolean(),
 });
+
+export const LANYARD_TEMPLATE_SIZES = ['lanyard', 'badge'] as const;
+export const LANYARD_TEMPLATE_SIDES = ['front', 'back'] as const;
 export type LanyardSettings = z.infer<typeof lanyardSettingsSchema>;
 
 const eventFields = {

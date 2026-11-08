@@ -147,7 +147,7 @@ function PlatformEventHome() {
 }
 
 /**
- * An event's own address (supersplash.campcount.com): a separate, branded
+ * An event's own address (summercamp.campcount.com): a separate, branded
  * site for that one event. No event list, no admin area.
  */
 function EventSiteApp({ site }: { site: Extract<SiteInfo, { kind: 'event' }> }) {

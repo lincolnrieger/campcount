@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Badge, Button, SearchField } from '../ui';
+import { Badge, Button, FilterTabs, SearchField } from '../ui';
 import { matchesSearch } from '../../shared/search';
-import { dayInZone, dayLabel, timeRange } from '../../shared/time';
+import { dayInZone, dayLabel, timeInZone, timeRange, todayInZone } from '../../shared/time';
 import type { ParticipantTeamEvent } from './TeamsPanel';
 
 export interface SignupSession {
@@ -43,7 +43,26 @@ export function placesLeft(s: SignupSession): string {
   return left <= 0 ? 'Full' : `${left} place${left === 1 ? '' : 's'} left`;
 }
 
-/** Sessions grouped by day, for the sign-up screen and its dashboard. */
+/** "8 of 12 booked" with a fill bar, or "8 booked" when there's no limit. */
+export function Spots({ s }: { s: SignupSession }) {
+  if (s.capacity === null) return <span className="spots">{s.booked === 0 ? 'No one booked yet' : `${s.booked} booked`}</span>;
+  const left = s.capacity - s.booked;
+  return (
+    <span className={left <= 0 ? 'spots is-full' : left <= 2 ? 'spots is-low' : 'spots'}>
+      <span className="num">
+        {Math.min(s.booked, s.capacity)} of {s.capacity} booked
+        {left > 0 && left <= 2 ? ` · ${left} left` : ''}
+      </span>
+      <span className="spots-bar" aria-hidden="true">
+        <span style={{ width: `${Math.min(100, (s.booked / s.capacity) * 100)}%` }} />
+      </span>
+    </span>
+  );
+}
+
+const ANY_DAY = 'any';
+
+/** Sessions for one day at a time (day tabs when there's more than one), each with its spots and a Book button. */
 export function SessionBoard({
   sessions,
   tz,
@@ -59,54 +78,66 @@ export function SessionBoard({
   busy?: boolean;
   onBook?: (s: SignupSession) => void;
 }) {
-  const days = new Map<string, SignupSession[]>();
-  for (const s of sessions) {
-    const key = s.startsAt ? dayInZone(s.startsAt, tz) : '';
-    days.set(key, [...(days.get(key) ?? []), s]);
-  }
+  const days = [...new Set(sessions.map((s) => (s.startsAt ? dayInZone(s.startsAt, tz) : ANY_DAY)))].sort((a, b) => (a === ANY_DAY ? 1 : b === ANY_DAY ? -1 : a.localeCompare(b)));
+  const today = todayInZone(tz);
+  const wantedDay = highlight ? sessions.find((s) => s.id === highlight) : null;
+  const [chosen, setChosen] = useState<string | null>(null);
+  const day =
+    chosen && days.includes(chosen)
+      ? chosen
+      : wantedDay
+        ? wantedDay.startsAt
+          ? dayInZone(wantedDay.startsAt, tz)
+          : ANY_DAY
+        : days.includes(today)
+          ? today
+          : (days.find((d) => d !== ANY_DAY && d > today) ?? days[0] ?? ANY_DAY);
   if (sessions.length === 0) return <p className="meta">No activities are open for sign-up yet.</p>;
+  const list = sessions.filter((s) => (s.startsAt ? dayInZone(s.startsAt, tz) : ANY_DAY) === day);
   return (
-    <>
-      {[...days].map(([day, list]) => (
-        <section key={day} className="section">
-          <h3>{day ? dayLabel(day, 'long') : 'Any time'}</h3>
-          <ul className="list">
-            {list.map((s) => {
-              const isBooked = booked.has(s.id);
-              return (
-                <li key={s.id} className={s.id === highlight ? 'row is-highlight' : 'row'}>
-                  <span className="row-main">
-                    <span className="row-title">{s.name}</span>
-                    <span className="row-meta">{[s.startsAt ? timeRange(s.startsAt, s.endsAt, tz) : null, s.location || null].filter(Boolean).join(' · ')}</span>
-                  </span>
-                  <span className="row-side">
-                    {onBook ? (
-                      isBooked ? (
-                        <Badge tone="success" icon>
-                          Booked
-                        </Badge>
-                      ) : s.full ? (
-                        <Badge>Full</Badge>
-                      ) : (
-                        <Button kind="primary" disabled={busy} onClick={() => onBook(s)}>
-                          Book<span className="visually-hidden"> {s.name}</span>
-                        </Button>
-                      )
-                    ) : (
-                      <Badge tone={s.full ? 'neutral' : 'success'}>{placesLeft(s)}</Badge>
-                    )}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      ))}
-    </>
+    <div className="session-board">
+      {days.length > 1 && (
+        <FilterTabs
+          label="Day"
+          value={day}
+          onChange={setChosen}
+          options={days.map((d) => ({ value: d, label: d === ANY_DAY ? 'Any time' : d === today ? 'Today' : dayLabel(d) }))}
+        />
+      )}
+      <ul className="session-list">
+        {list.map((s) => {
+          const isBooked = booked.has(s.id);
+          return (
+            <li key={s.id} className={['session', s.id === highlight ? 'is-highlight' : '', isBooked ? 'is-booked' : ''].join(' ').trim()}>
+              <span className="session-time num">{s.startsAt ? timeInZone(s.startsAt, tz) : 'Any time'}</span>
+              <span className="session-main">
+                <span className="row-title">{s.name}</span>
+                <span className="row-meta">{[s.startsAt && s.endsAt ? `until ${timeInZone(s.endsAt, tz)}` : null, s.location || null].filter(Boolean).join(' · ')}</span>
+                <Spots s={s} />
+              </span>
+              <span className="session-action">
+                {onBook &&
+                  (isBooked ? (
+                    <Badge tone="success" icon>
+                      Booked
+                    </Badge>
+                  ) : s.full ? (
+                    <Badge>Full</Badge>
+                  ) : (
+                    <Button kind="primary" disabled={busy} onClick={() => onBook(s)}>
+                      Book<span className="visually-hidden"> {s.name}</span>
+                    </Button>
+                  ))}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
-/** One identified person: their bookings and everything they can book. */
+/** One identified person: what they've booked, then everything they can book. */
 export function SignupPanel({
   view,
   highlight,
@@ -125,47 +156,46 @@ export function SignupPanel({
   const booked = new Set(view.bookings.map((b) => b.activityId));
   const wanted = highlight ? view.sessions.find((s) => s.id === highlight) : null;
   const shown = view.sessions.filter((s) => matchesSearch(q, s.name, s.location));
+  const mine = [...view.bookings].sort((a, b) => (a.startsAt ?? '9').localeCompare(b.startsAt ?? '9'));
   return (
     <>
       {wanted && !booked.has(wanted.id) && (
         <div className="panel panel-pad wanted stack">
           <p>
             <strong>{wanted.name}</strong>
-            {wanted.startsAt && `, ${timeRange(wanted.startsAt, wanted.endsAt, tz)}`}
+            {wanted.startsAt && `, ${dayLabel(dayInZone(wanted.startsAt, tz))} ${timeRange(wanted.startsAt, wanted.endsAt, tz)}`}
           </p>
+          <Spots s={wanted} />
           {wanted.full ? (
             <p>This session is full. Pick another below.</p>
           ) : (
             <Button kind="primary" block disabled={busy} onClick={() => onBook(wanted)}>
-              Book {wanted.name} for {view.person.name}
+              Book {wanted.name}
             </Button>
           )}
         </div>
       )}
 
-      <section className="section">
-        <h2>{view.person.name}'s activities</h2>
-        {view.bookings.length === 0 ? (
-          <p className="meta">Nothing booked yet.</p>
+      <section className="signup-section" aria-labelledby="mine-heading">
+        <h2 id="mine-heading">{mine.length ? `Booked (${mine.length})` : 'Booked'}</h2>
+        {mine.length === 0 ? (
+          <p className="meta">Nothing yet. Pick something below.</p>
         ) : (
-          <ul className="list">
-            {view.bookings.map((b) => (
-              <li key={b.activityId} className="row">
-                <span className="row-main">
+          <ul className="session-list">
+            {mine.map((b) => (
+              <li key={b.activityId} className="session is-booked">
+                <span className="session-time num">{b.startsAt ? timeInZone(b.startsAt, tz) : 'Any time'}</span>
+                <span className="session-main">
                   <span className="row-title">{b.name}</span>
-                  <span className="row-meta">
-                    {[b.startsAt ? `${dayLabel(dayInZone(b.startsAt, tz))}, ${timeRange(b.startsAt, b.endsAt, tz)}` : null, b.location || null]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </span>
+                  <span className="row-meta">{[b.startsAt ? dayLabel(dayInZone(b.startsAt, tz)) : null, b.location || null].filter(Boolean).join(' · ')}</span>
                 </span>
-                <span className="row-side">
+                <span className="session-action">
                   {b.canCancel ? (
-                    <Button disabled={busy} onClick={() => onCancel(b.activityId)}>
-                      Cancel booking<span className="visually-hidden"> for {b.name}</span>
+                    <Button small kind="ghost" disabled={busy} onClick={() => onCancel(b.activityId)}>
+                      Cancel<span className="visually-hidden"> {b.name}</span>
                     </Button>
                   ) : (
-                    <span className="meta">Booked by leaders</span>
+                    <span className="meta">Set by leaders</span>
                   )}
                 </span>
               </li>
@@ -175,9 +205,9 @@ export function SignupPanel({
       </section>
 
       {view.open ? (
-        <section className="section">
-          <h2>Book an activity</h2>
-          <SearchField id="signup-q" label="Search activities" placeholder="Type an activity, for example kayak" value={q} onChange={setQ} />
+        <section className="signup-section" aria-labelledby="book-heading">
+          <h2 id="book-heading">Book an activity</h2>
+          {view.sessions.length > 10 && <SearchField id="signup-q" label="Search activities" placeholder="For example, kayak" value={q} onChange={setQ} />}
           <SessionBoard sessions={shown} tz={tz} booked={booked} highlight={highlight} busy={busy} onBook={onBook} />
         </section>
       ) : (

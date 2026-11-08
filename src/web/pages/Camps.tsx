@@ -29,7 +29,7 @@ export function CampMark({ event, size = 40 }: { event: Pick<EventSummary, 'name
   );
 }
 
-/** "supersplash.campcount.com", as text. */
+/** "summercamp.campcount.com", as text. */
 function addressText(rootDomain: string | null, subdomain: string | null) {
   return subdomain ? `${subdomain}.${rootDomain ?? 'campcount.com'}` : null;
 }

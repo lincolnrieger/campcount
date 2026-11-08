@@ -49,13 +49,59 @@ export interface PhotoMarkerStyle {
   photoMarkerLabel: boolean;
 }
 
+/** Uploaded artwork for one side of the card: PNG or JPEG bytes. */
+export interface Artwork {
+  bytes: Uint8Array;
+  type: 'image/png' | 'image/jpeg';
+}
+
 export interface PdfOptions {
   marker: PhotoMarkerStyle;
   /** Print a back for every card (for double-sided printing, flip on the long edge). */
   doubleSided: boolean;
-  /** The camp's logo as PNG bytes, for the back. */
+  /** The camp's logo as PNG bytes, for the built-in back. */
   logoPng: Uint8Array | null;
+  /** The event's own artwork, drawn behind what CampCount prints. */
+  artwork?: { front?: Artwork | null; back?: Artwork | null };
+  /** With front artwork: print the coloured section band over it, or only the section word. */
+  printBand?: boolean;
 }
+
+/** A box on the card, in millimetres from the top-left corner. */
+export interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Where CampCount prints each thing, in mm from the card's top-left corner.
+ * The PDF, the on-screen preview and the blank template all use these, so
+ * artwork made on the template lines up with what's printed.
+ */
+export const CARD_LAYOUT: Record<CardSize, { band: Box; punch: Box | null; name: Box; group: Box; qr: Box; code: Box; safe: number; frame: number }> = {
+  lanyard: {
+    band: { x: 0, y: 0, w: 90, h: 20 },
+    punch: { x: 38, y: 3, w: 14, h: 3 },
+    name: { x: 5, y: 25, w: 80, h: 10 },
+    group: { x: 5, y: 36.5, w: 80, h: 4.5 },
+    qr: { x: 17, y: 49, w: 56, h: 56 },
+    code: { x: 5, y: 109, w: 80, h: 6 },
+    safe: 4,
+    frame: 3.5,
+  },
+  badge: {
+    band: { x: 0, y: 0, w: 86, h: 9 },
+    punch: null,
+    name: { x: 4, y: 11, w: 38, h: 8 },
+    group: { x: 4, y: 20, w: 38, h: 4 },
+    qr: { x: 48, y: 15, w: 34, h: 34 },
+    code: { x: 4, y: 44, w: 38, h: 5 },
+    safe: 3,
+    frame: 2.5,
+  },
+};
 
 /** The camp logo, redrawn as a PNG (the PDF library can't read WebP). Null if there isn't one or it won't load. */
 export async function loadLogoPng(url: string | null): Promise<Uint8Array | null> {
@@ -173,67 +219,92 @@ export async function buildLanyardPdf(cards: Card[], size: CardSize, eventName: 
     }
   };
 
+  const L = CARD_LAYOUT[size];
+  const embed = async (a: Artwork | null | undefined) => (!a ? null : a.type === 'image/png' ? doc.embedPng(a.bytes) : doc.embedJpg(a.bytes));
+  const frontArt = await embed(options.artwork?.front).catch(() => null);
+  const backArt = options.doubleSided ? await embed(options.artwork?.back).catch(() => null) : null;
+  const printBand = !frontArt || options.printBand !== false;
+
+  /** A box from the layout (mm from the top-left) as PDF coordinates (points from the bottom-left). */
+  const at = (x: number, y: number, box: Box) => ({ x: x + box.x * MM, y: y + h - (box.y + box.h) * MM, w: box.w * MM, h: box.h * MM });
+  /** Text baseline inside a box: a little above its bottom edge. */
+  const baseline = (r: { y: number; h: number }, sizePt: number) => r.y + (r.h - sizePt * 0.72) / 2;
+
   const front = (p: PDFPage, card: Card, x: number, y: number) => {
     const colours = bandColours(card);
     const name = pdfSafe(card.name);
     const group = pdfSafe(card.groupName);
     const label = bandLabel(card);
-    const inset = card.noPhotos && (marker.photoMarker === 'black_border' || marker.photoMarker === 'colour_border') ? (lanyard ? 3.5 : 2.5) * MM : 0;
+    const framed = card.noPhotos && (marker.photoMarker === 'black_border' || marker.photoMarker === 'colour_border');
+    const inset = framed ? L.frame * MM : 0;
     const showLabel = card.noPhotos && marker.photoMarkerLabel;
     const showBadge = card.noPhotos && (marker.photoMarker === 'red_dot' || marker.photoMarker === 'camera_icon');
 
-    if (lanyard) {
-      const band = 20 * MM;
-      p.drawRectangle({ x: x + inset, y: y + h - band - inset, width: w - 2 * inset, height: band, color: hex(colours.bg) });
-      p.drawText(label, { x: x + inset + 5 * MM, y: y + h - band - inset + 6 * MM, size: 18, font: bold, color: hex(colours.fg) });
-      // Hole-punch guide
-      p.drawRectangle({ x: x + w / 2 - 7 * MM, y: y + h - inset - 6 * MM, width: 14 * MM, height: 3 * MM, borderColor: hex(colours.fg), borderWidth: 0.6, opacity: 0, borderOpacity: 0.6 });
-      let right = x + w - inset - 5 * MM;
-      if (showBadge) {
-        badge(p, right - 4 * MM, y + h - band - inset + 8 * MM, 4 * MM);
-        right -= 10 * MM;
-      }
-      if (showLabel) {
-        const t = 'No photos';
-        p.drawText(t, { x: right - bold.widthOfTextAtSize(t, 9), y: y + h - band - inset + 7 * MM, size: 9, font: bold, color: hex(colours.fg) });
-      }
+    if (frontArt) p.drawImage(frontArt, { x, y, width: w, height: h });
 
-      const textW = w - 2 * inset - 10 * MM;
-      const nameSize = fit(bold, name, textW, 26, 14);
-      p.drawText(name, { x: x + (w - bold.widthOfTextAtSize(name, nameSize)) / 2, y: y + h - band - 14 * MM, size: nameSize, font: bold });
-      const g = truncate(regular, group, textW, 10);
-      p.drawText(g, { x: x + (w - regular.widthOfTextAtSize(g, 10)) / 2, y: y + h - band - 20 * MM, size: 10, font: regular });
-
-      const side = (inset ? 52 : 56) * MM;
-      drawQr(p, card.qr, x + (w - side) / 2, y + 15 * MM, side);
-      const code = card.shortCode.split('').join(' ');
-      p.drawText(code, { x: x + (w - bold.widthOfTextAtSize(code, 12)) / 2, y: y + inset + 6 * MM, size: 12, font: bold });
+    // Section band (or, over artwork that has its own band, the word on a white tag).
+    const band = at(x, y, L.band);
+    const labelSize = lanyard ? 18 : 11;
+    const pad = (lanyard ? 5 : 4) * MM;
+    const textY = band.y + (band.h - labelSize * 0.72) / 2 - (lanyard ? 0 : 0.3 * MM) - inset / 2;
+    if (printBand) {
+      p.drawRectangle({ x: band.x + inset, y: band.y - inset, width: band.w - 2 * inset, height: band.h, color: hex(colours.bg) });
+      p.drawText(label, { x: band.x + inset + pad, y: textY, size: labelSize, font: bold, color: hex(colours.fg) });
     } else {
-      const band = 9 * MM;
-      p.drawRectangle({ x: x + inset, y: y + h - band - inset, width: w - 2 * inset, height: band, color: hex(colours.bg) });
-      p.drawText(label, { x: x + inset + 4 * MM, y: y + h - band - inset + 2.8 * MM, size: 11, font: bold, color: hex(colours.fg) });
-      let right = x + w - inset - 4 * MM;
-      if (showBadge) {
-        badge(p, right - 2.6 * MM, y + h - inset - band / 2, 2.6 * MM);
-        right -= 7 * MM;
-      }
-      if (showLabel) {
-        const t = 'No photos';
-        p.drawText(t, { x: right - bold.widthOfTextAtSize(t, 7.5), y: y + h - band - inset + 3 * MM, size: 7.5, font: bold, color: hex(colours.fg) });
-      }
-      const side = (inset ? 31 : 34) * MM;
-      const qx = x + w - inset - side - 4 * MM;
-      drawQr(p, card.qr, qx, y + inset + 5 * MM, side);
-      const textW = qx - x - inset - 7 * MM;
-      const nameSize = fit(bold, name, textW, 17, 9);
-      p.drawText(name, { x: x + inset + 4 * MM, y: y + h - band - inset - 9 * MM, size: nameSize, font: bold });
-      const g = truncate(regular, group, textW, 7.5);
-      p.drawText(g, { x: x + inset + 4 * MM, y: y + h - band - inset - 14 * MM, size: 7.5, font: regular });
-      p.drawText(card.shortCode, { x: x + inset + 4 * MM, y: y + inset + 5 * MM, size: 10, font: bold });
+      const tw = bold.widthOfTextAtSize(label, labelSize);
+      p.drawRectangle({ x: band.x + inset + pad - 1.5 * MM, y: textY - 1.5 * MM, width: tw + 3 * MM, height: labelSize * 0.72 + 3 * MM, color: white });
+      p.drawText(label, { x: band.x + inset + pad, y: textY, size: labelSize, font: bold, color: black });
     }
+    const markColour = printBand ? hex(colours.fg) : black;
+    if (L.punch && !frontArt) {
+      const r = at(x, y, L.punch);
+      p.drawRectangle({ x: r.x, y: r.y - inset, width: r.w, height: r.h, borderColor: hex(colours.fg), borderWidth: 0.6, opacity: 0, borderOpacity: 0.6 });
+    }
+    let right = band.x + band.w - inset - pad;
+    const r = (lanyard ? 4 : 2.6) * MM;
+    if (showBadge) {
+      badge(p, right - r, band.y + band.h / 2 - inset / 2, r);
+      right -= 2 * r + 2 * MM;
+    }
+    if (showLabel) {
+      const t = 'No photos';
+      const ts = lanyard ? 9 : 7.5;
+      const tw = bold.widthOfTextAtSize(t, ts);
+      if (!printBand) p.drawRectangle({ x: right - tw - 1 * MM, y: textY - 1 * MM, width: tw + 2 * MM, height: ts * 0.72 + 2 * MM, color: white });
+      p.drawText(t, { x: right - tw, y: textY + (lanyard ? 0.5 * MM : 0), size: ts, font: bold, color: markColour });
+    }
+
+    const centred = lanyard;
+    const nb = at(x, y, L.name);
+    const nameSize = fit(bold, name, nb.w - 2 * inset, lanyard ? 26 : 17, lanyard ? 14 : 9);
+    const nx = centred ? x + (w - bold.widthOfTextAtSize(name, nameSize)) / 2 : nb.x + inset;
+    p.drawText(name, { x: nx, y: baseline(nb, nameSize), size: nameSize, font: bold });
+    const gb = at(x, y, L.group);
+    const gs = lanyard ? 10 : 7.5;
+    const g = truncate(regular, group, gb.w - 2 * inset, gs);
+    p.drawText(g, { x: centred ? x + (w - regular.widthOfTextAtSize(g, gs)) / 2 : gb.x + inset, y: baseline(gb, gs), size: gs, font: regular });
+
+    const qb = at(x, y, L.qr);
+    const shrink = framed ? (lanyard ? 4 : 3) * MM : 0;
+    drawQr(p, card.qr, qb.x + shrink / 2 - (centred ? 0 : inset), qb.y + shrink / 2 + inset / 2, qb.w - shrink);
+
+    const cb = at(x, y, L.code);
+    const cs = lanyard ? 12 : 10;
+    const code = lanyard ? card.shortCode.split('').join(' ') : card.shortCode;
+    if (frontArt) {
+      // Keep the typed code readable on any artwork.
+      const cw = bold.widthOfTextAtSize(code, cs);
+      const cx = centred ? x + (w - cw) / 2 : cb.x + inset;
+      p.drawRectangle({ x: cx - 1.5 * MM, y: baseline(cb, cs) - 1.2 * MM, width: cw + 3 * MM, height: cs * 0.72 + 2.4 * MM, color: white });
+    }
+    p.drawText(code, { x: centred ? x + (w - bold.widthOfTextAtSize(code, cs)) / 2 : cb.x + inset, y: baseline(cb, cs) + (lanyard ? inset / 2 : inset / 2), size: cs, font: bold });
   };
 
   const back = (p: PDFPage, x: number, y: number) => {
+    if (backArt) {
+      p.drawImage(backArt, { x, y, width: w, height: h });
+      return;
+    }
     const ev = pdfSafe(eventName);
     const note = 'If found, please hand to a camp leader.';
     if (lanyard) {
@@ -264,22 +335,186 @@ export async function buildLanyardPdf(cards: Card[], size: CardSize, eventName: 
     const fronts = doc.addPage([A4.w, A4.h]);
     pageCards.forEach((card, slot) => {
       const { x, y } = slotXY(slot, false);
-      cutLine(fronts, x, y);
-      frame(fronts, x, y, card);
       front(fronts, card, x, y);
+      frame(fronts, x, y, card);
+      // Last, so it shows over artwork that runs to the edge.
+      cutLine(fronts, x, y);
     });
     if (options.doubleSided) {
       const backs = doc.addPage([A4.w, A4.h]);
       pageCards.forEach((card, slot) => {
         const { x, y } = slotXY(slot, true);
-        cutLine(backs, x, y);
-        frame(backs, x, y, card);
         back(backs, x, y);
+        frame(backs, x, y, card);
+        cutLine(backs, x, y);
       });
     }
   }
 
   return doc.save();
+}
+
+// ---------------------------------------------------------------- blank template
+
+export type CardSide = 'front' | 'back';
+
+/** Pixel size for artwork at 300 dpi, which prints sharply. */
+export function artworkPixels(size: CardSize): { w: number; h: number } {
+  const spec = CARD_SIZES[size];
+  return { w: Math.round((spec.w / 25.4) * 300), h: Math.round((spec.h / 25.4) * 300) };
+}
+
+interface Guide {
+  box: Box;
+  kind: 'cut' | 'safe' | 'frame' | 'zone' | 'keep-clear';
+  label?: string;
+}
+
+/** The pencilled-in guides on the blank template: where CampCount prints, and where to keep important artwork. */
+function guides(size: CardSize, side: CardSide): Guide[] {
+  const spec = CARD_SIZES[size];
+  const L = CARD_LAYOUT[size];
+  const card = { x: 0, y: 0, w: spec.w, h: spec.h };
+  const inside = (m: number) => ({ x: m, y: m, w: spec.w - 2 * m, h: spec.h - 2 * m });
+  const list: Guide[] = [
+    { box: card, kind: 'cut', label: 'Cut line: the edge of the card' },
+    { box: inside(L.frame), kind: 'frame', label: '' },
+    { box: inside(L.safe), kind: 'safe', label: '' },
+  ];
+  if (side === 'back') return list;
+  const lanyard = size === 'lanyard';
+  list.push({ box: L.band, kind: 'zone', label: lanyard ? 'Section band: Scout / Venturer / Rover / Leader' : 'Section band' });
+  if (L.punch) list.push({ box: L.punch, kind: 'keep-clear', label: '' });
+  list.push({ box: L.name, kind: 'zone', label: 'Name' });
+  list.push({ box: L.group, kind: 'zone', label: 'Scout group' });
+  list.push({ box: { x: L.qr.x - 2, y: L.qr.y - 2, w: L.qr.w + 4, h: L.qr.h + 4 }, kind: 'keep-clear', label: lanyard ? 'QR code: keep this white' : 'QR code' });
+  list.push({ box: L.code, kind: 'zone', label: 'Typed code' });
+  return list;
+}
+
+const NOTES: Record<CardSide, string[]> = {
+  front: [
+    'CampCount prints the name, group, QR code, code and section on top of your design.',
+    'Keep the QR area plain white. Hide these guides before you export.',
+  ],
+  back: ['Your design fills the whole back. Keep words inside the dashed line.', 'A no-photo border, if you use one, prints around the edge.'],
+};
+
+/** Where the FRONT/BACK tag and the notes sit on the template (mm), clear of the guides. */
+const TAG_AT: Record<CardSize, Record<CardSide, { x: number; y: number }>> = {
+  lanyard: { front: { x: 6, y: 17.5 }, back: { x: 6, y: 9 } },
+  badge: { front: { x: 3.5, y: 7.4 }, back: { x: 4, y: 7 } },
+};
+const NOTES_AT: Record<CardSize, Record<CardSide, { x: number; y: number[] } | null>> = {
+  lanyard: { front: { x: 45, y: [43, 45.6] }, back: { x: 45, y: [58, 61] } },
+  badge: { front: null, back: { x: 43, y: [26, 29] } },
+};
+
+/** The blank template as a PDF: one page per side, each exactly the size of a card. Opens in Illustrator, Affinity, Canva… */
+export async function buildTemplatePdf(size: CardSize): Promise<Uint8Array> {
+  const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
+  const doc = await PDFDocument.create();
+  doc.setTitle(`CampCount ${size === 'lanyard' ? 'lanyard' : 'wallet card'} template`);
+  doc.setCreator('CampCount');
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const spec = CARD_SIZES[size];
+  const W = spec.w * MM;
+  const H = spec.h * MM;
+  const grey = rgb(0.55, 0.55, 0.55);
+  const blue = rgb(0.12, 0.37, 0.66);
+  for (const side of ['front', 'back'] as const) {
+    const p = doc.addPage([W, H]);
+    const r = (b: Box) => ({ x: b.x * MM, y: H - (b.y + b.h) * MM, width: b.w * MM, height: b.h * MM });
+    for (const g of guides(size, side)) {
+      const rect = r(g.box);
+      if (g.kind === 'cut') p.drawRectangle({ ...rect, borderColor: rgb(0, 0, 0), borderWidth: 0.75 });
+      else if (g.kind === 'frame') p.drawRectangle({ ...rect, borderColor: grey, borderWidth: 0.4, borderDashArray: [1, 2] });
+      else if (g.kind === 'safe') p.drawRectangle({ ...rect, borderColor: blue, borderWidth: 0.5, borderDashArray: [4, 3] });
+      else if (g.kind === 'keep-clear') p.drawRectangle({ ...rect, color: rgb(1, 1, 1), borderColor: grey, borderWidth: 0.5 });
+      else p.drawRectangle({ ...rect, color: rgb(0.9, 0.94, 0.92), opacity: 0.6, borderColor: grey, borderWidth: 0.5, borderDashArray: [2, 2] });
+      if (g.label) {
+        const ts = 6;
+        const label = g.kind === 'cut' ? '' : g.label;
+        if (label) p.drawText(label, { x: rect.x + (rect.width - font.widthOfTextAtSize(label, ts)) / 2, y: rect.y + rect.height / 2 - 2, size: ts, font, color: grey });
+      }
+    }
+    const tag = TAG_AT[size][side];
+    p.drawText(side === 'front' ? 'FRONT' : 'BACK', { x: tag.x * MM, y: H - tag.y * MM, size: 7, font: bold, color: blue });
+    const at = NOTES_AT[size][side];
+    if (at)
+      NOTES[side].forEach((line, i) => {
+        const ts = 5;
+        p.drawText(line, { x: at.x * MM - font.widthOfTextAtSize(line, ts) / 2, y: H - at.y[i]! * MM, size: ts, font, color: blue });
+      });
+  }
+  return doc.save();
+}
+
+/** One side of the blank template as a 300 dpi PNG, for design tools that prefer images. */
+export async function buildTemplatePng(size: CardSize, side: CardSide): Promise<Blob> {
+  const { w, h } = artworkPixels(size);
+  const px = w / CARD_SIZES[size].w; // pixels per mm
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const g = canvas.getContext('2d')!;
+  g.fillStyle = '#ffffff';
+  g.fillRect(0, 0, w, h);
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  for (const guide of guides(size, side)) {
+    const { x, y, w: bw, h: bh } = guide.box;
+    g.setLineDash([]);
+    g.lineWidth = px * 0.25;
+    if (guide.kind === 'cut') {
+      g.strokeStyle = '#000000';
+      g.lineWidth = px * 0.3;
+    } else if (guide.kind === 'frame') {
+      g.strokeStyle = '#8c8c8c';
+      g.setLineDash([px * 0.4, px * 0.8]);
+    } else if (guide.kind === 'safe') {
+      g.strokeStyle = '#1f5fa8';
+      g.setLineDash([px * 1.4, px * 1]);
+    } else if (guide.kind === 'keep-clear') {
+      g.fillStyle = '#ffffff';
+      g.fillRect(x * px, y * px, bw * px, bh * px);
+      g.strokeStyle = '#8c8c8c';
+    } else {
+      g.fillStyle = 'rgba(214, 232, 223, 0.6)';
+      g.fillRect(x * px, y * px, bw * px, bh * px);
+      g.strokeStyle = '#8c8c8c';
+      g.setLineDash([px * 0.7, px * 0.7]);
+    }
+    g.strokeRect(x * px, y * px, bw * px, bh * px);
+    if (guide.label && guide.kind !== 'cut') {
+      g.fillStyle = '#8c8c8c';
+      g.font = `${Math.round(px * 2.2)}px system-ui, sans-serif`;
+      g.fillText(guide.label, (x + bw / 2) * px, (y + bh / 2) * px);
+    }
+  }
+  g.fillStyle = '#1f5fa8';
+  g.textBaseline = 'alphabetic';
+  g.textAlign = 'left';
+  g.font = `600 ${Math.round(px * 2.5)}px system-ui, sans-serif`;
+  const tag = TAG_AT[size][side];
+  g.fillText(side === 'front' ? 'FRONT' : 'BACK', tag.x * px, tag.y * px);
+  g.textAlign = 'center';
+  g.font = `${Math.round(px * 1.8)}px system-ui, sans-serif`;
+  const at = NOTES_AT[size][side];
+  if (at) NOTES[side].forEach((line, i) => g.fillText(line, at.x * px, at.y[i]! * px));
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('png'))), 'image/png'));
+}
+
+export function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 export function downloadPdf(bytes: Uint8Array, filename: string) {
