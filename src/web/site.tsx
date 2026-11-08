@@ -13,7 +13,7 @@ export interface SiteEvent {
 }
 
 /**
- * Which site this address is. An event's own address (supersplash.campcount.com)
+ * Which site this address is. An event's own address (summercamp.campcount.com)
  * is a separate, branded site for that one event; the main address is the
  * admin console.
  */

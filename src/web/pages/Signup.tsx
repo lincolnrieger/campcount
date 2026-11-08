@@ -38,15 +38,41 @@ function Frame({ title, subtitle, children, kiosk = false }: { title: string; su
   );
 }
 
+/** What just happened (booked, cancelled, or what went wrong), pinned to the bottom of the screen so it's seen wherever you tapped. */
+function SignupStatus({ error, done }: { error: string | null; done: string | null }) {
+  return (
+    <div className="signup-status" role="status" aria-live="polite">
+      {error ? (
+        <p className="signup-status-msg is-error">
+          <Icon name="error" size={20} />
+          {error}
+        </p>
+      ) : done ? (
+        <p className="signup-status-msg">
+          <Icon name="success" size={20} />
+          {done}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 /** Book, cancel and refresh for one identified person. */
 function usePerson(onError: (text: string) => void) {
   const [view, setView] = useState<SignupView | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
+  // The confirmation fades after a few seconds.
+  useEffect(() => {
+    if (!done) return;
+    const t = setTimeout(() => setDone(null), 4000);
+    return () => clearTimeout(t);
+  }, [done]);
   const call = useCallback(
     async (path: string, body: object, ok?: string) => {
       setBusy(true);
       setDone(null);
+      onError(''); // clear the last problem
       try {
         setView(await api<SignupView>(path, { body }));
         if (ok) setDone(ok);
@@ -159,12 +185,7 @@ export function SignupKiosk() {
   if (person.view) {
     return (
       <Frame title={`Hi ${person.view.person.name}`} subtitle={person.view.person.groupName || subtitle} kiosk>
-        {error && <Notice tone="error">{error}</Notice>}
-        {person.done && (
-          <Notice tone="success" live>
-            <p>{person.done}</p>
-          </Notice>
-        )}
+        <SignupStatus error={error} done={person.done} />
         {person.view.teamEvents?.length ? (
           <Segmented
             block
@@ -364,20 +385,14 @@ export function MyActivities() {
   const teamEvents = v.teamEvents ?? [];
   return (
     <Frame title={v.person.name} subtitle={`${v.event.name} · ${formatDateRange(v.event.startsOn, v.event.endsOn)}`}>
-      {error && <Notice tone="error">{error}</Notice>}
-      {person.done && (
-        <Notice tone="success" live>
-          <p>{person.done}</p>
-        </Notice>
-      )}
+      <SignupStatus error={error} done={person.done} />
       <Segmented
         block
         label="Show"
         value={tab}
         onChange={setTab}
         options={[
-          // With three tabs there's no room for the count on a phone.
-          { value: 'bookings', label: v.bookings.length && !teamEvents.length ? `Bookings (${v.bookings.length})` : 'Bookings' },
+          { value: 'bookings', label: 'Activities' },
           ...(teamEvents.length ? [{ value: 'teams' as const, label: 'Teams' }] : []),
           { value: 'programme', label: 'Programme' },
         ]}

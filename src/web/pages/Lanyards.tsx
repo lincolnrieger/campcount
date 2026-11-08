@@ -4,6 +4,7 @@ import { Link } from 'react-router';
 import { LanyardBack, LanyardCard } from '../components/LanyardCard';
 import type { Card, CardSize } from '../lanyards/pdf';
 import { CARD_SIZES, buildLanyardPdf, downloadPdf, loadLogoPng } from '../lanyards/pdf';
+import { loadArtwork, useLanyardArtwork } from '../lanyards/artwork';
 import { Button, Choice, EmptyState, Field, Icon, LoadError, Loading, Notice, PageHeader, SearchField, Segmented, Skeleton, useToast } from '../ui';
 import { PHOTO_MARKER_WORDS } from './LanyardSettings';
 import { useEvent } from './EventLayout';
@@ -23,6 +24,7 @@ export function Lanyards() {
   const [doubleSided, setDoubleSided] = useState(true);
   const [side, setSide] = useState<'front' | 'back'>('front');
   const [onlyNoPhotos, setOnlyNoPhotos] = useState(false);
+  const art = useLanyardArtwork(event.id);
   const back = { to: `${eventBase}/people`, label: 'People' };
 
   const load = useCallback(async () => {
@@ -62,7 +64,18 @@ export function Lanyards() {
 
   async function makePdf() {
     try {
-      const bytes = await buildLanyardPdf(selected, size, event.name, { marker: event.lanyard, doubleSided, logoPng: doubleSided ? await loadLogoPng(event.logoUrl) : null });
+      const [front, backArt, logoPng] = await Promise.all([
+        loadArtwork(art.url(size, 'front')),
+        doubleSided ? loadArtwork(art.url(size, 'back')) : null,
+        doubleSided ? loadLogoPng(event.logoUrl) : null,
+      ]);
+      const bytes = await buildLanyardPdf(selected, size, event.name, {
+        marker: event.lanyard,
+        doubleSided,
+        logoPng,
+        artwork: { front, back: backArt },
+        printBand: event.lanyard.printBand,
+      });
       const slug = event.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
       downloadPdf(bytes, `${slug}-${size === 'lanyard' ? 'lanyards' : 'cards'}.pdf`);
       toast(`PDF ready with ${selected.length} lanyards. Print at 100% (actual size)${doubleSided ? ', both sides, flip on the long edge' : ''}.`);
@@ -75,7 +88,7 @@ export function Lanyards() {
     <PageHeader
       title="Print lanyards"
       back={back}
-      summary="Each lanyard has a QR code and a typed backup code. The back has the camp's logo."
+      summary="Each lanyard has a QR code and a typed backup code."
       primary={
         cards &&
         cards.length > 0 && (
@@ -156,7 +169,7 @@ export function Lanyards() {
                 <div className="choices">
                   <Choice
                     label="Both sides"
-                    description={event.logoUrl ? 'Each front page is followed by its backs, with the camp logo. Print double-sided, flip on the long edge.' : 'The backs show the camp name. Add a logo to the camp to print it on the back.'}
+                    description="Each page of fronts is followed by a page of backs. Print double-sided and flip on the long edge."
                     checked={doubleSided}
                     onChange={(e) => {
                       setDoubleSided(e.target.checked);
@@ -193,13 +206,17 @@ export function Lanyards() {
               </Button>
             </div>
             <p className="meta">Print on A4 at 100% (actual size) and cut along the dashed lines. Keep spare lanyards secure: a lanyard is enough to be scanned as that person.</p>
-            {event.features.photo && (
-              <p className="meta">
-                No photo consent: {PHOTO_MARKER_WORDS[event.lanyard.photoMarker].toLowerCase()}
-                {event.lanyard.photoMarkerLabel ? ', with "No photos" on the band' : ''}.{' '}
-                {can('event.configure') && <Link to={`${eventBase}/settings/lanyards`}>Change how it's shown</Link>}
-              </p>
-            )}
+            <p className="meta">
+              {art.url(size, 'front') || art.url(size, 'back') ? 'Printing on your own artwork.' : 'Printing the built-in design.'}
+              {event.features.photo && (
+                <>
+                  {' '}
+                  No photo consent: {PHOTO_MARKER_WORDS[event.lanyard.photoMarker].toLowerCase()}
+                  {event.lanyard.photoMarkerLabel ? ', with "No photos" on the band' : ''}.
+                </>
+              )}{' '}
+              {can('event.configure') && <Link to={`${eventBase}/settings/lanyards`}>Change the design</Link>}
+            </p>
             {doubleSided && (
               <Segmented
                 label="Preview"
@@ -221,9 +238,9 @@ export function Lanyards() {
                       <input type="checkbox" checked={on} onChange={() => toggle(c.registrationId)} />
                       <span className="visually-hidden">Include {c.name}</span>
                       {side === 'back' ? (
-                        <LanyardBack card={c} size={size} marker={event.lanyard} eventName={event.name} logoUrl={event.logoUrl} />
+                        <LanyardBack card={c} size={size} marker={event.lanyard} eventName={event.name} logoUrl={event.logoUrl} artwork={art.url(size, 'back')} />
                       ) : (
-                        <LanyardCard card={c} size={size} marker={event.lanyard} />
+                        <LanyardCard card={c} size={size} marker={event.lanyard} artwork={art.url(size, 'front')} printBand={event.lanyard.printBand} />
                       )}
                     </label>
                   </li>

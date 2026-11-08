@@ -36,6 +36,7 @@ export interface EventRow {
   photo_marker: string;
   photo_marker_colour: string;
   photo_marker_label: number;
+  lanyard_print_band: number;
   /** From event_logos, when the query includes it. */
   logo_updated_at?: string | null;
 }
@@ -71,6 +72,7 @@ export function eventDto(row: EventRow) {
       photoMarker: (row.photo_marker ?? 'black_border') as LanyardSettings['photoMarker'],
       photoMarkerColour: row.photo_marker_colour ?? '#B3261E',
       photoMarkerLabel: row.photo_marker_label !== 0,
+      printBand: row.lanyard_print_band !== 0,
     } satisfies LanyardSettings,
     logoUrl: row.logo_updated_at ? `/api/events/${row.id}/logo?v=${encodeURIComponent(row.logo_updated_at)}` : null,
   };
@@ -207,6 +209,7 @@ eventRoutes.patch('/:eventId', async (c) => {
   if (input.lanyard?.photoMarker !== undefined) set('photo_marker', input.lanyard.photoMarker);
   if (input.lanyard?.photoMarkerColour !== undefined) set('photo_marker_colour', input.lanyard.photoMarkerColour.toUpperCase());
   if (input.lanyard?.photoMarkerLabel !== undefined) set('photo_marker_label', input.lanyard.photoMarkerLabel ? 1 : 0);
+  if (input.lanyard?.printBand !== undefined) set('lanyard_print_band', input.lanyard.printBand ? 1 : 0);
   for (const [key, value] of Object.entries(input.features ?? {})) {
     if (value !== undefined) set(FEATURE_COLUMNS[key as keyof EventFeatures], value ? 1 : 0);
   }

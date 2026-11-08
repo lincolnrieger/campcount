@@ -16,8 +16,10 @@ meal scanning that keeps working with patchy signal, and close-out reports.
 - Events with per-event features and a draft → open → completed → archived
   lifecycle
 - MyScout import (.xlsx/CSV) filtered in the browser, with dietary review
-- QR lanyards (print four per A4, double-sided with the camp logo) with typed
-  backup codes; a marker for no photo consent, chosen in Settings › Lanyards
+- QR lanyards (print four per A4, double-sided) with typed backup codes. Each
+  event can download a blank template, design its own artwork and upload it in
+  Settings › Lanyards; until then the built-in design is used. A marker for no
+  photo consent is chosen there too
 - Team events (Soccer, Basketball…): people make and join teams from their
   lanyard link or the sign-up kiosk, within team size limits
 - Scanning for activities, meals and on-site, working offline, on personal
@@ -87,7 +89,7 @@ Settings:
   Until then the app runs at the workers.dev address, and camps open at
   `/events/<id>` instead of their own address.
 
-### Camp addresses (supersplash.campcount.com)
+### Camp addresses (summercamp.campcount.com)
 
 Each camp can have its own address. It shows only that camp, with its own
 name, colour and logo. `campcount.com` itself is the admin console. One-time

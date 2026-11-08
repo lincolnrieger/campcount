@@ -15,12 +15,12 @@ describe('event sites', () => {
 
   it("an event's address shows its branding before sign-in, and nothing about other events", async () => {
     const admin = await createUser({ platformAdmin: true });
-    const mine = await createEvent(admin.id, { name: 'Super Splash' });
+    const mine = await createEvent(admin.id, { name: 'Summer Camp' });
     const other = await createEvent(admin.id, { name: 'Other Camp' });
     const host = await withAddress(mine, `splash-${mine.slice(0, 6)}`);
 
     const site = await json(await api('/site', { host }));
-    expect(site).toMatchObject({ kind: 'event', event: { id: mine, name: 'Super Splash', brandColor: '#FFCC00', logoUrl: null } });
+    expect(site).toMatchObject({ kind: 'event', event: { id: mine, name: 'Summer Camp', brandColor: '#FFCC00', logoUrl: null } });
 
     // Even a platform admin only sees this event here.
     const list = await json(await api('/events', { host, cookie: admin.cookie }));

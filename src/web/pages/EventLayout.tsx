@@ -13,7 +13,7 @@ interface EventContextValue {
   reload: () => Promise<void>;
   /** Where this event's pages live: '' on the event's own site, '/events/<id>' on the main site. */
   base: string;
-  /** True on the event's own address (supersplash.campcount.com). */
+  /** True on the event's own address (summercamp.campcount.com). */
   onSite: boolean;
 }
 

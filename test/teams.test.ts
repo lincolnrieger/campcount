@@ -148,7 +148,7 @@ describe('lanyards', () => {
     expect(c.card('400').noPhotos).toBe(true);
 
     const { event } = await json(await api(`/events/${c.eventId}`, { cookie: c.manager.cookie }));
-    expect(event.lanyard).toEqual({ photoMarker: 'black_border', photoMarkerColour: '#B3261E', photoMarkerLabel: true });
+    expect(event.lanyard).toEqual({ photoMarker: 'black_border', photoMarkerColour: '#B3261E', photoMarkerLabel: true, printBand: true });
     const saved = await json(
       await api(`/events/${c.eventId}`, { cookie: c.manager.cookie, method: 'PATCH', body: { lanyard: { photoMarker: 'red_dot', photoMarkerLabel: false } } }),
     );
