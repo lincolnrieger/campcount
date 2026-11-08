@@ -15,6 +15,7 @@ import { reportRoutes } from './routes/reports';
 import { staffRoutes } from './routes/staff';
 import { publicSignupRoutes, signupRoutes } from './routes/signup';
 import { logoRoutes, siteRoutes } from './routes/site';
+import { teamRoutes } from './routes/teams';
 import { resolveSite } from './services/site';
 import { notFound } from './lib/errors';
 import { runMaintenance } from './services/maintenance';
@@ -63,6 +64,7 @@ app.route('/events/:eventId', operationsRoutes);
 app.route('/events/:eventId', scanRoutes);
 app.route('/events/:eventId', reportRoutes);
 app.route('/events/:eventId', signupRoutes);
+app.route('/events/:eventId', teamRoutes);
 app.route('/public/signup', publicSignupRoutes);
 app.route('/stations', pairingRoutes);
 

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { createUserSchema } from '../../shared/schemas';
 import type { AppContext, AppEnv } from '../context';
 import { parseBody, requirePermission, requireUser } from '../context';
-import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
+import { ApiError, badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { nowIso } from '../lib/time';
 import { getCookie } from 'hono/cookie';
 import { auditStatement } from '../services/audit';
@@ -12,8 +12,10 @@ import { deleteAccount, isLastAdmin } from '../services/accounts';
 import { deleteEvent } from '../services/eventDelete';
 import { SESSION_COOKIE } from '../services/sessions';
 import { sha256Hex } from '../lib/crypto';
-import { can } from '../services/principal';
-import type { UserPrincipal } from '../services/principal';
+import { isPlatformAdmin, managedEventIds, mayPreview } from '../services/principal';
+import type { Permission } from '../../shared/permissions';
+import { loadUserPrincipal } from '../services/sessions';
+import { resolveSite } from '../services/site';
 import { createPasswordLink, emailPasswordLink } from '../services/passwordLinks';
 
 export const adminRoutes = new Hono<AppEnv>();
@@ -392,22 +394,33 @@ adminRoutes.delete('/demo/:eventId', async (c) => {
 
 // ---------------------------------------------------------------- view as (role preview)
 
-/** A platform admin, or an admin currently previewing a role (who must be able to switch or stop). */
-function requireRealAdmin(c: AppContext): UserPrincipal {
+/**
+ * Who may use View as: platform admins, event managers (for their own
+ * events), and anyone currently previewing (so they can switch or stop).
+ * Checks are made against the account's real roles, not the previewed one.
+ */
+async function viewAsActor(c: AppContext) {
   const user = requireUser(c);
-  if (!user.preview && !can(user, 'platform.users.manage')) throw forbidden();
-  return user;
+  const real = user.preview ? await loadUserPrincipal(c.env, user.userId) : user;
+  if (!real) throw forbidden();
+  const admin = isPlatformAdmin(real);
+  const managed = managedEventIds(real);
+  if (!user.preview && !admin && managed.size === 0) throw forbidden();
+  return { user, real, admin, managed };
 }
 
 adminRoutes.get('/preview/options', async (c) => {
-  requireRealAdmin(c);
-  const { results: events } = await c.env.DB.prepare(
+  const { admin, managed } = await viewAsActor(c);
+  const { results: allEvents } = await c.env.DB.prepare(
     `SELECT id, name, is_demo, status FROM events WHERE status <> 'archived' ORDER BY is_demo DESC, starts_on DESC`,
   ).all<{ id: string; name: string; is_demo: number; status: string }>();
+  const site = await resolveSite(c);
+  const events = allEvents.filter((e) => (admin || managed.has(e.id)) && (site.kind !== 'event' || site.event.id === e.id));
   const { results: activities } = await c.env.DB.prepare(
-    `SELECT a.id, a.name, a.event_id FROM activities a JOIN events e ON e.id = a.event_id
-      WHERE e.status <> 'archived' AND a.status = 'active' ORDER BY a.name COLLATE NOCASE`,
-  ).all<{ id: string; name: string; event_id: string }>();
+    `SELECT a.id, a.name, a.event_id, a.starts_at, e.timezone FROM activities a JOIN events e ON e.id = a.event_id
+      WHERE e.status <> 'archived' AND a.status = 'active' AND a.kind = 'activity'
+      ORDER BY a.starts_at IS NULL, a.starts_at, a.name COLLATE NOCASE`,
+  ).all<{ id: string; name: string; event_id: string; starts_at: string | null; timezone: string }>();
   const { results: roles } = await c.env.DB.prepare(
     `SELECT key, name, description, scope FROM roles WHERE scope <> 'platform' ORDER BY CASE key
        WHEN 'event_manager' THEN 1 WHEN 'scanner' THEN 2 WHEN 'activity_leader' THEN 3 WHEN 'meal_leader' THEN 4 ELSE 9 END, name`,
@@ -418,7 +431,7 @@ adminRoutes.get('/preview/options', async (c) => {
       name: e.name,
       isDemo: e.is_demo === 1,
       status: e.status,
-      activities: activities.filter((a) => a.event_id === e.id).map((a) => ({ id: a.id, name: a.name })),
+      activities: activities.filter((a) => a.event_id === e.id).map((a) => ({ id: a.id, name: a.name, startsAt: a.starts_at, timezone: a.timezone })),
     })),
     roles,
   });
@@ -435,14 +448,17 @@ const previewSchema = z.strictObject({
  * recorded in the audit log, and ends with "Back to me" or sign-out.
  */
 adminRoutes.post('/preview', async (c) => {
-  const user = requireRealAdmin(c);
+  const { user, real } = await viewAsActor(c);
   const input = await parseBody(c, previewSchema);
-  const role = await c.env.DB.prepare(`SELECT id, scope FROM roles WHERE key = ?`)
+  const role = await c.env.DB.prepare(`SELECT r.id, r.scope, group_concat(rp.permission) AS permissions FROM roles r LEFT JOIN role_permissions rp ON rp.role_id = r.id WHERE r.key = ? GROUP BY r.id`)
     .bind(input.roleKey)
-    .first<{ id: string; scope: string }>();
+    .first<{ id: string; scope: string; permissions: string | null }>();
   if (!role || role.scope === 'platform') throw badRequest('Choose an event role.');
   const event = await c.env.DB.prepare(`SELECT id FROM events WHERE id = ? AND status <> 'archived'`).bind(input.eventId).first();
   if (!event) throw notFound();
+  if (!mayPreview(real, input.eventId, (role.permissions ?? '').split(',').filter(Boolean) as Permission[])) {
+    throw new ApiError(403, 'forbidden', 'You can only view your own events as a role, and only as roles with no more access than yours.');
+  }
   let activityId: string | null = null;
   if (role.scope === 'activity' && input.activityId) {
     const activity = await c.env.DB.prepare(`SELECT id FROM activities WHERE id = ? AND event_id = ?`)
@@ -470,7 +486,7 @@ adminRoutes.post('/preview', async (c) => {
 });
 
 adminRoutes.delete('/preview', async (c) => {
-  const user = requireRealAdmin(c);
+  const user = requireUser(c);
   const token = getCookie(c, SESSION_COOKIE)!;
   await c.env.DB.batch([
     c.env.DB.prepare(`UPDATE sessions SET preview_event_id = NULL, preview_role_id = NULL, preview_activity_id = NULL WHERE id_hash = ?`).bind(

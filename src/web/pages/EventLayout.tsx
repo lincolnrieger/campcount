@@ -58,6 +58,7 @@ export function eventSections(event: EventSummary, onSite = false) {
       label: 'Schedule',
       show: (event.features.activities && can('activities.manage')) || (event.features.meals && can('meals.manage')),
     },
+    { to: 'teams', label: 'Teams', show: event.features.activities && can('activities.manage') },
     { to: 'meals', label: 'Meals', show: event.features.meals && can('meals.manage') },
     { to: 'reports', label: 'Reports', show: can('reports.view') && event.status !== 'draft' },
     { to: 'settings', label: 'Settings', show: can('event.configure') || can('staff.manage') || can('stations.manage') },

@@ -134,9 +134,13 @@
 .viewas-event {
   max-width: 24rem;
 }
-.viewas-activities {
+.viewas-activity {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
-  margin-top: var(--space-1);
+  margin-top: var(--space-2);
+}
+.viewas-activity .select {
+  flex: 1 1 16rem;
+  max-width: 24rem;
 }

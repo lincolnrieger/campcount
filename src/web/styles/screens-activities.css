@@ -335,3 +335,61 @@
   display: grid;
   gap: var(--space-4);
 }
+
+/* ---------- Teams ---------- */
+.team-rego {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: var(--border-width) solid var(--divider);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.team-rego.is-open {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
+.team-grid {
+  display: grid;
+  align-items: start;
+  gap: var(--section-gap);
+}
+.team-count {
+  color: var(--ink-3);
+  font-weight: var(--weight-regular);
+}
+.team-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+@media (min-width: 1024px) {
+  .team-grid {
+    grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+    gap: var(--space-5) var(--space-6);
+  }
+}
+
+/* Participants: their team, and the teams they can join. */
+.team-pick {
+  display: grid;
+  gap: var(--space-3);
+}
+.team-mine {
+  padding: var(--space-3) var(--space-4);
+  border: 2px solid var(--brand);
+  border-radius: var(--radius);
+  background: var(--brand-tint);
+}
+.team-new {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+.team-new .field {
+  flex: 1 1 14rem;
+}

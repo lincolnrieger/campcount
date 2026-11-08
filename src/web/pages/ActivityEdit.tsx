@@ -242,6 +242,8 @@ export function ActivityEdit() {
   const mode = activityId ? 'edit' : from ? 'copy' : 'new';
   const title = mode === 'edit' ? 'Edit activity' : mode === 'copy' ? 'Add another session' : 'Add activity';
   const base = `${eventBase}/activities`;
+  // The API path, which differs from the page address on a camp's own site (where pages have no /events/<id> prefix).
+  const apiBase = `/events/${event.id}/activities`;
   const back = mode === 'new' ? { to: base, label: 'Activities' } : { to: `${base}/${sourceId}`, label: source?.name ?? 'Activity' };
 
   if (!can('activities.manage') || (event.status !== 'draft' && event.status !== 'open'))
@@ -286,11 +288,11 @@ export function ActivityEdit() {
         onCancel={() => navigate(back.to)}
         onSave={async (body) => {
           if (mode === 'edit') {
-            await api(`${base}/${source!.id}`, { method: 'PATCH', body });
+            await api(`${apiBase}/${source!.id}`, { method: 'PATCH', body });
             toast('Changes saved');
             navigate(`${base}/${source!.id}`);
           } else {
-            const { id } = await api<{ id: string }>(base, { body });
+            const { id } = await api<{ id: string }>(apiBase, { body });
             toast(`${body.name} added`);
             navigate(`${base}/${id}`);
           }

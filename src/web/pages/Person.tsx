@@ -137,8 +137,9 @@ export function Person() {
       const res = await api<{ cards: Card[] }>(`/events/${event.id}/credentials/print`, { body: { registrationIds: [r.id] } });
       const card = res.cards[0];
       if (!card) return;
-      const { buildLanyardPdf, downloadPdf } = await import('../lanyards/pdf');
-      downloadPdf(await buildLanyardPdf([card], 'lanyard', event.name), `${fullName.replace(/\W+/g, '-')}-lanyard.pdf`);
+      const { buildLanyardPdf, downloadPdf, loadLogoPng } = await import('../lanyards/pdf');
+      const bytes = await buildLanyardPdf([card], 'lanyard', event.name, { marker: event.lanyard, doubleSided: true, logoPng: await loadLogoPng(event.logoUrl) });
+      downloadPdf(bytes, `${fullName.replace(/\W+/g, '-')}-lanyard.pdf`);
     } catch (err) {
       fail(err);
     }

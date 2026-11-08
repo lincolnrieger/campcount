@@ -4,6 +4,7 @@ import { useParams, useSearchParams } from 'react-router';
 import { parseCredentialPayload } from '../../shared/credentials';
 import { ApiFailure, api } from '../api';
 import { SessionBoard, SignupPanel } from '../components/SignupPanel';
+import { TeamsPanel } from '../components/TeamsPanel';
 import type { ProgrammeItem, SignupSession, SignupView } from '../components/SignupPanel';
 import { dayInZone, dayLabel, timeInZone } from '../../shared/time';
 import { createDetector } from '../scan/decoder';
@@ -65,6 +66,9 @@ function usePerson(onError: (text: string) => void) {
     setDone,
     book: (s: SignupSession) => view && void call('/public/signup/book', { pass: view.pass, activityId: s.id }, `Booked: ${s.name}`),
     cancel: (activityId: string) => view && void call('/public/signup/cancel', { pass: view.pass, activityId }, 'Booking cancelled.'),
+    createTeam: (activityId: string, name: string) => view && void call('/public/signup/team/create', { pass: view.pass, activityId, name }, `Team made: ${name}. Tell your friends to join it.`),
+    joinTeam: (teamId: string, name: string) => view && void call('/public/signup/team/join', { pass: view.pass, teamId }, `You joined ${name}.`),
+    leaveTeam: (teamId: string) => view && void call('/public/signup/team/leave', { pass: view.pass, teamId }, 'You left the team.'),
   };
 }
 
@@ -84,6 +88,7 @@ export function SignupKiosk() {
   const person = usePerson(setError);
   const { setView, setDone } = person;
   const [typed, setTyped] = useState('');
+  const [kioskTab, setKioskTab] = useState<'activities' | 'teams'>('activities');
   const lastTap = useRef(0);
 
   const loadBoard = useCallback(() => {
@@ -103,6 +108,7 @@ export function SignupKiosk() {
     setDone(null);
     setError(null);
     setTyped('');
+    setKioskTab('activities');
     loadBoard();
   }, [loadBoard, setView, setDone]);
 
@@ -159,7 +165,30 @@ export function SignupKiosk() {
             <p>{person.done}</p>
           </Notice>
         )}
-        <SignupPanel view={person.view} highlight={highlight} busy={person.busy} onBook={(s) => person.book(s)} onCancel={(id) => person.cancel(id)} />
+        {person.view.teamEvents?.length ? (
+          <Segmented
+            block
+            label="Show"
+            value={kioskTab}
+            onChange={setKioskTab}
+            options={[
+              { value: 'activities', label: 'Activities' },
+              { value: 'teams', label: 'Teams' },
+            ]}
+          />
+        ) : null}
+        {kioskTab === 'teams' && person.view.teamEvents?.length ? (
+          <TeamsPanel
+            teamEvents={person.view.teamEvents}
+            tz={person.view.event.timezone}
+            busy={person.busy}
+            onCreate={(id, name) => person.createTeam(id, name)}
+            onJoin={(id, name) => person.joinTeam(id, name)}
+            onLeave={(id) => person.leaveTeam(id)}
+          />
+        ) : (
+          <SignupPanel view={person.view} highlight={highlight} busy={person.busy} onBook={(s) => person.book(s)} onCancel={(id) => person.cancel(id)} />
+        )}
         <Button kind="primary" block onClick={reset}>
           Finish and clear screen
         </Button>
@@ -297,7 +326,7 @@ export function MyActivities() {
   const [failed, setFailed] = useState(false);
   const person = usePerson(setError);
   const { setView } = person;
-  const [chosenTab, setChosenTab] = useState<'bookings' | 'programme' | null>(null);
+  const [chosenTab, setChosenTab] = useState<'bookings' | 'teams' | 'programme' | null>(null);
 
   useEffect(() => {
     if (!/^[A-Za-z0-9_-]{22}$/.test(token)) {
@@ -331,7 +360,8 @@ export function MyActivities() {
   const v = person.view;
   // Start where there's something to do: bookings when there are any (or any to make), otherwise the programme.
   const tab = chosenTab ?? (v.bookings.length || (v.open && v.sessions.length) ? 'bookings' : 'programme');
-  const setTab = (t: 'bookings' | 'programme') => setChosenTab(t);
+  const setTab = (t: 'bookings' | 'teams' | 'programme') => setChosenTab(t);
+  const teamEvents = v.teamEvents ?? [];
   return (
     <Frame title={v.person.name} subtitle={`${v.event.name} · ${formatDateRange(v.event.startsOn, v.event.endsOn)}`}>
       {error && <Notice tone="error">{error}</Notice>}
@@ -346,11 +376,22 @@ export function MyActivities() {
         value={tab}
         onChange={setTab}
         options={[
-          { value: 'bookings', label: v.bookings.length ? `Bookings (${v.bookings.length})` : 'Bookings' },
+          // With three tabs there's no room for the count on a phone.
+          { value: 'bookings', label: v.bookings.length && !teamEvents.length ? `Bookings (${v.bookings.length})` : 'Bookings' },
+          ...(teamEvents.length ? [{ value: 'teams' as const, label: 'Teams' }] : []),
           { value: 'programme', label: 'Programme' },
         ]}
       />
-      {tab === 'bookings' ? (
+      {tab === 'teams' ? (
+        <TeamsPanel
+          teamEvents={teamEvents}
+          tz={v.event.timezone}
+          busy={person.busy}
+          onCreate={(id, name) => person.createTeam(id, name)}
+          onJoin={(id, name) => person.joinTeam(id, name)}
+          onLeave={(id) => person.leaveTeam(id)}
+        />
+      ) : tab === 'bookings' ? (
         <SignupPanel view={v} busy={person.busy} onBook={(s) => person.book(s)} onCancel={(id) => person.cancel(id)} />
       ) : (
         <>

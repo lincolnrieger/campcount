@@ -54,6 +54,7 @@ interface Attendance {
     trackSignOut: boolean;
     signupOpen: boolean;
     bookingRequired: boolean;
+    teamEvent?: boolean;
     status: 'active' | 'cancelled';
   };
   presentNow: number;
@@ -199,7 +200,10 @@ export function ActivityRoster() {
   const when = a.startsAt ? `${dayLabel(dayInZone(a.startsAt, tz))}, ${timeRange(a.startsAt, a.endsAt, tz)}` : 'Runs all camp';
   const canScan = data.canCheckIn && event.status === 'open' && a.status === 'active';
 
-  const menu: MenuItem[] = manage
+  const teams = a.teamEvent ? `${base}/teams/${a.id}` : null;
+  const menu: MenuItem[] = teams
+    ? [{ label: 'Teams', to: teams }, ...(manage ? [{ label: 'Edit settings', to: teams }] : []), { label: 'Print this list', onSelect: () => window.print() }]
+    : manage
     ? [
         { label: 'Edit activity', to: `${list}/${a.id}/edit` },
         { label: 'Add another session', to: `${list}/new?from=${a.id}` },
@@ -249,7 +253,7 @@ export function ActivityRoster() {
     <>
       <PageHeader
         title={a.name}
-        back={{ to: list, label: 'Activities' }}
+        back={teams && manage ? { to: `${base}/teams`, label: 'Teams' } : { to: list, label: 'Activities' }}
         summary={
           <>
             <span className="sep">{when}</span>

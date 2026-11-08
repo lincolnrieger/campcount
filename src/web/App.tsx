@@ -25,6 +25,7 @@ import { ActivityEdit } from './pages/ActivityEdit';
 import { Meals } from './pages/Meals';
 import { ProgramImport } from './pages/ProgramImport';
 import { Schedule } from './pages/Schedule';
+import { TeamEventPage, TeamEvents } from './pages/Teams';
 import { Pair } from './pages/Pair';
 import { ScanHub } from './pages/ScanHub';
 import { Stations } from './pages/Stations';
@@ -46,6 +47,7 @@ import { PageHeader, EmptyState } from './ui';
 // The camera, PDF and spreadsheet code is heavy: load it only on the pages that need it.
 const Scan = lazy(() => import('./pages/Scan').then((m) => ({ default: m.Scan })));
 const Lanyards = lazy(() => import('./pages/Lanyards').then((m) => ({ default: m.Lanyards })));
+const LanyardSettings = lazy(() => import('./pages/LanyardSettings').then((m) => ({ default: m.LanyardSettings })));
 const Import = lazy(() => import('./pages/Import').then((m) => ({ default: m.Import })));
 const SignupKiosk = lazy(() => import('./pages/Signup').then((m) => ({ default: m.SignupKiosk })));
 const MyActivities = lazy(() => import('./pages/Signup').then((m) => ({ default: m.MyActivities })));
@@ -190,6 +192,8 @@ function EventSiteApp({ site }: { site: Extract<SiteInfo, { kind: 'event' }> }) 
             <Route path="activities/new" element={<ActivityEdit />} />
             <Route path="activities/import" element={<ProgramImport />} />
             <Route path="schedule" element={<Schedule />} />
+            <Route path="teams" element={<TeamEvents />} />
+            <Route path="teams/:teamEventId" element={<TeamEventPage />} />
             <Route path="activities/signup" element={<SignupScreen />} />
             <Route path="activities/:activityId" element={<ActivityRoster />} />
             <Route path="activities/:activityId/edit" element={<ActivityEdit />} />
@@ -201,6 +205,7 @@ function EventSiteApp({ site }: { site: Extract<SiteInfo, { kind: 'event' }> }) 
               <Route path="staff" element={<Staff />} />
               <Route path="staff/add" element={<AddStaff />} />
               <Route path="stations" element={<Stations />} />
+              <Route path="lanyards" element={<LanyardSettings />} />
             </Route>
             <Route path="more" element={<More />} />
             <Route path="account" element={<Account />} />
@@ -260,6 +265,8 @@ function PlatformApp() {
             <Route path="activities/new" element={<ActivityEdit />} />
             <Route path="activities/import" element={<ProgramImport />} />
             <Route path="schedule" element={<Schedule />} />
+            <Route path="teams" element={<TeamEvents />} />
+            <Route path="teams/:teamEventId" element={<TeamEventPage />} />
             <Route path="activities/signup" element={<SignupScreen />} />
             <Route path="activities/:activityId" element={<ActivityRoster />} />
             <Route path="activities/:activityId/edit" element={<ActivityEdit />} />
@@ -271,6 +278,7 @@ function PlatformApp() {
               <Route path="staff" element={<Staff />} />
               <Route path="staff/add" element={<AddStaff />} />
               <Route path="stations" element={<Stations />} />
+              <Route path="lanyards" element={<LanyardSettings />} />
               <Route path="copy" element={<CopyEvent />} />
             </Route>
             {/* Old addresses */}

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { canTransition } from '../../shared/lifecycle';
-import type { EventFeatures, EventStatus } from '../../shared/schemas';
+import type { EventFeatures, EventStatus, LanyardSettings } from '../../shared/schemas';
 import { createEventSchema, eventTransitionSchema, updateEventSchema } from '../../shared/schemas';
 import type { AppEnv } from '../context';
 import { parseBody, requirePermission, requirePrincipal, requireUser } from '../context';
@@ -33,6 +33,9 @@ export interface EventRow {
   is_demo: number;
   subdomain: string | null;
   brand_color: string | null;
+  photo_marker: string;
+  photo_marker_colour: string;
+  photo_marker_label: number;
   /** From event_logos, when the query includes it. */
   logo_updated_at?: string | null;
 }
@@ -64,6 +67,11 @@ export function eventDto(row: EventRow) {
     isDemo: row.is_demo === 1,
     subdomain: row.subdomain,
     brandColor: row.brand_color,
+    lanyard: {
+      photoMarker: (row.photo_marker ?? 'black_border') as LanyardSettings['photoMarker'],
+      photoMarkerColour: row.photo_marker_colour ?? '#B3261E',
+      photoMarkerLabel: row.photo_marker_label !== 0,
+    } satisfies LanyardSettings,
     logoUrl: row.logo_updated_at ? `/api/events/${row.id}/logo?v=${encodeURIComponent(row.logo_updated_at)}` : null,
   };
 }
@@ -196,6 +204,9 @@ eventRoutes.patch('/:eventId', async (c) => {
     await assertSubdomainFree(c.env.DB, input.subdomain, eventId);
     set('subdomain', input.subdomain);
   }
+  if (input.lanyard?.photoMarker !== undefined) set('photo_marker', input.lanyard.photoMarker);
+  if (input.lanyard?.photoMarkerColour !== undefined) set('photo_marker_colour', input.lanyard.photoMarkerColour.toUpperCase());
+  if (input.lanyard?.photoMarkerLabel !== undefined) set('photo_marker_label', input.lanyard.photoMarkerLabel ? 1 : 0);
   for (const [key, value] of Object.entries(input.features ?? {})) {
     if (value !== undefined) set(FEATURE_COLUMNS[key as keyof EventFeatures], value ? 1 : 0);
   }

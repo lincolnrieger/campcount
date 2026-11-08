@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router';
 import type { ScanTarget } from '../scan/targets';
 import { canScan, isOnNow, rememberScanEvent, useLastScan, useScanEvent, useScanTargets } from '../scan/targets';
 import type { EventSummary } from '../types';
+import { scanOnly } from './EventLayout';
 import { useApi } from '../useApi';
 import { dayLabel, eventDays, todayInZone } from '../../shared/time';
 import { Badge, EmptyState, FilterTabs, Icon, LoadError, Loading, PageHeader, Section, Sheet, SkeletonHeader, SkeletonRows } from '../ui';
@@ -74,14 +75,27 @@ export function ScanHub() {
             </li>
           </ul>
         )}
-        <ScanTargetPicker event={event} />
+        <ScanTargetPicker event={event} autoOpen={scanOnly(event) && !params.get('pick')} />
       </div>
     </>
   );
 }
 
 /** "On now", then the gate, then the chosen day's meals and activities. Used on the Scan tab and in the scanner's Switch sheet. */
-export function ScanTargetPicker({ event, currentKey, onPick, onDismiss }: { event: EventSummary; currentKey?: string; onPick?: () => void; onDismiss?: () => void }) {
+export function ScanTargetPicker({
+  event,
+  currentKey,
+  onPick,
+  onDismiss,
+  autoOpen = false,
+}: {
+  event: EventSummary;
+  currentKey?: string;
+  onPick?: () => void;
+  onDismiss?: () => void;
+  /** Open the scanner straight away when there's only one thing to scan right now (for people who only scan). */
+  autoOpen?: boolean;
+}) {
   const { targets, offline } = useScanTargets(event);
   const navigate = useNavigate();
   const days = eventDays(event.startsOn, event.endsOn);
@@ -89,6 +103,14 @@ export function ScanTargetPicker({ event, currentKey, onPick, onDismiss }: { eve
   const current = targets?.find((t) => t.key === currentKey);
   const usedDays = days.filter((d) => targets?.some((t) => t.day === d));
   const [day, setDay] = useState<string | null>(null);
+  const only = !targets ? null : targets.length === 1 ? targets[0]! : (() => {
+    const on = targets.filter((t) => t.type !== 'site' && isOnNow(t));
+    return on.length === 1 ? on[0]! : null;
+  })();
+  const onlyTo = only?.to;
+  useEffect(() => {
+    if (autoOpen && onlyTo) navigate(onlyTo, { replace: true });
+  }, [autoOpen, onlyTo, navigate]);
   const shownDay = day ?? current?.day ?? (usedDays.includes(today) ? today : (usedDays[0] ?? ''));
 
   if (!targets)

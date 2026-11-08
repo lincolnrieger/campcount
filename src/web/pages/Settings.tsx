@@ -37,6 +37,8 @@ export function SettingsIndex() {
 
   const rows = [
     can('event.configure') && { to: 'event', title: 'Event details', meta: 'Name, dates, location, notes and features' },
+    can('event.configure') &&
+      event.features.photo && { to: 'lanyards', title: 'Lanyards', meta: 'How cards show someone without photo consent' },
     can('staff.manage') && { to: 'staff', title: 'Staff', meta: staff.data ? `${plural(staff.data.staff.length, 'person', 'people')} · who works on this event` : 'Who works on this event and what they can do' },
     can('stations.manage') && {
       to: 'stations',

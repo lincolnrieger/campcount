@@ -150,3 +150,36 @@ export function platformPermissions(principal: Principal): Permission[] {
   }
   return [...out];
 }
+
+/** Every permission a user's own assignments give them within one event (ignores oversight). */
+export function grantedInEvent(principal: UserPrincipal, eventId: string): Set<Permission> {
+  const out = new Set<Permission>();
+  for (const grant of principal.grants) if (grant.eventId === eventId) grant.permissions.forEach((p) => out.add(p));
+  return out;
+}
+
+/** Events this user runs (can configure it and manage its staff): they may view these as another role. */
+export function managedEventIds(principal: UserPrincipal): Set<string> {
+  const ids = new Set<string>();
+  for (const grant of principal.grants) {
+    if (grant.eventId && grant.activityId === null && grant.permissions.has('event.configure') && grant.permissions.has('staff.manage')) ids.add(grant.eventId);
+  }
+  return ids;
+}
+
+export function isPlatformAdmin(principal: UserPrincipal): boolean {
+  return principal.grants.some((g) => g.eventId === null && g.permissions.has('platform.users.manage'));
+}
+
+/**
+ * May this user view an event as a role with these permissions? Platform
+ * admins may view any event as any event role. An event manager may view
+ * their own event as a role that holds nothing they don't already hold there.
+ */
+export function mayPreview(principal: UserPrincipal, eventId: string, rolePermissions: Iterable<Permission>): boolean {
+  if (isPlatformAdmin(principal)) return true;
+  if (!managedEventIds(principal).has(eventId)) return false;
+  const mine = grantedInEvent(principal, eventId);
+  for (const p of rolePermissions) if (!mine.has(p)) return false;
+  return true;
+}

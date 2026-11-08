@@ -48,12 +48,36 @@ describe('view as (role preview)', () => {
     expect(results.map((r) => r.action)).toEqual(['preview.start', 'preview.start', 'preview.stop']);
   });
 
-  it('is for platform admins only, and only affects their own session', async () => {
-    const { admin, eventId } = await setup();
+  it('lets event managers view their own event as a role, and nothing else', async () => {
+    const { admin, eventId, activityId } = await setup();
+    const otherEvent = await createEvent(admin.id, { status: 'open' });
     const director = await createUser();
     await grant(director.id, 'event_manager', eventId);
-    expect((await preview(director.cookie, { eventId, roleKey: 'scanner' })).status).toBe(403);
-    expect((await api('/admin/preview/options', { cookie: director.cookie })).status).toBe(403);
+    expect((await json(await api('/me', { cookie: director.cookie }))).canViewAs).toBe(true);
+
+    // Only their own event is offered, with its activities.
+    const options = await json(await api('/admin/preview/options', { cookie: director.cookie }));
+    expect(options.events.map((e: any) => e.id)).toEqual([eventId]);
+    expect(options.events[0].activities.map((a: any) => a.id)).toContain(activityId);
+
+    expect((await preview(director.cookie, { eventId: otherEvent, roleKey: 'scanner' })).status).toBe(403);
+    expect((await preview(director.cookie, { eventId, roleKey: 'activity_leader', activityId })).status).toBe(200);
+    const me = await json(await api('/me', { cookie: director.cookie }));
+    expect(me.preview).toMatchObject({ eventId, roleKey: 'activity_leader', activityId });
+    expect((await api(`/events/${eventId}/registrations`, { cookie: director.cookie })).status).toBe(403);
+    // Still previewing, they can switch and stop.
+    expect((await preview(director.cookie, { eventId, roleKey: 'meal_leader' })).status).toBe(200);
+    expect((await api('/admin/preview', { cookie: director.cookie, method: 'DELETE' })).status).toBe(200);
+    expect((await api(`/events/${eventId}/registrations`, { cookie: director.cookie })).status).toBe(200);
+  });
+
+  it('is not for scanners, and only affects the session that started it', async () => {
+    const { admin, eventId } = await setup();
+    const scanner = await createUser();
+    await grant(scanner.id, 'scanner', eventId);
+    expect((await json(await api('/me', { cookie: scanner.cookie }))).canViewAs).toBe(false);
+    expect((await preview(scanner.cookie, { eventId, roleKey: 'scanner' })).status).toBe(403);
+    expect((await api('/admin/preview/options', { cookie: scanner.cookie })).status).toBe(403);
 
     // A second session for the same admin is unaffected by the first one's preview.
     const second = await createUser({ platformAdmin: true });

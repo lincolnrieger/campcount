@@ -43,6 +43,18 @@ export const eventFeaturesSchema = z.strictObject({
   selfSignup: z.boolean(),
 });
 
+/** How a lanyard shows someone without photo consent (Settings › Lanyards). */
+export const PHOTO_MARKERS = ['black_border', 'colour_border', 'red_dot', 'camera_icon', 'none'] as const;
+export type PhotoMarker = (typeof PHOTO_MARKERS)[number];
+
+export const lanyardSettingsSchema = z.strictObject({
+  photoMarker: z.enum(PHOTO_MARKERS),
+  photoMarkerColour: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Choose a colour like #B3261E'),
+  /** Print a small "No photos" next to the section. */
+  photoMarkerLabel: z.boolean(),
+});
+export type LanyardSettings = z.infer<typeof lanyardSettingsSchema>;
+
 const eventFields = {
   name: trimmed(120).min(1),
   description: trimmed(2000).default(''),
@@ -74,6 +86,7 @@ export const updateEventSchema = z
     features: eventFeaturesSchema.partial(),
     subdomain: eventFields.subdomain.unwrap(),
     brandColor: eventFields.brandColor.unwrap(),
+    lanyard: lanyardSettingsSchema.partial(),
   })
   .partial();
 
@@ -248,6 +261,44 @@ export const programImportSchema = z
     meals: z.array(mealInputSchema).max(150).default([]),
   })
   .refine((p) => p.activities.length + p.meals.length > 0, { message: 'There is nothing to import' });
+
+// ---------------------------------------------------------------- team events
+
+/** A team event (Soccer, Basketball…): an activity people enter as teams. */
+const teamEventFields = {
+  name: trimmed(80).min(1),
+  description: trimmed(1000),
+  location: trimmed(120),
+  startsAt: isoDateTime.nullable(),
+  endsAt: isoDateTime.nullable(),
+  /** Fewest people a team needs to play. */
+  minSize: z.number().int().min(1).max(100),
+  /** Most people on one team (null: no limit). */
+  maxSize: z.number().int().min(1).max(100).nullable(),
+  /** Most teams that can enter (null: no limit). */
+  maxTeams: z.number().int().min(1).max(200).nullable(),
+  /** Participants can make and join teams themselves. */
+  registrationOpen: z.boolean(),
+};
+const sizesMakeSense = (t: { minSize?: number; maxSize?: number | null }) => t.maxSize == null || t.minSize === undefined || t.maxSize >= t.minSize;
+const sizeMessage = { message: 'The most per team must be at least the fewest', path: ['maxSize'] };
+
+export const teamEventInputSchema = z
+  .strictObject({
+    ...teamEventFields,
+    description: teamEventFields.description.default(''),
+    location: teamEventFields.location.default(''),
+    startsAt: teamEventFields.startsAt.default(null),
+    endsAt: teamEventFields.endsAt.default(null),
+    minSize: teamEventFields.minSize.default(1),
+    maxSize: teamEventFields.maxSize.default(null),
+    maxTeams: teamEventFields.maxTeams.default(null),
+    registrationOpen: teamEventFields.registrationOpen.default(false),
+  })
+  .refine(sizesMakeSense, sizeMessage);
+export const teamEventPatchSchema = z.strictObject(teamEventFields).partial().refine(sizesMakeSense, sizeMessage);
+
+export const teamNameSchema = z.strictObject({ name: trimmed(40).min(1, 'Enter a team name') });
 
 export const stationInputSchema = z.strictObject({
   name: trimmed(60).min(1),
