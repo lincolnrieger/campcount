@@ -9,7 +9,7 @@ import { verifyPassword } from '../lib/passwords';
 import { addMinutes, nowIso } from '../lib/time';
 import { deleteAccount, isLastAdmin } from '../services/accounts';
 import { SESSION_COOKIE } from '../services/sessions';
-import { platformPermissions } from '../services/principal';
+import { isPlatformAdmin, managedEventIds, platformPermissions } from '../services/principal';
 
 export const meRoutes = new Hono<AppEnv>();
 
@@ -37,6 +37,8 @@ meRoutes.get('/', (c) => {
     },
     preview: principal.preview ?? null,
     platformPermissions: platformPermissions(principal),
+    // Platform admins, and event managers for their own events.
+    canViewAs: Boolean(principal.preview) || isPlatformAdmin(principal) || managedEventIds(principal).size > 0,
   });
 });
 

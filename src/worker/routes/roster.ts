@@ -514,7 +514,7 @@ rosterRoutes.post('/credentials/print', async (c) => {
   const { registrationIds } = await parseBody(c, z.strictObject({ registrationIds: z.array(z.uuid()).max(2000).optional() }));
 
   const { results } = await c.env.DB.prepare(
-    `SELECT r.id, p.first_name, p.preferred_name, p.last_name, r.kind, r.section, r.group_name,
+    `SELECT r.id, p.first_name, p.preferred_name, p.last_name, r.kind, r.section, r.group_name, r.photo_consent,
             cr.short_code, cr.token_ciphertext
        FROM registrations r
        JOIN people p ON p.id = r.person_id
@@ -528,6 +528,8 @@ rosterRoutes.post('/credentials/print', async (c) => {
   const rows = results.filter((r) => !wanted || wanted.has(r.id!));
 
   const origin = new URL(c.req.url).origin;
+  const event = await c.env.DB.prepare(`SELECT feature_photo FROM events WHERE id = ?`).bind(eventId).first<{ feature_photo: number }>();
+  const photos = event?.feature_photo === 1 && can(c.get('principal')!, 'photo.view_status', { eventId });
   const cards = await Promise.all(
     rows.map(async (r) => ({
       registrationId: r.id,
@@ -536,6 +538,8 @@ rosterRoutes.post('/credentials/print', async (c) => {
       section: r.section,
       groupName: r.group_name,
       shortCode: formatShortCode(r.short_code!),
+      // Anyone without a "yes" is treated as no consent, the same as at the scanner.
+      noPhotos: photos && r.photo_consent !== 'yes',
       qr: credentialUrl(origin, await decryptToken(c.env, r.token_ciphertext!)),
     })),
   );

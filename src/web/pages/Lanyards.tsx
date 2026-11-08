@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ApiFailure, api } from '../api';
-import { LanyardCard } from '../components/LanyardCard';
+import { Link } from 'react-router';
+import { LanyardBack, LanyardCard } from '../components/LanyardCard';
 import type { Card, CardSize } from '../lanyards/pdf';
-import { CARD_SIZES, buildLanyardPdf, downloadPdf } from '../lanyards/pdf';
-import { Button, EmptyState, Field, Icon, LoadError, Loading, Notice, PageHeader, SearchField, Skeleton, useToast } from '../ui';
+import { CARD_SIZES, buildLanyardPdf, downloadPdf, loadLogoPng } from '../lanyards/pdf';
+import { Button, Choice, EmptyState, Field, Icon, LoadError, Loading, Notice, PageHeader, SearchField, Segmented, Skeleton, useToast } from '../ui';
+import { PHOTO_MARKER_WORDS } from './LanyardSettings';
 import { useEvent } from './EventLayout';
 
 /** People › Print lanyards: issue cards and download them as a PDF. */
@@ -18,6 +20,9 @@ export function Lanyards() {
   const [group, setGroup] = useState('');
   const [size, setSize] = useState<CardSize>('lanyard');
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  const [doubleSided, setDoubleSided] = useState(true);
+  const [side, setSide] = useState<'front' | 'back'>('front');
+  const [onlyNoPhotos, setOnlyNoPhotos] = useState(false);
   const back = { to: `${eventBase}/people`, label: 'People' };
 
   const load = useCallback(async () => {
@@ -39,7 +44,10 @@ export function Lanyards() {
   }, [load]);
 
   const groups = useMemo(() => [...new Set((cards ?? []).map((c) => c.groupName))].filter(Boolean).sort(), [cards]);
-  const shown = (cards ?? []).filter((c) => (!group || c.groupName === group) && (!query || `${c.name} ${c.shortCode}`.toLowerCase().includes(query.toLowerCase())));
+  const shown = (cards ?? []).filter(
+    (c) => (!group || c.groupName === group) && (!onlyNoPhotos || c.noPhotos) && (!query || `${c.name} ${c.shortCode}`.toLowerCase().includes(query.toLowerCase())),
+  );
+  const noPhotoCount = (cards ?? []).filter((c) => c.noPhotos).length;
   const selected = shown.filter((c) => !excluded.has(c.registrationId));
 
   async function issueMissing() {
@@ -54,10 +62,10 @@ export function Lanyards() {
 
   async function makePdf() {
     try {
-      const bytes = await buildLanyardPdf(selected, size, event.name);
+      const bytes = await buildLanyardPdf(selected, size, event.name, { marker: event.lanyard, doubleSided, logoPng: doubleSided ? await loadLogoPng(event.logoUrl) : null });
       const slug = event.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
       downloadPdf(bytes, `${slug}-${size === 'lanyard' ? 'lanyards' : 'cards'}.pdf`);
-      toast(`PDF ready with ${selected.length} lanyards. Print at 100% (actual size).`);
+      toast(`PDF ready with ${selected.length} lanyards. Print at 100% (actual size)${doubleSided ? ', both sides, flip on the long edge' : ''}.`);
     } catch {
       toast("The PDF couldn't be made. Try fewer lanyards at a time.", { tone: 'error' });
     }
@@ -67,7 +75,7 @@ export function Lanyards() {
     <PageHeader
       title="Print lanyards"
       back={back}
-      summary="Each lanyard has a QR code and a typed backup code."
+      summary="Each lanyard has a QR code and a typed backup code. The back has the camp's logo."
       primary={
         cards &&
         cards.length > 0 && (
@@ -144,6 +152,23 @@ export function Lanyards() {
                 </select>
               </Field>
               <fieldset className="field">
+                <legend className="field-label">Print</legend>
+                <div className="choices">
+                  <Choice
+                    label="Both sides"
+                    description={event.logoUrl ? 'Each front page is followed by its backs, with the camp logo. Print double-sided, flip on the long edge.' : 'The backs show the camp name. Add a logo to the camp to print it on the back.'}
+                    checked={doubleSided}
+                    onChange={(e) => {
+                      setDoubleSided(e.target.checked);
+                      if (!e.target.checked) setSide('front');
+                    }}
+                  />
+                  {noPhotoCount > 0 && (
+                    <Choice label={`Only people without photo consent (${noPhotoCount})`} checked={onlyNoPhotos} onChange={(e) => setOnlyNoPhotos(e.target.checked)} />
+                  )}
+                </div>
+              </fieldset>
+              <fieldset className="field">
                 <legend className="field-label">Size</legend>
                 <div className="choices">
                   {(Object.keys(CARD_SIZES) as CardSize[]).map((k) => (
@@ -168,6 +193,24 @@ export function Lanyards() {
               </Button>
             </div>
             <p className="meta">Print on A4 at 100% (actual size) and cut along the dashed lines. Keep spare lanyards secure: a lanyard is enough to be scanned as that person.</p>
+            {event.features.photo && (
+              <p className="meta">
+                No photo consent: {PHOTO_MARKER_WORDS[event.lanyard.photoMarker].toLowerCase()}
+                {event.lanyard.photoMarkerLabel ? ', with "No photos" on the band' : ''}.{' '}
+                {can('event.configure') && <Link to={`${eventBase}/settings/lanyards`}>Change how it's shown</Link>}
+              </p>
+            )}
+            {doubleSided && (
+              <Segmented
+                label="Preview"
+                value={side}
+                onChange={setSide}
+                options={[
+                  { value: 'front', label: 'Front' },
+                  { value: 'back', label: 'Back' },
+                ]}
+              />
+            )}
 
             <ul className={`card-grid card-grid-${size}`}>
               {shown.map((c) => {
@@ -177,7 +220,11 @@ export function Lanyards() {
                     <label className={on ? 'card-pick is-on' : 'card-pick'}>
                       <input type="checkbox" checked={on} onChange={() => toggle(c.registrationId)} />
                       <span className="visually-hidden">Include {c.name}</span>
-                      <LanyardCard card={c} eventName={event.name} size={size} />
+                      {side === 'back' ? (
+                        <LanyardBack card={c} size={size} marker={event.lanyard} eventName={event.name} logoUrl={event.logoUrl} />
+                      ) : (
+                        <LanyardCard card={c} size={size} marker={event.lanyard} />
+                      )}
                     </label>
                   </li>
                 );

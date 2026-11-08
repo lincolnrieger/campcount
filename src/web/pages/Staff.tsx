@@ -27,6 +27,7 @@ import {
   useToast,
 } from '../ui';
 import { useEvent } from './EventLayout';
+import { dayInZone, dayLabel, timeInZone } from '../../shared/time';
 
 interface StaffRow {
   assignmentId: string;
@@ -65,6 +66,7 @@ function RolePicker({
   name: string;
 }) {
   const role = roles.find((r) => r.key === roleKey);
+  const { event } = useEvent();
   return (
     <>
       <fieldset className="field">
@@ -76,14 +78,16 @@ function RolePicker({
         </div>
       </fieldset>
       {role?.scope === 'activity' && (
-        <Field id={`${name}-activity`} label="Activity" hint="Leaders only see and scan the activity you choose.">
+        <Field id={`${name}-activity`} label="Activity or team event" hint="Leaders only see the people, teams and check-ins for the one you choose.">
           <select className="select" value={activityId} onChange={(e) => onChange(roleKey, e.target.value)}>
             <option value="">All activities</option>
-            {activities.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
+            {activities
+              .filter((a) => a.kind !== 'program' && (a.status === 'active' || a.id === activityId))
+              .map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.startsAt ? `${a.name} · ${dayLabel(dayInZone(a.startsAt, event.timezone))}, ${timeInZone(a.startsAt, event.timezone)}` : a.name}
+                </option>
+              ))}
           </select>
         </Field>
       )}

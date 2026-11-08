@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
-import type { ContextType, Direction } from '../../shared/scanRules';
+import type { ContextType, Direction, PersonState } from '../../shared/scanRules';
 import { matchesSearch, searchRank } from '../../shared/search';
-import { api } from '../api';
 import { useSyncStatus } from '../offline/sync';
 import { createDetector } from '../scan/decoder';
-import { rememberLastScan } from '../scan/targets';
-import type { Feedback, ScanInput, SnapshotPerson } from '../scan/useScanSession';
+import { rememberLastScan, useEventSummary } from '../scan/targets';
+import type { Feedback, ScanInput, Snapshot, SnapshotPerson } from '../scan/useScanSession';
 import { useScanSession } from '../scan/useScanSession';
 import { useSession } from '../session';
 import { useTitle } from '../shell';
-import { Button, Icon, IconButton, Loading, Menu, Notice, Progress, SearchField, Segmented, Sheet, Skeleton, SkeletonRows, useConfirm } from '../ui';
+import { Badge, Button, ButtonLink, Icon, IconButton, Loading, Notice, Progress, SearchField, Segmented, Sheet, Skeleton, SkeletonRows, useConfirm } from '../ui';
+import { scanOnly } from './EventLayout';
 
 const SAME_CODE_COOLDOWN_MS = 3000;
 const TZ = 'Australia/Adelaide';
@@ -71,6 +71,26 @@ function SyncChip() {
 
 const RESULT_ICON = { ok: 'check', warn: 'warning', stop: 'cross' } as const;
 
+const isAllergy = (alert: string) => /allergy|anaphyla/i.test(alert);
+
+/**
+ * Dietary needs, impossible to miss: a solid red block across the result,
+ * so the person serving sees it before they hand over a plate.
+ */
+function DietaryAlert({ alert }: { alert: string }) {
+  const allergy = isAllergy(alert);
+  return (
+    <div className="diet-alert" role="alert">
+      <p className="diet-alert-word">
+        <Icon name="warning" size={24} />
+        {allergy ? 'Allergy' : 'Dietary needs'}
+      </p>
+      <p className="diet-alert-text">{alert.replace(/^allergy:\s*/i, '')}</p>
+      <p className="diet-alert-note">Check their food before serving.</p>
+    </div>
+  );
+}
+
 /** The big answer after each scan: icon, word and name. Announced to screen readers. */
 function ScanResult({ feedback, contextType }: { feedback: Feedback | null; contextType: ContextType }) {
   if (!feedback) {
@@ -82,6 +102,7 @@ function ScanResult({ feedback, contextType }: { feedback: Feedback | null; cont
     );
   }
   const p = feedback.person;
+  const alert = contextType === 'meal' ? p?.dietaryAlert : null;
   return (
     <div className={`scan-result scan-result-${feedback.tone}`} role={feedback.tone === 'stop' ? 'alert' : 'status'} aria-atomic="true">
       <p className="scan-result-word">
@@ -92,25 +113,12 @@ function ScanResult({ feedback, contextType }: { feedback: Feedback | null; cont
       {p && <p className="scan-result-meta">{[p.group, p.section].filter(Boolean).join(' · ')}</p>}
       {feedback.message && <p>{feedback.message}</p>}
       {feedback.warning && <p>{feedback.warning}</p>}
-      {(p?.noPhotos || (contextType === 'meal' && p?.dietaryAlert)) && (
-        <div className="scan-flags">
-          {p?.noPhotos && (
-            <p className="scan-flag">
-              <Icon name="eye" size={16} />
-              No photos
-            </p>
-          )}
-          {contextType === 'meal' && p?.dietaryAlert && (
-            <p className={/allergy/i.test(p.dietaryAlert) ? 'scan-flag scan-flag-allergy' : 'scan-flag'}>
-              <Icon name="warning" size={16} />
-              <span>
-                <strong>{/allergy/i.test(p.dietaryAlert) ? 'Allergy: ' : 'Dietary: '}</strong>
-                {p.dietaryAlert.replace(/^allergy:\s*/i, '')}
-                <span className="scan-flag-note"> Check the food yourself.</span>
-              </span>
-            </p>
-          )}
-        </div>
+      {alert && <DietaryAlert alert={alert} />}
+      {p?.noPhotos && (
+        <p className="scan-flag">
+          <Icon name="eye" size={16} />
+          No photos
+        </p>
       )}
     </div>
   );
@@ -128,9 +136,13 @@ export function Scan() {
   const navigate = useNavigate();
   const confirm = useConfirm();
   const station = me?.kind === 'station';
+  const eventSummary = useEventSummary(me?.kind === 'user' ? eventId : null);
+  // People who only scan live in the scanner: no close button, their account is a tab.
+  const scanOnlyUser = me?.kind === 'user' && eventSummary !== null && scanOnly(eventSummary);
   useTitle(session.snapshot ? `Scan: ${session.snapshot.context.type === 'site' ? 'Gate' : session.snapshot.context.name}` : 'Scan');
 
-  const [sheet, setSheet] = useState<'none' | 'name' | 'eaten'>('none');
+  const [sheet, setSheet] = useState<'none' | 'name'>('none');
+  const [tab, setTab] = useState<'scan' | 'list' | 'account'>('scan');
   const [direction, setDirection] = useState<Direction>('in');
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [camera, setCamera] = useState<'off' | 'starting' | 'on' | 'denied' | 'unavailable'>('off');
@@ -152,12 +164,13 @@ export function Scan() {
       try {
         const result = await session.record(input, direction);
         setFeedback(result);
-        signal(result.tone, sound);
+        // A dietary alert at a meal always gets the long buzz, even when the scan went through.
+        signal(type === 'meal' && result.person?.dietaryAlert ? 'stop' : result.tone, sound);
       } catch {
         // A scan is already being processed, or the list is still loading.
       }
     },
-    [session, direction, sound],
+    [session, direction, sound, type],
   );
   useEffect(() => {
     recordRef.current = record;
@@ -242,6 +255,19 @@ export function Scan() {
   useEffect(() => {
     void import('jsqr');
   }, []);
+  // The camera rests while another tab is open, and comes back with the Scan tab.
+  const cameraWasOn = useRef(false);
+  useEffect(() => {
+    if (tab !== 'scan') {
+      if (streamRef.current) {
+        cameraWasOn.current = true;
+        stopCamera();
+      }
+    } else if (cameraWasOn.current) {
+      cameraWasOn.current = false;
+      void startRef.current();
+    }
+  }, [tab, stopCamera]);
 
   const counts = useMemo(() => {
     const values = [...session.states.map.values()];
@@ -291,13 +317,13 @@ export function Scan() {
       ? `${counts.present} of ${counts.total} served`
       : ctx.type === 'site'
         ? `${counts.present} on site · ${counts.people} of ${counts.total} arrived`
-        : `${counts.people} ${counts.people === 1 ? 'person' : 'people'} so far${twoWay ? ` · ${counts.present} here now` : ''}`;
-
+        : `${counts.people} checked in${twoWay ? ` · ${counts.present} here now` : ''}`;
+  const listLabel = ctx.type === 'meal' ? 'Eaten' : ctx.type === 'site' ? 'On site' : 'Checked in';
   return (
     <div className="scanner">
       <div className="scanner-inner">
         <header className="scanner-head">
-          {!station && (
+          {!station && !scanOnlyUser && (
             <IconButton label="Close scanner" onClick={close}>
               <Icon name="close" size={24} />
             </IconButton>
@@ -312,96 +338,103 @@ export function Scan() {
         </header>
         <SyncChip />
 
-        <div className="scanner-body">
-          <div className="scanner-camera">
-            {twoWay && (
-              <Segmented
-                block
-                label="Scan direction"
-                value={direction}
-                onChange={setDirection}
-                options={[
-                  { value: 'in', label: ctx.type === 'site' ? 'Arriving' : 'Signing in' },
-                  { value: 'out', label: ctx.type === 'site' ? 'Leaving' : 'Signing out' },
-                ]}
-              />
-            )}
-            <div className={camera === 'on' ? 'viewfinder is-live' : 'viewfinder'}>
-              <video ref={videoRef} playsInline muted aria-hidden="true" />
-              {camera !== 'on' && (
-                <div className="viewfinder-cover">
-                  {camera === 'denied' ? (
-                    <p>The camera is blocked. Allow it for this site in your browser's settings, or use Find by name.</p>
-                  ) : camera === 'unavailable' ? (
-                    <p>This browser can't use the camera. Use Find by name instead.</p>
-                  ) : (
-                    <Button kind="primary" onClick={() => void startCamera()} busy={camera === 'starting'} busyLabel="Starting camera…">
-                      <Icon name="camera" />
-                      Start camera
-                    </Button>
-                  )}
-                </div>
+        <div className="scanner-body" hidden={tab !== 'scan'}>
+            <div className="scanner-camera">
+              {twoWay && (
+                <Segmented
+                  block
+                  label="Scan direction"
+                  value={direction}
+                  onChange={setDirection}
+                  options={[
+                    { value: 'in', label: ctx.type === 'site' ? 'Arriving' : 'Signing in' },
+                    { value: 'out', label: ctx.type === 'site' ? 'Leaving' : 'Signing out' },
+                  ]}
+                />
               )}
-              {camera === 'on' && <span className="viewfinder-guide" aria-hidden="true" />}
+              <div className={camera === 'on' ? 'viewfinder is-live' : 'viewfinder'}>
+                <video ref={videoRef} playsInline muted aria-hidden="true" />
+                {camera !== 'on' && (
+                  <div className="viewfinder-cover">
+                    {camera === 'denied' ? (
+                      <p>The camera is blocked. Allow it for this site in your browser's settings, or use Find by name.</p>
+                    ) : camera === 'unavailable' ? (
+                      <p>This browser can't use the camera. Use Find by name instead.</p>
+                    ) : (
+                      <Button kind="primary" onClick={() => void startCamera()} busy={camera === 'starting'} busyLabel="Starting camera…">
+                        <Icon name="camera" />
+                        Start camera
+                      </Button>
+                    )}
+                  </div>
+                )}
+                {camera === 'on' && <span className="viewfinder-guide" aria-hidden="true" />}
+              </div>
+              {session.fromCache && <p className="scanner-note">Using the list saved on this phone. Scans from other phones show up once you have signal.</p>}
             </div>
-            {session.fromCache && <p className="scanner-note">Using the list saved on this phone. Scans from other phones show up once you have signal.</p>}
-          </div>
 
-          <div className="scanner-side">
-            <ScanResult feedback={feedback} contextType={ctx.type} />
-            <div className="scanner-progress">
-              <p className="num">{progressText}</p>
-              {counts.total > 0 && ctx.type !== 'activity' && <Progress value={progressValue} max={counts.total} />}
-            </div>
-            <div className="scanner-actions">
+            <div className="scanner-side">
+              <ScanResult feedback={feedback} contextType={ctx.type} />
+              <div className="scanner-progress">
+                <p className="num">{progressText}</p>
+                {counts.total > 0 && ctx.type !== 'activity' && <Progress value={progressValue} max={counts.total} />}
+              </div>
               <Button block onClick={() => setSheet('name')}>
                 <Icon name="search" />
                 Find by name
               </Button>
-              {ctx.type === 'meal' && (
-                <Button block onClick={() => setSheet('eaten')}>
-                  Who hasn't eaten
-                </Button>
-              )}
-              {camera === 'on' && (
-                <Button block kind="ghost" onClick={stopCamera}>
-                  Stop camera
-                </Button>
-              )}
             </div>
-            {session.entries.length > 0 && (
-              <section className="scanner-recent" aria-labelledby="recent-heading">
-                <h2 id="recent-heading">Last scans</h2>
-                <ol>
-                  {[...session.entries]
-                    .reverse()
-                    .slice(0, 5)
-                    .map((e) => {
-                      const person = e.registrationId ? session.snapshot!.people.find((p) => p.id === e.registrationId) : null;
-                      const result = e.server ?? e.local;
-                      return (
-                        <li key={e.id} className={result.outcome === 'accepted' ? undefined : 'is-problem'}>
-                          <span className="num">{clock(e.createdAt)}</span>
-                          <strong>{person?.fullName ?? person?.name ?? 'Unknown card'}</strong>
-                          <span>
-                            {result.outcome === 'accepted' ? '' : <Icon name="warning" size={16} />}
-                            {result.message}
-                            {e.synced ? '' : ' · waiting'}
-                          </span>
-                        </li>
-                      );
-                    })}
-                </ol>
-              </section>
-            )}
-            {station && (
-              <div className="scanner-station">
-                <Menu label="Station options" items={[{ label: 'Unpair this device', onSelect: () => void signOut(), danger: true }]} />
+          </div>
+
+        {tab === 'list' && <WhoList snapshot={session.snapshot} states={session.states.map} />}
+
+        {tab === 'account' && (
+          <div className="scanner-account">
+            {me?.kind === 'user' && (
+              <div>
+                <p className="row-title">{me.user.displayName}</p>
+                <p className="meta">{me.user.email}</p>
               </div>
             )}
+            {station ? (
+              <>
+                <p>This phone is a scanning station. It only scans {ctx.type === 'site' ? 'the gate' : ctx.name}.</p>
+                <Button block onClick={() => void signOut()}>
+                  Unpair this device
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button block onClick={() => navigate(`/scan?event=${eventId}&pick=1`)}>
+                  <Icon name="scan" />
+                  Scan something else
+                </Button>
+                <ButtonLink block to="/account">
+                  Account settings
+                </ButtonLink>
+                <Button block kind="ghost" onClick={() => void signOut()}>
+                  Sign out
+                </Button>
+              </>
+            )}
           </div>
-        </div>
+        )}
       </div>
+
+      <nav className="scanner-tabs" aria-label="Scanner">
+        {(
+          [
+            { key: 'scan', label: 'Scan', icon: 'scan' },
+            { key: 'list', label: listLabel, icon: 'check' },
+            { key: 'account', label: 'Account', icon: 'user' },
+          ] as const
+        ).map((t) => (
+          <button key={t.key} type="button" aria-current={tab === t.key ? 'page' : undefined} onClick={() => setTab(t.key)}>
+            <Icon name={t.icon} size={24} />
+            <span>{t.label}</span>
+          </button>
+        ))}
+      </nav>
 
       <Sheet open={sheet === 'name'} title="Find by name" onClose={() => setSheet('none')}>
         <FindByName
@@ -422,11 +455,6 @@ export function Scan() {
           }}
         />
       </Sheet>
-      {ctx.type === 'meal' && ctx.id && (
-        <Sheet open={sheet === 'eaten'} title="Who hasn't eaten" onClose={() => setSheet('none')}>
-          <WhoHasEaten eventId={eventId} mealId={ctx.id} refreshKey={session.entries.length} />
-        </Sheet>
-      )}
     </div>
   );
 }
@@ -512,61 +540,70 @@ function FindByName({ people, onPick, onCode }: { people: SnapshotPerson[]; onPi
   );
 }
 
-/** For the meal team: who has and hasn't eaten at this meal. Needs signal. */
-function WhoHasEaten({ eventId, mealId, refreshKey }: { eventId: string; mealId: string; refreshKey: number }) {
-  type Row = { id: string; name: string; group: string; servedAt: string | null };
-  const [data, setData] = useState<{ people: Row[] } | null>(null);
-  const [show, setShow] = useState<'not' | 'eaten'>('not');
+/**
+ * Who has and hasn't been scanned here: eaten / not yet at a meal, checked in
+ * / not yet at an activity, on site / not arrived at the gate. Built from the
+ * list saved on this phone plus its own scans, so it works with no signal.
+ */
+function WhoList({ snapshot, states }: { snapshot: Snapshot; states: Map<string, PersonState> }) {
+  const ctx = snapshot.context;
+  const [show, setShow] = useState<'not' | 'done'>('not');
   const [q, setQ] = useState('');
-  const [offline, setOffline] = useState(false);
-  useEffect(() => {
-    api<{ people: Row[] }>(`/events/${eventId}/meals/${mealId}/served`)
-      .then((d) => {
-        setData(d);
-        setOffline(false);
-      })
-      .catch(() => setOffline(true));
-  }, [eventId, mealId, refreshKey]);
-  if (!data)
-    return offline ? (
-      <Notice tone="warning">
-        <p>This list needs signal. Scanning still works without it.</p>
-      </Notice>
-    ) : (
-      <Loading what="who has eaten" rows={5} />
-    );
-  const eaten = data.people.filter((p) => p.servedAt);
-  const notYet = data.people.filter((p) => !p.servedAt);
-  const list = (show === 'eaten' ? eaten : notYet).filter((p) => matchesSearch(q, p.name));
+  const people = snapshot.people.filter((p) => !p.withdrawn);
+  // At an activity with bookings, "Not yet" is who's booked and hasn't come. Otherwise it's everyone.
+  const bookings = ctx.type === 'activity' && people.some((p) => p.booked);
+  const done = people.filter((p) => (states.get(p.id)?.visits ?? 0) > 0);
+  const notYet = people.filter((p) => (states.get(p.id)?.visits ?? 0) === 0 && (!bookings || p.booked));
+  const words =
+    ctx.type === 'meal'
+      ? { not: 'Not yet', done: 'Eaten', allDone: 'Everyone has eaten.', none: 'No one has eaten yet.' }
+      : ctx.type === 'site'
+        ? { not: 'Not arrived', done: 'Arrived', allDone: 'Everyone has arrived.', none: 'No one has arrived yet.' }
+        : { not: bookings ? 'Booked, not here' : 'Not yet', done: 'Checked in', allDone: 'Everyone booked has checked in.', none: 'No one has checked in yet.' };
+  const name = (p: SnapshotPerson) => p.fullName ?? p.name;
+  const list = (show === 'done' ? done : notYet)
+    .filter((p) => matchesSearch(q, name(p), p.memberNumber))
+    .sort((a, b) => (show === 'done' ? (states.get(b.id)?.lastAcceptedAt ?? '').localeCompare(states.get(a.id)?.lastAcceptedAt ?? '') : name(a).localeCompare(name(b))));
+  const status = (p: SnapshotPerson) => {
+    const s = states.get(p.id);
+    if (!s?.lastAcceptedAt) return null;
+    if (ctx.type === 'activity' && ctx.rules.type === 'activity' && ctx.rules.trackSignOut) return s.present ? 'Here' : 'Left';
+    if (ctx.type === 'site') return s.present ? 'On site' : 'Left';
+    return null;
+  };
   return (
-    <>
+    <div className="scanner-list">
       <Segmented
         block
         label="Show"
         value={show}
         onChange={setShow}
         options={[
-          { value: 'not', label: `Not yet (${notYet.length})` },
-          { value: 'eaten', label: `Eaten (${eaten.length})` },
+          { value: 'not', label: `${words.not} (${notYet.length})` },
+          { value: 'done', label: `${words.done} (${done.length})` },
         ]}
       />
-      <SearchField id="eaten-q" label="Search names" value={q} onChange={setQ} />
-      {offline && <p className="meta">No signal: showing the last list loaded.</p>}
+      <SearchField id="who-q" label="Search names" value={q} onChange={setQ} />
       {list.length === 0 ? (
-        <p className="meta">{show === 'not' ? 'Everyone has eaten.' : 'No one yet.'}</p>
+        <p className="meta">{q ? `No one matches "${q}".` : show === 'not' ? words.allDone : words.none}</p>
       ) : (
         <ul className="list">
-          {list.map((p) => (
-            <li key={p.id} className="row">
-              <span className="row-main">
-                <span className="row-title">{p.name}</span>
-                <span className="row-meta">{p.group}</span>
-              </span>
-              {p.servedAt && <span className="meta num">{clock(p.servedAt)}</span>}
-            </li>
-          ))}
+          {list.map((p) => {
+            const s = states.get(p.id);
+            const st = status(p);
+            return (
+              <li key={p.id} className="row">
+                <span className="row-main">
+                  <span className="row-title">{name(p)}</span>
+                  <span className="row-meta">{[p.group, st].filter(Boolean).join(' · ')}</span>
+                </span>
+                {ctx.type === 'meal' && p.dietaryAlert && <Badge tone="error">{isAllergy(p.dietaryAlert) ? 'Allergy' : 'Dietary'}</Badge>}
+                {s?.lastAcceptedAt && <span className="meta num">{clock(s.lastAcceptedAt)}</span>}
+              </li>
+            );
+          })}
         </ul>
       )}
-    </>
+    </div>
   );
 }

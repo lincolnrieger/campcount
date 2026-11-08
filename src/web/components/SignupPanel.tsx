@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Badge, Button, SearchField } from '../ui';
 import { matchesSearch } from '../../shared/search';
 import { dayInZone, dayLabel, timeRange } from '../../shared/time';
+import type { ParticipantTeamEvent } from './TeamsPanel';
 
 export interface SignupSession {
   id: string;
@@ -23,6 +24,8 @@ export interface SignupView {
   bookings: { activityId: string; name: string; location: string; startsAt: string | null; endsAt: string | null; canCancel: boolean }[];
   /** The whole camp programme (activities, meals and programme items). */
   programme?: ProgrammeItem[];
+  /** Team events (Soccer, Basketball…) and the person's own teams. */
+  teamEvents?: ParticipantTeamEvent[];
 }
 
 export interface ProgrammeItem {

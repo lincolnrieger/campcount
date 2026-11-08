@@ -16,7 +16,10 @@ meal scanning that keeps working with patchy signal, and close-out reports.
 - Events with per-event features and a draft → open → completed → archived
   lifecycle
 - MyScout import (.xlsx/CSV) filtered in the browser, with dietary review
-- QR lanyards (print four per A4) with typed backup codes; card replacement
+- QR lanyards (print four per A4, double-sided with the camp logo) with typed
+  backup codes; a marker for no photo consent, chosen in Settings › Lanyards
+- Team events (Soccer, Basketball…): people make and join teams from their
+  lanyard link or the sign-up kiosk, within team size limits
 - Scanning for activities, meals and on-site, working offline, on personal
   phones or paired shared stations
 - Live dashboard, reconciliation, close-out, CSV exports, paper roll sheets

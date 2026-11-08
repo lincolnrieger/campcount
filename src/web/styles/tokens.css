@@ -73,11 +73,6 @@
 
   --focus: #1F5FA8;          /* focus ring: 6.4:1 on white */
 
-  /* ---------- Scanner (dark, full-screen) ---------- */
-  --scan-bg: #0E1210;
-  --scan-ink: #FFFFFF;
-  --scan-ink-2: #C9D1CD;     /* 12:1 on --scan-bg */
-
   /* ---------- Motion ---------- */
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --duration: 150ms;

@@ -68,44 +68,25 @@
   max-width: 24rem;
 }
 
-/* ---------- Scanner (full screen, dark) ---------- */
+/* ---------- Scanner (full screen, light: readable in sun) ---------- */
 .scanner {
   min-height: 100dvh;
-  background: var(--scan-bg);
-  color: var(--scan-ink);
+  background: var(--surface);
+  color: var(--ink);
 }
 .scanner-inner {
   display: grid;
   gap: var(--space-4);
   max-width: var(--content-max);
   margin: 0 auto;
-  padding: var(--space-2) var(--space-4) calc(var(--space-7) + env(safe-area-inset-bottom));
-}
-.scanner .icon-btn {
-  color: var(--scan-ink);
-}
-.scanner .icon-btn:hover {
-  background: rgb(255 255 255 / 0.12);
-  color: var(--scan-ink);
-}
-.scanner .btn-secondary {
-  background: transparent;
-  color: var(--scan-ink);
-  border-color: var(--scan-ink-2);
-}
-.scanner .btn-secondary:hover {
-  background: rgb(255 255 255 / 0.12);
-}
-.scanner .btn-ghost {
-  color: var(--scan-ink);
-}
-.scanner .btn-ghost:hover {
-  background: rgb(255 255 255 / 0.12);
+  padding: var(--space-2) var(--space-4) calc(var(--control-lg) + var(--space-5) + env(safe-area-inset-bottom));
 }
 .scanner-head {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: var(--border-width) solid var(--divider);
 }
 .scanner-title {
   flex: 1;
@@ -118,7 +99,7 @@
 }
 .scanner-event {
   font-size: var(--text-sm);
-  color: var(--scan-ink-2);
+  color: var(--ink-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -132,8 +113,8 @@
   border-radius: var(--radius);
   font-size: var(--text-sm);
   font-weight: var(--weight-bold);
-  background: rgb(255 255 255 / 0.08);
-  color: var(--scan-ink-2);
+  background: var(--surface-sunken);
+  color: var(--ink-2);
 }
 .sync-warn {
   background: var(--warning-bg);
@@ -152,26 +133,21 @@
   gap: var(--space-3);
   align-content: start;
 }
-.scanner .segmented {
-  background: rgb(255 255 255 / 0.08);
-  border-color: var(--scan-ink-2);
-}
-.scanner .segmented label {
-  color: var(--scan-ink);
-}
-.scanner .segmented label:has(input:checked) {
-  background: var(--scan-ink);
-  color: var(--scan-bg);
-}
 .viewfinder {
   position: relative;
   aspect-ratio: 1;
-  max-height: 60dvh;
+  /* Leaves room for the result under it on a phone. */
+  max-height: 40dvh;
   width: 100%;
   margin: 0 auto;
   overflow: hidden;
+  border: var(--border-width) solid var(--border-control);
   border-radius: var(--radius);
-  background: #000;
+  background: var(--surface-sunken);
+}
+.viewfinder.is-live {
+  border-color: var(--brand);
+  background: var(--surface);
 }
 .viewfinder video {
   width: 100%;
@@ -185,18 +161,18 @@
   place-items: center;
   padding: var(--space-5);
   text-align: center;
-  color: var(--scan-ink-2);
+  color: var(--ink-2);
 }
 .viewfinder-guide {
   position: absolute;
   inset: 18%;
-  border: 3px solid rgb(255 255 255 / 0.85);
+  border: 3px solid #fff;
   border-radius: var(--radius);
-  box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.25);
+  box-shadow: 0 0 0 100vmax rgb(255 255 255 / 0.35);
 }
 .scanner-note {
   font-size: var(--text-sm);
-  color: var(--scan-ink-2);
+  color: var(--ink-2);
 }
 .scanner-side {
   display: grid;
@@ -209,9 +185,10 @@
   min-height: 8.5rem;
   align-content: center;
   padding: var(--space-4);
+  border: var(--border-width) solid var(--divider);
   border-radius: var(--radius);
-  background: rgb(255 255 255 / 0.08);
-  color: var(--scan-ink);
+  background: var(--canvas);
+  color: var(--ink);
 }
 .scan-result-word {
   display: flex;
@@ -226,110 +203,121 @@
   font-weight: var(--weight-bold);
   line-height: var(--leading-tight);
   overflow-wrap: anywhere;
+  color: var(--ink);
 }
 .scan-result-meta {
   font-size: var(--text-sm);
 }
 .scan-result-idle .scan-result-meta {
-  color: var(--scan-ink-2);
+  color: var(--ink-2);
   font-size: var(--text-base);
 }
 .scan-result-ok {
+  border-color: var(--success-border);
   background: var(--success-bg);
   color: var(--success-fg);
 }
 .scan-result-warn {
+  border-color: var(--warning-border);
   background: var(--warning-bg);
   color: var(--warning-fg);
 }
 .scan-result-stop {
+  border-color: var(--error-border);
   background: var(--error-bg);
   color: var(--error-fg);
 }
-.scan-result-ok .scan-result-name,
-.scan-result-warn .scan-result-name,
-.scan-result-stop .scan-result-name {
-  color: var(--ink);
-}
-.scan-flags {
-  display: grid;
-  gap: var(--space-2);
-  margin-top: var(--space-2);
-}
 .scan-flag {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  justify-self: start;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border: var(--border-width) solid var(--warning-border);
+  margin-top: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 2px solid var(--ink);
   border-radius: var(--radius);
   background: var(--surface);
-  color: var(--warning-fg);
+  color: var(--ink);
+  font-weight: var(--weight-bold);
 }
-.scan-flag .icon {
-  margin-top: 3px;
-  flex: none;
+/* Dietary needs at a meal: solid red, full width, big words. */
+.diet-alert {
+  display: grid;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius);
+  background: var(--error-solid);
+  color: #fff;
 }
-.scan-flag-allergy {
-  border: 2px solid var(--error-solid);
-  color: var(--error-fg);
+.diet-alert-word {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
-.scan-flag-note {
-  color: var(--ink-2);
+.diet-alert-text {
+  font-size: var(--text-display);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  overflow-wrap: anywhere;
+}
+.diet-alert-note {
+  font-weight: var(--weight-bold);
 }
 .scanner-progress {
   display: grid;
   gap: var(--space-2);
   font-weight: var(--weight-bold);
 }
-.scanner .progress {
-  background: rgb(255 255 255 / 0.15);
-}
-.scanner-actions {
+.scanner-list,
+.scanner-account {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-4);
+  align-content: start;
+  max-width: var(--form-max);
 }
-.scanner-recent h2 {
+/* Scan · Eaten · Account, along the bottom like the app's tab bar. */
+.scanner-tabs {
+  position: fixed;
+  inset: auto 0 0;
+  z-index: var(--z-nav);
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding-bottom: env(safe-area-inset-bottom);
+  border-top: var(--border-width) solid var(--divider);
+  background: var(--surface);
+}
+.scanner-tabs button {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 2px;
+  min-height: var(--control-lg);
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
   font-size: var(--text-sm);
-  color: var(--scan-ink-2);
-  margin-bottom: var(--space-2);
+  font-weight: var(--weight-bold);
+  cursor: pointer;
 }
-.scanner-recent ol {
-  list-style: none;
-  padding: 0;
-  display: grid;
-}
-.scanner-recent li {
-  display: grid;
-  grid-template-columns: 3.5rem 1fr;
-  gap: 0 var(--space-3);
-  padding: var(--space-2) 0;
-  border-top: var(--border-width) solid rgb(255 255 255 / 0.12);
-}
-.scanner-recent li > span:first-child {
-  grid-row: span 2;
-  color: var(--scan-ink-2);
-}
-.scanner-recent li > span:last-child {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--text-sm);
-  color: var(--scan-ink-2);
-}
-.scanner-recent li.is-problem > span:last-child {
-  color: #F9C97A; /* on --scan-bg: 11.6:1 */
-}
-.scanner-station {
-  display: flex;
-  justify-content: flex-end;
+.scanner-tabs button[aria-current='page'] {
+  color: var(--brand);
+  box-shadow: inset 0 3px 0 var(--brand);
 }
 .scanner .notice {
   color: var(--ink);
 }
 @media (min-width: 1024px) {
   .scanner-inner {
-    padding: var(--space-4) var(--space-6) var(--space-7);
+    padding: var(--space-4) var(--space-6) calc(var(--control-lg) + var(--space-6));
+  }
+  .viewfinder {
+    max-height: 60dvh;
   }
   .scanner-body {
     grid-template-columns: minmax(0, 30rem) minmax(0, 1fr);

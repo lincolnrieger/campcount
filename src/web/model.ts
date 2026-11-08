@@ -18,7 +18,32 @@ export interface Activity {
   booked: number;
   /** 'program': on the schedule only, never booked or scanned. */
   kind: 'activity' | 'program';
+  /** People enter as teams; set up on the Teams tab. */
+  teamEvent?: boolean;
   status: 'active' | 'cancelled';
+}
+
+export interface TeamMember {
+  registrationId: string;
+  name: string;
+  groupName: string;
+  section: string;
+  source: 'manual' | 'self_signup';
+}
+
+export interface TeamEvent {
+  id: string;
+  name: string;
+  description: string;
+  location: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  status: 'active' | 'cancelled';
+  minSize: number;
+  maxSize: number | null;
+  maxTeams: number | null;
+  registrationOpen: boolean;
+  teams: { id: string; name: string; members: TeamMember[] }[];
 }
 
 export interface Meal {

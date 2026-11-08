@@ -67,7 +67,8 @@ export function Activities() {
       </>
     );
 
-  const all = (data?.activities ?? []).filter((a) => a.kind !== 'program' && (manager || a.status === 'active'));
+  // Managers find team events on the Teams tab; their leaders see them here with their other activities.
+  const all = (data?.activities ?? []).filter((a) => a.kind !== 'program' && !(manager && a.teamEvent) && (manager || a.status === 'active'));
   if (all.length === 0)
     return (
       <>

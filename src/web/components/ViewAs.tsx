@@ -2,10 +2,15 @@ import { useEffect, useState } from 'react';
 import { ApiFailure, api } from '../api';
 import { clearDevice } from '../offline/db';
 import { useSession } from '../session';
+import { dayInZone, dayLabel, timeInZone } from '../../shared/time';
 import { Badge, Button, Loading, Notice, Sheet } from '../ui';
 
+/** "Sat 6 Dec, 9:30am · Kayaking": activities often run several sessions with the same name. */
+const activityLabel = (a: { name: string; startsAt: string | null; timezone: string }) =>
+  a.startsAt ? `${a.name} · ${dayLabel(dayInZone(a.startsAt, a.timezone))}, ${timeInZone(a.startsAt, a.timezone)}` : `${a.name} · any time`;
+
 interface Options {
-  events: { id: string; name: string; isDemo: boolean; status: string; activities: { id: string; name: string }[] }[];
+  events: { id: string; name: string; isDemo: boolean; status: string; activities: { id: string; name: string; startsAt: string | null; timezone: string }[] }[];
   roles: { key: string; name: string; description: string; scope: 'event' | 'activity' }[];
 }
 
@@ -27,6 +32,7 @@ export function ViewAsForm({ initialEventId }: { initialEventId?: string }) {
   const [eventId, setEventId] = useState(initialEventId ?? '');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [activityId, setActivityId] = useState('');
   const current = me?.kind === 'user' ? me.preview : null;
 
   useEffect(() => {
@@ -97,22 +103,31 @@ export function ViewAsForm({ initialEventId }: { initialEventId?: string }) {
             {options.roles.map((r) => {
               const isCurrent = current?.eventId === eventId && current.roleKey === r.key;
               if (r.scope === 'activity' && event && event.activities.length > 0) {
+                const chosen = activityId || (isCurrent && current?.activityId) || '';
+                const selectId = `viewas-activity-${r.key}`;
                 return (
                   <li key={r.key} className="row viewas-role">
                     <span className="row-main">
                       <span className="row-title">{r.name}</span>
-                      <span className="row-meta">Choose an activity</span>
-                      <span className="viewas-activities">
-                        {event.activities.map((a) => {
-                          const on = isCurrent && current?.activityId === a.id;
-                          return (
-                            <Button key={a.id} small kind={on ? 'primary' : 'secondary'} aria-current={on || undefined} disabled={busy} onClick={() => void choose(r.key, a.id)}>
-                              {a.name}
-                            </Button>
-                          );
-                        })}
+                      <span className="row-meta">{r.description}</span>
+                      <span className="viewas-activity">
+                        <label htmlFor={selectId} className="visually-hidden">
+                          Activity for {r.name}
+                        </label>
+                        <select id={selectId} className="select" value={chosen} onChange={(e) => setActivityId(e.target.value)}>
+                          <option value="">Every activity</option>
+                          {event.activities.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {activityLabel(a)}
+                            </option>
+                          ))}
+                        </select>
+                        <Button kind={isCurrent ? 'secondary' : 'primary'} disabled={busy} onClick={() => void choose(r.key, chosen || null)}>
+                          View as {r.name.toLowerCase()}
+                        </Button>
                       </span>
                     </span>
+                    {isCurrent && <Badge tone="brand">Viewing</Badge>}
                   </li>
                 );
               }

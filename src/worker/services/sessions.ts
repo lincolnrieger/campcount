@@ -3,6 +3,7 @@ import type { Env } from '../env';
 import { randomToken, sha256Hex } from '../lib/crypto';
 import { addDays, addMinutes, nowIso } from '../lib/time';
 import type { AssignmentGrant, Principal, UserPrincipal } from './principal';
+import { isPlatformAdmin, managedEventIds, mayPreview } from './principal';
 
 export const SESSION_COOKIE = '__Host-cc_session';
 export const USER_SESSION_DAYS = 7;
@@ -143,12 +144,12 @@ export async function loadUserPrincipal(env: Env, userId: string): Promise<UserP
 }
 
 /**
- * Replace an admin's grants with a single previewed role. Only honoured while
- * the real account still holds platform.users.manage.
+ * Replace a user's grants with a single previewed role. Only honoured while
+ * the real account is a platform admin, or still runs the event and holds
+ * everything the role does there.
  */
 async function applyPreview(env: Env, principal: UserPrincipal, session: SessionRow): Promise<UserPrincipal | null> {
-  const isAdmin = principal.grants.some((g) => g.eventId === null && g.permissions.has('platform.users.manage'));
-  if (!isAdmin) return null;
+  if (!isPlatformAdmin(principal) && !managedEventIds(principal).has(session.preview_event_id!)) return null;
   const row = await env.DB.prepare(
     `SELECT e.id AS event_id, e.name AS event_name, r.key AS role_key, r.name AS role_name,
             a.id AS activity_id, a.name AS activity_name, group_concat(rp.permission) AS permissions
@@ -162,6 +163,9 @@ async function applyPreview(env: Env, principal: UserPrincipal, session: Session
     .bind(session.preview_event_id, session.preview_role_id, session.preview_activity_id)
     .first<{ event_id: string; event_name: string; role_key: string; role_name: string; activity_id: string | null; activity_name: string | null; permissions: string | null }>();
   if (!row) return null;
+  const permissions = new Set((row.permissions ?? '').split(',').filter(Boolean) as Permission[]);
+  // Re-checked on every request, so losing the event manager role ends the preview too.
+  if (!mayPreview(principal, row.event_id, permissions)) return null;
   return {
     ...principal,
     grants: [
@@ -170,7 +174,7 @@ async function applyPreview(env: Env, principal: UserPrincipal, session: Session
         roleKey: row.role_key,
         eventId: row.event_id,
         activityId: row.activity_id,
-        permissions: new Set((row.permissions ?? '').split(',').filter(Boolean) as Permission[]),
+        permissions,
       },
     ],
     preview: {

@@ -11,6 +11,8 @@ import { auditStatement } from '../services/audit';
 import { hashToken } from '../services/credentials';
 import { contextState, loadContext } from '../services/contexts';
 import { can } from '../services/principal';
+import { addMember, createTeam, participantTeams, removeMember, teamEventRow, teamRow } from '../services/teams';
+import { teamNameSchema } from '../../shared/schemas';
 
 /**
  * Activity sign-up. People book activity sessions themselves:
@@ -53,6 +55,7 @@ async function sessions(db: D1Database, eventId: string): Promise<SignupSession[
               (SELECT count(*) FROM activity_bookings b WHERE b.activity_id = a.id) AS booked
          FROM activities a
         WHERE a.event_id = ? AND a.status = 'active' AND a.signup_open = 1 AND a.kind = 'activity'
+          AND NOT EXISTS (SELECT 1 FROM team_events t WHERE t.activity_id = a.id)
         ORDER BY a.starts_at IS NULL, a.starts_at, a.name COLLATE NOCASE`,
     )
     .bind(eventId)
@@ -156,7 +159,7 @@ async function programme(db: D1Database, eventId: string) {
 }
 
 async function personView(c: AppContext, p: Person) {
-  const [list, booked, programmeList] = await Promise.all([
+  const [list, booked, programmeList, teams] = await Promise.all([
     sessions(c.env.DB, p.event.id),
     c.env.DB.prepare(
       `SELECT b.activity_id, b.source, a.name, a.location, a.starts_at, a.ends_at
@@ -166,6 +169,7 @@ async function personView(c: AppContext, p: Person) {
       .bind(p.registrationId)
       .all<{ activity_id: string; source: string; name: string; location: string; starts_at: string | null; ends_at: string | null }>(),
     programme(c.env.DB, p.event.id),
+    participantTeams(c.env.DB, p.event.id, p.registrationId),
   ]);
   return {
     pass: await makePass(c, p.registrationId),
@@ -174,14 +178,15 @@ async function personView(c: AppContext, p: Person) {
     open: signupOpen(p.event),
     sessions: list,
     programme: programmeList,
+    teamEvents: teamsOpen(p.event) ? teams : [],
     bookings: booked.results.map((b) => ({
       activityId: b.activity_id,
       name: b.name,
       location: b.location,
       startsAt: b.starts_at,
       endsAt: b.ends_at,
-      // Bookings made by the event team can only be changed by them.
-      canCancel: b.source === 'self_signup',
+      // Bookings made by the event team, and team places (changed on the Teams tab), can only be changed there.
+      canCancel: b.source === 'self_signup' && !teams.some((t) => t.id === b.activity_id),
     })),
   };
 }
@@ -247,7 +252,8 @@ publicSignupRoutes.post('/book', async (c) => {
   const person = await personFor(c, await readPass(c, pass));
   if (!signupOpen(person.event)) throw conflict('Activity sign-up is closed.');
   const activity = await c.env.DB.prepare(
-    `SELECT id, name, starts_at, ends_at, capacity FROM activities WHERE id = ? AND event_id = ? AND status = 'active' AND signup_open = 1`,
+    `SELECT id, name, starts_at, ends_at, capacity FROM activities WHERE id = ? AND event_id = ? AND status = 'active' AND signup_open = 1
+        AND NOT EXISTS (SELECT 1 FROM team_events t WHERE t.activity_id = activities.id)`,
   )
     .bind(activityId, person.event.id)
     .first<{ id: string; name: string; starts_at: string | null; ends_at: string | null; capacity: number | null }>();
@@ -310,6 +316,90 @@ publicSignupRoutes.post('/cancel', async (c) => {
       targetType: 'registration',
       targetId: person.registrationId,
       detail: { activityId },
+    }).run();
+  }
+  return c.json(await personView(c, person));
+});
+
+// ---------------------------------------------------------------- teams (participants)
+
+/** Teams can be made and joined while the event is a draft or open; each team event also has its own open/closed switch. */
+const teamsOpen = (e: SignupEvent) => e.status === 'open' || e.status === 'draft';
+
+async function openTeamEvent(c: AppContext, person: Person, activityId: string) {
+  if (!teamsOpen(person.event)) throw conflict('Team sign-up is closed.');
+  const te = await teamEventRow(c.env.DB, person.event.id, activityId);
+  if (!te || te.status !== 'active') throw notFound();
+  if (te.registration_open !== 1) throw conflict(`Teams for ${te.name} are closed. Ask a leader.`);
+  return te;
+}
+
+async function notAlreadyOnATeam(c: AppContext, activityId: string, registrationId: string) {
+  const mine = await c.env.DB.prepare(
+    `SELECT t.name FROM team_members m JOIN teams t ON t.id = m.team_id WHERE m.activity_id = ? AND m.registration_id = ?`,
+  )
+    .bind(activityId, registrationId)
+    .first<{ name: string }>();
+  if (mine) throw conflict(`You're already on ${mine.name}. Leave it first.`);
+}
+
+const teamCreateSchema = z.strictObject({ pass: z.string().max(200), activityId: z.uuid(), name: teamNameSchema.shape.name });
+const teamJoinSchema = z.strictObject({ pass: z.string().max(200), teamId: z.uuid() });
+
+/** Make a new team, with yourself on it. */
+publicSignupRoutes.post('/team/create', async (c) => {
+  const { pass, activityId, name } = await parseBody(c, teamCreateSchema);
+  await limitByIp(c, 'signup-book');
+  const person = await personFor(c, await readPass(c, pass));
+  const te = await openTeamEvent(c, person, activityId);
+  await notAlreadyOnATeam(c, activityId, person.registrationId);
+  const teamId = await createTeam(c.env.DB, person.event.id, te, name);
+  try {
+    await addMember(c.env.DB, person.event.id, { id: teamId, activity_id: activityId, name }, te, person.registrationId, 'self_signup');
+  } catch (err) {
+    await c.env.DB.prepare(`DELETE FROM teams WHERE id = ?`).bind(teamId).run();
+    throw err;
+  }
+  await auditStatement(c.env.DB, { actor: { type: 'public' }, action: 'team.self_create', eventId: person.event.id, targetType: 'team', targetId: teamId, detail: { activityId } }).run();
+  return c.json(await personView(c, person));
+});
+
+publicSignupRoutes.post('/team/join', async (c) => {
+  const { pass, teamId } = await parseBody(c, teamJoinSchema);
+  await limitByIp(c, 'signup-book');
+  const person = await personFor(c, await readPass(c, pass));
+  const team = await teamRow(c.env.DB, person.event.id, teamId);
+  if (!team) throw notFound();
+  const te = await openTeamEvent(c, person, team.activity_id);
+  await notAlreadyOnATeam(c, team.activity_id, person.registrationId);
+  await addMember(c.env.DB, person.event.id, team, te, person.registrationId, 'self_signup');
+  await auditStatement(c.env.DB, {
+    actor: { type: 'public' },
+    action: 'team.self_join',
+    eventId: person.event.id,
+    targetType: 'registration',
+    targetId: person.registrationId,
+    detail: { teamId },
+  }).run();
+  return c.json(await personView(c, person));
+});
+
+/** Leave your team. A team nobody is left on goes too. */
+publicSignupRoutes.post('/team/leave', async (c) => {
+  const { pass, teamId } = await parseBody(c, teamJoinSchema);
+  await limitByIp(c, 'signup-book');
+  const person = await personFor(c, await readPass(c, pass));
+  const team = await teamRow(c.env.DB, person.event.id, teamId);
+  if (!team) throw notFound();
+  await openTeamEvent(c, person, team.activity_id);
+  if (await removeMember(c.env.DB, person.event.id, team.id, team.activity_id, person.registrationId, true)) {
+    await auditStatement(c.env.DB, {
+      actor: { type: 'public' },
+      action: 'team.self_leave',
+      eventId: person.event.id,
+      targetType: 'registration',
+      targetId: person.registrationId,
+      detail: { teamId },
     }).run();
   }
   return c.json(await personView(c, person));
@@ -437,7 +527,11 @@ signupRoutes.get('/activities/:activityId/attendance', async (c) => {
   const principal = requirePermission(c, 'activity.view_roster', { eventId, activityId: activityId.data });
   const ctx = await loadContext(c.env.DB, eventId, 'activity', activityId.data);
   const [activity, people, bookings, state] = await Promise.all([
-    c.env.DB.prepare(`SELECT name, location, instructions, starts_at, ends_at, capacity, capacity_policy, track_sign_out, signup_open, booking_required, status FROM activities WHERE id = ?`)
+    c.env.DB.prepare(
+      `SELECT name, location, instructions, starts_at, ends_at, capacity, capacity_policy, track_sign_out, signup_open, booking_required, status,
+              EXISTS (SELECT 1 FROM team_events t WHERE t.activity_id = activities.id) AS team_event
+         FROM activities WHERE id = ?`,
+    )
       .bind(activityId.data)
       .first<Record<string, string | number | null>>(),
     c.env.DB.prepare(
@@ -482,6 +576,7 @@ signupRoutes.get('/activities/:activityId/attendance', async (c) => {
       trackSignOut: activity!.track_sign_out === 1,
       signupOpen: activity!.signup_open === 1,
       bookingRequired: activity!.booking_required === 1,
+      teamEvent: activity!.team_event === 1,
       status: activity!.status,
     },
     presentNow: state.presentNow,

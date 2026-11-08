@@ -21,7 +21,7 @@ export function Account() {
   if (me?.kind !== 'user') return null;
   const user = me.user;
   const isAdmin = me.platformPermissions.includes('platform.users.manage');
-  const canViewAs = isAdmin || me.preview !== null;
+  const canViewAs = isAdmin || me.preview !== null || Boolean(me.canViewAs);
 
   async function saveName(e: FormEvent) {
     e.preventDefault();

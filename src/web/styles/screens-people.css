@@ -131,7 +131,8 @@
 }
 .card-pick input {
   position: absolute;
-  top: var(--space-2);
+  /* Bottom corner, clear of the band where "No photos" prints. */
+  bottom: var(--space-2);
   right: var(--space-2);
   z-index: 2;
   width: 1.5rem;
@@ -159,9 +160,125 @@
   aspect-ratio: 90 / 120;
 }
 .card-band {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2cqw;
   padding: 7cqw 5.5cqw 2.5cqw;
-  font-size: 7cqw;
+  font-size: 8cqw;
   font-weight: var(--weight-bold);
+}
+/* No photo consent: a thick frame inside the cut line (black, or the colour chosen in Settings › Lanyards). */
+.card-preview {
+  position: relative;
+}
+/* Drawn on a layer inside the card so it sizes against the card (cqw), like the 3.5 mm printed frame. */
+.card-preview.has-frame::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 3.9cqw solid var(--frame);
+  pointer-events: none;
+}
+.card-badge.has-frame::after {
+  border-width: 2.9cqw;
+}
+.card-marker {
+  display: inline-flex;
+  align-items: center;
+  gap: 1.5cqw;
+  font-size: 3.6cqw;
+  line-height: 1;
+}
+.card-marker .no-camera {
+  width: 9cqw;
+  height: 9cqw;
+}
+.card-dot {
+  width: 9cqw;
+  height: 9cqw;
+  border: 0.8cqw solid #fff;
+  border-radius: 50%;
+  background: #d0021b;
+}
+.card-badge .card-marker {
+  font-size: 2.8cqw;
+}
+.card-badge .card-dot,
+.card-badge .card-marker .no-camera {
+  width: 6cqw;
+  height: 6cqw;
+}
+.card-back {
+  display: grid;
+}
+/* Sized inside the card (cqw is the card's width here, not the page's). */
+.card-back-inner {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 4cqw;
+  padding: 8cqw;
+  text-align: center;
+}
+.card-back-lanyard {
+  aspect-ratio: 90 / 120;
+}
+.card-back-badge {
+  aspect-ratio: 86 / 54;
+}
+.card-back-badge .card-back-inner {
+  grid-template-columns: 40cqw 1fr;
+  align-items: center;
+  justify-items: start;
+  padding: 5cqw;
+  text-align: left;
+}
+.card-back-logo {
+  width: 70cqw;
+  height: auto;
+  max-height: 70cqw;
+  object-fit: contain;
+}
+.card-back-badge .card-back-logo {
+  width: 36cqw;
+  max-height: 36cqw;
+}
+.card-back-name {
+  font-size: 6cqw;
+  font-weight: var(--weight-bold);
+  line-height: 1.15;
+}
+.card-back-note {
+  margin-top: 1.5cqw;
+  color: #444;
+  font-size: 3.4cqw;
+}
+.card-back-badge .card-back-name {
+  font-size: 4.5cqw;
+}
+.card-back-badge .card-back-note {
+  font-size: 2.6cqw;
+}
+.lanyard-settings {
+  display: grid;
+  gap: var(--space-5);
+  align-items: start;
+}
+.lanyard-sample {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 16rem;
+}
+.input-colour {
+  width: 6rem;
+  padding: var(--space-1);
+}
+@media (min-width: 1024px) {
+  .lanyard-settings {
+    grid-template-columns: minmax(0, var(--form-max)) 16rem;
+    gap: var(--space-6);
+  }
 }
 .card-body {
   display: grid;
@@ -195,12 +312,6 @@
   font-weight: var(--weight-bold);
   letter-spacing: 0.12em;
 }
-.card-foot {
-  padding: 0 4cqw 3cqw;
-  color: #444;
-  font-size: 2.8cqw;
-  text-align: center;
-}
 .card-badge {
   display: grid;
   grid-template-rows: auto 1fr;
@@ -208,7 +319,7 @@
 }
 .card-badge .card-band {
   padding: 2cqw 4.5cqw;
-  font-size: 5cqw;
+  font-size: 5.5cqw;
 }
 .card-badge-body {
   display: grid;

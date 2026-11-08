@@ -61,6 +61,32 @@ export function Stations() {
   }
 
   const list = stations.data?.stations ?? [];
+  const finished = list.filter((s) => s.state !== 'active' && s.state !== 'waiting');
+
+  /** Delete stations from the list. Their scans stay in the reports. */
+  async function remove(targets: Station[]) {
+    const one = targets.length === 1 ? targets[0]! : null;
+    const live = targets.some((s) => s.state === 'active' || s.state === 'waiting');
+    const ok = await confirm({
+      title: one ? `Delete ${one.name}?` : `Delete ${targets.length} finished stations?`,
+      body: (
+        <p>
+          {live ? 'It is signed out straight away. ' : ''}
+          {one ? 'It' : 'They'} won't show here any more. Scans already made stay in the reports.
+        </p>
+      ),
+      confirm: one ? 'Delete station' : 'Delete stations',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      for (const s of targets) await api(`/events/${event.id}/stations/${s.id}/remove`, { body: {} });
+      toast(one ? `${one.name} deleted` : `${targets.length} stations deleted`);
+    } catch (err) {
+      toast(fail(err), { tone: 'error' });
+    }
+    await stations.reload();
+  }
   const add = (
     <Button kind="primary" onClick={() => setPanel({ kind: 'add' })}>
       Set up station
@@ -86,6 +112,17 @@ export function Stations() {
           Most camps only need one, for the meal hall.
         </EmptyState>
       ) : (
+        <>
+        {finished.length > 1 && (
+          <div className="toolbar">
+            <p>
+              <strong>{finished.length}</strong> finished stations
+            </p>
+            <Button small kind="ghost" onClick={() => void remove(finished)}>
+              Delete finished stations
+            </Button>
+          </div>
+        )}
         <ul className="list">
           {list.map((s) => {
             const live = s.state === 'active' || s.state === 'waiting';
@@ -122,6 +159,7 @@ export function Stations() {
                           }
                         },
                       },
+                      { label: 'Delete station…', danger: true, onSelect: () => void remove([s]) },
                     ]}
                   />
                 </span>
@@ -129,6 +167,7 @@ export function Stations() {
             );
           })}
         </ul>
+        </>
       )}
 
       <Sheet open={panel?.kind === 'add'} title="Set up station" onClose={() => setPanel(null)}>

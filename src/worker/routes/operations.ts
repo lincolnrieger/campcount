@@ -55,6 +55,8 @@ function activityDto(r: Record<string, unknown>) {
     bookingRequired: r.booking_required === 1,
     signupOpen: r.signup_open === 1,
     kind: r.kind ?? 'activity',
+    /** People enter as teams (Teams tab). */
+    teamEvent: r.team_event === 1,
     booked: (r.booked as number | undefined) ?? 0,
     status: r.status,
   };
@@ -64,7 +66,8 @@ operationsRoutes.get('/activities', async (c) => {
   const eventId = c.req.param('eventId')!;
   const principal = requirePermission(c, 'event.view', { eventId });
   const { results } = await c.env.DB.prepare(
-    `SELECT a.*, (SELECT count(*) FROM activity_bookings b WHERE b.activity_id = a.id) AS booked
+    `SELECT a.*, (SELECT count(*) FROM activity_bookings b WHERE b.activity_id = a.id) AS booked,
+            EXISTS (SELECT 1 FROM team_events t WHERE t.activity_id = a.id) AS team_event
        FROM activities a WHERE a.event_id = ? ORDER BY a.starts_at IS NULL, a.starts_at, a.name COLLATE NOCASE`,
   )
     .bind(eventId)
@@ -265,7 +268,7 @@ operationsRoutes.get('/stations', async (c) => {
        FROM stations s
        LEFT JOIN activities a ON a.id = s.context_id AND s.context_type = 'activity'
        LEFT JOIN meal_services m ON m.id = s.context_id AND s.context_type = 'meal'
-      WHERE s.event_id = ? ORDER BY s.created_at DESC`,
+      WHERE s.event_id = ? AND s.deleted_at IS NULL ORDER BY s.created_at DESC`,
   )
     .bind(eventId)
     .all<Record<string, string | null>>();
@@ -353,6 +356,29 @@ operationsRoutes.delete('/stations/:stationId', async (c) => {
   return c.json({ ok: true });
 });
 
+/**
+ * Delete a station from the list. Scans it recorded stay in the reports (they
+ * point at it), so it is hidden rather than removed. A station that is still
+ * running is signed out first.
+ */
+operationsRoutes.post('/stations/:stationId/remove', async (c) => {
+  const eventId = c.req.param('eventId')!;
+  const stationId = uuidParam(c.req.param('stationId'));
+  requirePermission(c, 'stations.manage', { eventId });
+  const user = requireUser(c);
+  const now = nowIso();
+  const [update] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE stations SET deleted_at = ?, revoked_at = COALESCE(revoked_at, ?), pairing_code_hash = NULL
+        WHERE id = ? AND event_id = ? AND deleted_at IS NULL`,
+    ).bind(now, now, stationId, eventId),
+    c.env.DB.prepare(`UPDATE sessions SET revoked_at = ? WHERE station_id = ? AND revoked_at IS NULL`).bind(now, stationId),
+    auditStatement(c.env.DB, { actor: { type: 'user', id: user.userId }, action: 'station.delete', eventId, targetType: 'station', targetId: stationId }),
+  ]);
+  if (update!.meta.changes !== 1) throw notFound();
+  return c.json({ ok: true });
+});
+
 /** Rename a station or change what it scans. A paired device switches on its next refresh. */
 operationsRoutes.patch('/stations/:stationId', async (c) => {
   const eventId = c.req.param('eventId')!;
@@ -360,7 +386,7 @@ operationsRoutes.patch('/stations/:stationId', async (c) => {
   requirePermission(c, 'stations.manage', { eventId });
   const user = requireUser(c);
   const input = await parseBody(c, stationPatchSchema);
-  const station = await c.env.DB.prepare(`SELECT context_type, context_id FROM stations WHERE id = ? AND event_id = ?`)
+  const station = await c.env.DB.prepare(`SELECT context_type, context_id FROM stations WHERE id = ? AND event_id = ? AND deleted_at IS NULL`)
     .bind(stationId, eventId)
     .first<{ context_type: 'activity' | 'meal' | 'site'; context_id: string | null }>();
   if (!station) throw notFound();
@@ -407,7 +433,7 @@ operationsRoutes.post('/stations/:stationId/reopen', async (c) => {
   const [update] = await c.env.DB.batch([
     c.env.DB.prepare(
       `UPDATE stations SET revoked_at = NULL, paired_at = NULL, pairing_code_hash = ?, pairing_expires_at = ?, expires_at = ?
-        WHERE id = ? AND event_id = ?`,
+        WHERE id = ? AND event_id = ? AND deleted_at IS NULL`,
     ).bind(await sha256Hex(`pair:${code}`), addMinutes(now, PAIRING_MINUTES), addMinutes(now, hours * 60), stationId, eventId),
     c.env.DB.prepare(`UPDATE sessions SET revoked_at = ? WHERE station_id = ? AND revoked_at IS NULL`).bind(now, stationId),
     auditStatement(c.env.DB, { actor: { type: 'user', id: user.userId }, action: 'station.reopen', eventId, targetType: 'station', targetId: stationId, detail: { hours } }),
