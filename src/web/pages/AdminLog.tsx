@@ -87,6 +87,7 @@ const ACTIONS: Record<string, string> = {
   'credentials.issue': 'issued lanyard cards',
   'credentials.replace': 'replaced lanyard cards',
   'credentials.print': 'opened lanyard cards',
+  'credentials.links': 'opened participant links',
   'scan.void': 'undid a scan',
   'reconciliation.sign_out_all': 'signed everyone out of',
   'export.download': 'downloaded a report',

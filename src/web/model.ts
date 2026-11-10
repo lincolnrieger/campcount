@@ -53,6 +53,8 @@ export interface Meal {
   startsAt: string | null;
   endsAt: string | null;
   status: 'active' | 'cancelled';
+  menu: string;
+  ingredients: string;
 }
 
 export interface Registration {

@@ -104,6 +104,7 @@ export function Roster() {
       menu={[
         can('roster.import') && { label: 'Import from MyScout', to: 'import' },
         can('credentials.manage') && active.length > 0 && { label: withoutCard > 0 ? `Print lanyards (${withoutCard} new)` : 'Print lanyards', to: 'lanyards' },
+        can('credentials.manage') && active.length > 0 && { label: 'Participant links', to: 'links' },
         active.length > 0 && { label: 'Print roll sheet', to: 'roll-sheet' },
         can('roster.edit') && all.length > 0 && !selecting && { label: 'Select people to delete…', onSelect: () => setSelecting(true), danger: true },
       ]}

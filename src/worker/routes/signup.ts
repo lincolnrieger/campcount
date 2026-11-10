@@ -133,28 +133,51 @@ async function personFor(c: AppContext, registrationId: string): Promise<Person>
   };
 }
 
-/** The whole camp programme, for people looking at their own lanyard page: activities, meals and programme items. */
+/**
+ * The whole camp programme, for people looking at their own lanyard page:
+ * activities (with how many places are taken), meals (with the menu and
+ * ingredients, so people can check them against their dietary needs) and
+ * programme items.
+ */
 async function programme(db: D1Database, eventId: string) {
   const [acts, meals] = await Promise.all([
     db
-      .prepare(`SELECT name, location, starts_at, ends_at, kind, booking_required FROM activities WHERE event_id = ? AND status = 'active'`)
+      .prepare(
+        `SELECT a.name, a.location, a.starts_at, a.ends_at, a.kind, a.capacity,
+                (SELECT count(*) FROM activity_bookings b WHERE b.activity_id = a.id) AS booked
+           FROM activities a WHERE a.event_id = ? AND a.status = 'active'`,
+      )
       .bind(eventId)
-      .all<{ name: string; location: string; starts_at: string | null; ends_at: string | null; kind: string; booking_required: number }>(),
+      .all<{ name: string; location: string; starts_at: string | null; ends_at: string | null; kind: string; capacity: number | null; booked: number }>(),
     db
-      .prepare(`SELECT name, location, starts_at, ends_at FROM meal_services WHERE event_id = ? AND status = 'active'`)
+      .prepare(`SELECT name, location, starts_at, ends_at, menu, ingredients FROM meal_services WHERE event_id = ? AND status = 'active'`)
       .bind(eventId)
-      .all<{ name: string; location: string; starts_at: string | null; ends_at: string | null }>(),
+      .all<{ name: string; location: string; starts_at: string | null; ends_at: string | null; menu: string; ingredients: string }>(),
   ]);
   return [
-    ...acts.results.map((a) => ({
-      name: a.name,
-      location: a.location,
-      startsAt: a.starts_at,
-      endsAt: a.ends_at,
-      kind: a.kind === 'program' ? 'program' : 'activity',
-      bookingRequired: a.booking_required === 1,
+    ...acts.results.map((a) => {
+      const program = a.kind === 'program';
+      return {
+        name: a.name,
+        location: a.location,
+        startsAt: a.starts_at,
+        endsAt: a.ends_at,
+        kind: program ? 'program' : 'activity',
+        capacity: program ? null : a.capacity,
+        booked: program ? 0 : a.booked,
+      };
+    }),
+    ...meals.results.map((m) => ({
+      name: m.name,
+      location: m.location,
+      startsAt: m.starts_at,
+      endsAt: m.ends_at,
+      kind: 'meal',
+      capacity: null,
+      booked: 0,
+      menu: m.menu,
+      ingredients: m.ingredients,
     })),
-    ...meals.results.map((m) => ({ name: m.name, location: m.location, startsAt: m.starts_at, endsAt: m.ends_at, kind: 'meal', bookingRequired: false })),
   ].sort((x, y) => (x.startsAt ?? '').localeCompare(y.startsAt ?? '') || x.name.localeCompare(y.name));
 }
 

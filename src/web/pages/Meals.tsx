@@ -157,6 +157,15 @@ export function Meals() {
                           {[m.location || null, s && s.expected ? `${s.people} of ${s.expected} served` : s ? `${s.people} served` : null].filter(Boolean).join(' · ') ||
                             (!m.startsAt && !mealDay(m) ? 'Give it a day so scanners can find it' : '')}
                         </span>
+                        {m.menu && <span className="meal-menu-text">{m.menu}</span>}
+                        {m.ingredients ? (
+                          <span className="meal-ingredients">
+                            <strong>Ingredients: </strong>
+                            {m.ingredients}
+                          </span>
+                        ) : (
+                          manage && m.status === 'active' && <span className="row-meta">No ingredients listed yet</span>
+                        )}
                         {m.status === 'cancelled' && (
                           <span>
                             <Badge>Cancelled</Badge>
@@ -343,7 +352,7 @@ function MealForm({
   meal?: Meal;
   initialDay: string;
   submitLabel: string;
-  onSubmit: (body: { name: string; location: string; startsAt: string; endsAt: string | null }) => Promise<void>;
+  onSubmit: (body: { name: string; location: string; startsAt: string; endsAt: string | null; menu: string; ingredients: string }) => Promise<void>;
   onCancel: () => void;
 }) {
   const { event } = useEvent();
@@ -354,6 +363,8 @@ function MealForm({
   const [start, setStart] = useState(meal?.startsAt ? clockInZone(meal.startsAt, tz) : '12:00');
   const [end, setEnd] = useState(meal?.endsAt ? clockInZone(meal.endsAt, tz) : '');
   const [location, setLocation] = useState(meal?.location ?? '');
+  const [menu, setMenu] = useState(meal?.menu ?? '');
+  const [ingredients, setIngredients] = useState(meal?.ingredients ?? '');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [failure, setFailure] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -369,7 +380,7 @@ function MealForm({
     setBusy(true);
     setFailure(null);
     try {
-      await onSubmit({ name: name.trim(), location: location.trim(), startsAt: zonedIso(day, start, tz), endsAt: end ? zonedIso(day, end, tz) : null });
+      await onSubmit({ name: name.trim(), location: location.trim(), startsAt: zonedIso(day, start, tz), endsAt: end ? zonedIso(day, end, tz) : null, menu: menu.trim(), ingredients: ingredients.trim() });
     } catch (err) {
       if (err instanceof ApiFailure) {
         setErrors(err.fieldErrors());
@@ -409,6 +420,18 @@ function MealForm({
       </div>
       <Field id="meal-location" label="Place" optional>
         <input className="input" value={location} onChange={(e) => setLocation(e.target.value)} autoComplete="off" />
+      </Field>
+      <Field id="meal-menu" label="Menu" optional hint="What's served, for example Spaghetti bolognese, garden salad, fruit" error={errors.menu}>
+        <textarea className="textarea" rows={2} maxLength={1000} value={menu} onChange={(e) => setMenu(e.target.value)} />
+      </Field>
+      <Field
+        id="meal-ingredients"
+        label="Ingredients"
+        optional
+        hint="Everything that goes in, including sauces and dressings. Participants see this on their own page to check against their dietary needs."
+        error={errors.ingredients}
+      >
+        <textarea className="textarea" rows={4} maxLength={4000} value={ingredients} onChange={(e) => setIngredients(e.target.value)} />
       </Field>
       <div className="btn-row">
         <Button type="submit" kind="primary" busy={busy} busyLabel="Saving…">

@@ -188,3 +188,40 @@ describe('activity leaders', () => {
     expect((await api(`/events/${c.eventId}/whereabouts`, { cookie: leader.cookie })).status).toBe(403);
   });
 });
+
+describe("someone's own lanyard page", () => {
+  it('shows places taken on activities and each meal with its menu and ingredients', async () => {
+    const c = await camp();
+    await testEnv.DB.prepare(`UPDATE events SET feature_meals = 1 WHERE id = ?`).bind(c.eventId).run();
+    const meal = await api(`/events/${c.eventId}/meals`, {
+      cookie: c.manager.cookie,
+      body: { name: 'Saturday dinner', startsAt: '2026-12-05T17:30:00+10:30', menu: 'Spaghetti bolognese', ingredients: 'Wheat pasta, beef, tomato, onion' },
+    });
+    expect(meal.status).toBe(201);
+    const { meals } = await json(await api(`/events/${c.eventId}/meals`, { cookie: c.manager.cookie }));
+    expect(meals[0]).toMatchObject({ menu: 'Spaghetti bolognese', ingredients: 'Wheat pasta, beef, tomato, onion' });
+
+    await api(`/public/signup/identify`, { body: { token: c.card('200').token } }).then(json).then((v) => api('/public/signup/book', { body: { pass: v.pass, activityId: c.kayak9 } }));
+    const view = await json(await api(`/public/signup/identify`, { body: { token: c.card('100').token } }));
+    const items = view.programme as { name: string; kind: string; capacity: number | null; booked: number; menu?: string; ingredients?: string }[];
+    expect(items.find((i) => i.kind === 'meal')).toMatchObject({ name: 'Saturday dinner', menu: 'Spaghetti bolognese', ingredients: 'Wheat pasta, beef, tomato, onion' });
+    expect(items.find((i) => i.name === 'Kayaking' && i.capacity === 2)).toMatchObject({ booked: 1 });
+    expect(items.some((i) => 'bookingRequired' in i)).toBe(false);
+  });
+});
+
+describe('participant links', () => {
+  it('lists each person with the same link as their lanyard, for event managers only, and audits it', async () => {
+    const c = await camp();
+    const { links } = await json(await api(`/events/${c.eventId}/credentials/links`, { cookie: c.manager.cookie, body: {} }));
+    expect(links).toHaveLength(3);
+    const first = links.find((l: { name: string }) => l.name.startsWith('First100'));
+    expect(first.link.split('#')[1]).toBe(c.card('100').token);
+    const audit = await testEnv.DB.prepare(`SELECT count(*) AS n FROM audit_log WHERE event_id = ? AND action = 'credentials.links'`).bind(c.eventId).first<{ n: number }>();
+    expect(audit?.n).toBe(1);
+
+    const scanner = await createUser();
+    await grant(scanner.id, 'scanner', c.eventId);
+    expect((await api(`/events/${c.eventId}/credentials/links`, { cookie: scanner.cookie, body: {} })).status).toBe(403);
+  });
+});
