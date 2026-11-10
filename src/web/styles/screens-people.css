@@ -331,6 +331,90 @@
   font-size: 4cqw;
   letter-spacing: 0.05em;
 }
+/* Text the event placed itself (Settings › Lanyards › Text on the card) */
+.card-custom-text {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  font-family: Helvetica, Arial, sans-serif;
+  line-height: 1;
+  white-space: nowrap;
+}
+.card-custom-text > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card-custom-code > span {
+  padding: 0 1.5cqw;
+  background: #fff;
+}
+.card-custom-qr {
+  aspect-ratio: 1;
+  padding: 0;
+  outline: 1.2cqw solid #fff;
+}
+.card-custom-marker {
+  position: absolute;
+}
+.card-custom-marker .card-marker-text {
+  padding: 0.5cqw 1cqw;
+  background: #fff;
+  color: #000;
+  font-weight: var(--weight-bold);
+}
+.card-custom .is-editable {
+  cursor: grab;
+  touch-action: none;
+  outline: 1px dashed rgba(31, 95, 168, 0.55);
+  outline-offset: 0;
+}
+.card-custom .is-editable:active {
+  cursor: grabbing;
+}
+.card-custom .is-editable.is-selected,
+.card-custom .is-editable:focus-visible {
+  outline: 2px solid var(--focus);
+  z-index: 1;
+}
+/* Settings › Lanyards › Text on the card */
+.layout-editor {
+  display: grid;
+  gap: var(--space-5);
+  align-items: start;
+}
+@media (min-width: 900px) {
+  .layout-editor {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+.layout-editor-preview {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+.layout-editor-card {
+  width: 100%;
+}
+.layout-editor-card-lanyard {
+  max-width: 22rem;
+}
+.layout-editor-card-badge {
+  max-width: 30rem;
+}
+.layout-editor-controls {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.field-trio {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.input-number {
+  max-width: 8rem;
+}
 .template-download {
   display: grid;
   gap: var(--space-2);

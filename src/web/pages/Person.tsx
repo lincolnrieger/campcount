@@ -142,7 +142,7 @@ export function Person() {
       const { templates } = await api<{ templates: { size: string; side: string; url: string }[] }>(`/events/${event.id}/lanyard-templates`).catch(() => ({ templates: [] }));
       const url = (side: string) => templates.find((t) => t.size === 'lanyard' && t.side === side)?.url ?? null;
       const [front, back, logoPng] = await Promise.all([loadArtwork(url('front')), loadArtwork(url('back')), loadLogoPng(event.logoUrl)]);
-      const bytes = await buildLanyardPdf([card], 'lanyard', event.name, { marker: event.lanyard, doubleSided: true, logoPng, artwork: { front, back }, printBand: event.lanyard.printBand });
+      const bytes = await buildLanyardPdf([card], 'lanyard', event.name, { marker: event.lanyard, doubleSided: true, logoPng, artwork: { front, back }, printBand: event.lanyard.printBand, layout: event.lanyard.layout.lanyard });
       downloadPdf(bytes, `${fullName.replace(/\W+/g, '-')}-lanyard.pdf`);
     } catch (err) {
       fail(err);

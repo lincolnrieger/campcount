@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { canTransition } from '../../shared/lifecycle';
-import type { EventFeatures, EventStatus, LanyardSettings } from '../../shared/schemas';
-import { createEventSchema, eventTransitionSchema, updateEventSchema } from '../../shared/schemas';
+import type { EventFeatures, EventStatus, LanyardLayout, LanyardSettings } from '../../shared/schemas';
+import { cardTextLayoutSchema, createEventSchema, eventTransitionSchema, updateEventSchema } from '../../shared/schemas';
 import type { AppEnv } from '../context';
 import { parseBody, requirePermission, requirePrincipal, requireUser } from '../context';
 import { badRequest, conflict, notFound } from '../lib/errors';
@@ -37,6 +37,7 @@ export interface EventRow {
   photo_marker_colour: string;
   photo_marker_label: number;
   lanyard_print_band: number;
+  lanyard_layout: string;
   /** From event_logos, when the query includes it. */
   logo_updated_at?: string | null;
 }
@@ -49,6 +50,21 @@ const FEATURE_COLUMNS: Record<keyof EventFeatures, keyof EventRow> = {
   photo: 'feature_photo',
   selfSignup: 'feature_self_signup',
 };
+
+/** The stored text layout, dropping anything that no longer matches the schema (it then uses the built-in layout). */
+function readLayout(text: string | null | undefined): LanyardLayout {
+  let raw: Record<string, unknown> = {};
+  try {
+    raw = JSON.parse(text || '{}') as Record<string, unknown>;
+  } catch {
+    // Unreadable: fall back to the built-in layout.
+  }
+  const one = (v: unknown) => {
+    const parsed = cardTextLayoutSchema.safeParse(v);
+    return parsed.success ? parsed.data : null;
+  };
+  return { lanyard: one(raw.lanyard), badge: one(raw.badge) };
+}
 
 export function eventDto(row: EventRow) {
   return {
@@ -73,6 +89,7 @@ export function eventDto(row: EventRow) {
       photoMarkerColour: row.photo_marker_colour ?? '#B3261E',
       photoMarkerLabel: row.photo_marker_label !== 0,
       printBand: row.lanyard_print_band !== 0,
+      layout: readLayout(row.lanyard_layout),
     } satisfies LanyardSettings,
     logoUrl: row.logo_updated_at ? `/api/events/${row.id}/logo?v=${encodeURIComponent(row.logo_updated_at)}` : null,
   };
@@ -210,6 +227,7 @@ eventRoutes.patch('/:eventId', async (c) => {
   if (input.lanyard?.photoMarkerColour !== undefined) set('photo_marker_colour', input.lanyard.photoMarkerColour.toUpperCase());
   if (input.lanyard?.photoMarkerLabel !== undefined) set('photo_marker_label', input.lanyard.photoMarkerLabel ? 1 : 0);
   if (input.lanyard?.printBand !== undefined) set('lanyard_print_band', input.lanyard.printBand ? 1 : 0);
+  if (input.lanyard?.layout !== undefined) set('lanyard_layout', JSON.stringify(input.lanyard.layout));
   for (const [key, value] of Object.entries(input.features ?? {})) {
     if (value !== undefined) set(FEATURE_COLUMNS[key as keyof EventFeatures], value ? 1 : 0);
   }

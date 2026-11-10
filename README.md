@@ -18,7 +18,10 @@ meal scanning that keeps working with patchy signal, and close-out reports.
 - MyScout import (.xlsx/CSV) filtered in the browser, with dietary review
 - QR lanyards (print four per A4, double-sided) with typed backup codes. Each
   event can download a blank template, design its own artwork and upload it in
-  Settings › Lanyards; until then the built-in design is used. A marker for no
+  Settings › Lanyards; until then the built-in design is used. There, the
+  event can also place the text itself: drag the name, Leader or Youth word
+  (from each person's role), group, QR code and typed code on a preview, and
+  set each one's colour, size and alignment. The PDF prints exactly that A marker for no
   photo consent is chosen there too
 - Team events (Soccer, Basketball…): people make and join teams from their
   lanyard link or the sign-up kiosk, within team size limits

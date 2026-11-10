@@ -52,4 +52,31 @@ describe('lanyard artwork', () => {
     const after = await json(await api(`/events/${c.eventId}`, { cookie: c.manager.cookie, method: 'PATCH', body: { lanyard: { printBand: false } } }));
     expect(after.event.lanyard.printBand).toBe(false);
   });
+
+  it('saves where the name, leader or youth word, group, QR code and typed code print, per card size', async () => {
+    const c = await camp();
+    const before = await json(await api(`/events/${c.eventId}`, { cookie: c.manager.cookie }));
+    expect(before.event.lanyard.layout).toEqual({ lanyard: null, badge: null });
+
+    const text = (y: number) => ({ show: true, x: 5, y, w: 80, size: 20, colour: '#123ABC', align: 'centre', bold: true });
+    const layout = {
+      name: text(30),
+      role: { ...text(8), adultColour: '#1F4D3F', adultWord: 'Leader', youthWord: 'Youth', youthUsesSection: false },
+      group: { ...text(40), bold: false, size: 10 },
+      qr: { x: 20, y: 50, size: 50 },
+      code: { ...text(108), size: 12 },
+    };
+    const after = await json(await api(`/events/${c.eventId}`, { cookie: c.manager.cookie, method: 'PATCH', body: { lanyard: { layout: { lanyard: layout, badge: null } } } }));
+    expect(after.event.lanyard.layout).toEqual({ lanyard: layout, badge: null });
+    // Other lanyard settings are left alone.
+    expect(after.event.lanyard.printBand).toBe(true);
+
+    const bad = await api(`/events/${c.eventId}`, {
+      cookie: c.manager.cookie,
+      method: 'PATCH',
+      body: { lanyard: { layout: { lanyard: { ...layout, name: { ...layout.name, colour: 'red' } }, badge: null } } },
+    });
+    expect(bad.status).toBe(400);
+    expect((await api(`/events/${c.eventId}`, { cookie: c.scanner.cookie, method: 'PATCH', body: { lanyard: { layout: { lanyard: null, badge: null } } } })).status).toBe(403);
+  });
 });

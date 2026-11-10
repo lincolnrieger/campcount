@@ -47,6 +47,48 @@ export const eventFeaturesSchema = z.strictObject({
 export const PHOTO_MARKERS = ['black_border', 'colour_border', 'red_dot', 'camera_icon', 'none'] as const;
 export type PhotoMarker = (typeof PHOTO_MARKERS)[number];
 
+const hexColour = z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Choose a colour like #B3261E');
+/** A distance on the card in millimetres from its top or left edge. */
+const mm = z.number().min(0).max(120);
+
+/** One line of text on the card: where it sits (mm from the top-left), how wide its box is, and how it looks. */
+const textPlacementSchema = z.strictObject({
+  show: z.boolean(),
+  x: mm,
+  y: mm,
+  w: z.number().min(5).max(120),
+  /** Font size in points. Long text shrinks to fit the box. */
+  size: z.number().min(4).max(72),
+  colour: hexColour,
+  align: z.enum(['left', 'centre', 'right']),
+  bold: z.boolean(),
+});
+export type TextPlacement = z.infer<typeof textPlacementSchema>;
+
+/** Where everything prints on one card size, when the event places it itself. */
+export const cardTextLayoutSchema = z.strictObject({
+  name: textPlacementSchema,
+  /** "Leader" for adults; for young people, a word of the event's choosing or their section. */
+  role: textPlacementSchema.extend({
+    adultColour: hexColour,
+    adultWord: trimmed(24).min(1),
+    youthWord: trimmed(24).min(1),
+    /** Print the section (Scout, Venturer, Rover) for young people instead of the youth word. */
+    youthUsesSection: z.boolean(),
+  }),
+  group: textPlacementSchema,
+  qr: z.strictObject({ x: mm, y: mm, size: z.number().min(15).max(90) }),
+  code: textPlacementSchema,
+});
+export type CardTextLayout = z.infer<typeof cardTextLayoutSchema>;
+
+/** Per card size; null uses the built-in layout. */
+export const lanyardLayoutSchema = z.strictObject({
+  lanyard: cardTextLayoutSchema.nullable(),
+  badge: cardTextLayoutSchema.nullable(),
+});
+export type LanyardLayout = z.infer<typeof lanyardLayoutSchema>;
+
 export const lanyardSettingsSchema = z.strictObject({
   photoMarker: z.enum(PHOTO_MARKERS),
   photoMarkerColour: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Choose a colour like #B3261E'),
@@ -54,6 +96,8 @@ export const lanyardSettingsSchema = z.strictObject({
   photoMarkerLabel: z.boolean(),
   /** With uploaded front artwork: print the coloured section band over it (or only the section word). */
   printBand: z.boolean(),
+  /** Text the event placed itself, per card size (Settings › Lanyards › Text on the card). */
+  layout: lanyardLayoutSchema,
 });
 
 export const LANYARD_TEMPLATE_SIZES = ['lanyard', 'badge'] as const;

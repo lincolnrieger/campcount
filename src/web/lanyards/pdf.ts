@@ -1,5 +1,6 @@
 import qrcode from 'qrcode-generator';
 import type { PDFFont, PDFPage, RGB } from 'pdf-lib';
+import type { CardTextLayout, TextPlacement } from '../../shared/schemas';
 
 export interface Card {
   registrationId: string;
@@ -65,6 +66,8 @@ export interface PdfOptions {
   artwork?: { front?: Artwork | null; back?: Artwork | null };
   /** With front artwork: print the coloured section band over it, or only the section word. */
   printBand?: boolean;
+  /** Text the event placed itself for this card size. Replaces the built-in front layout (and the band). */
+  layout?: CardTextLayout | null;
 }
 
 /** A box on the card, in millimetres from the top-left corner. */
@@ -102,6 +105,79 @@ export const CARD_LAYOUT: Record<CardSize, { band: Box; punch: Box | null; name:
     frame: 2.5,
   },
 };
+
+// ---------------------------------------------------------------- text the event places itself
+
+/** Millimetres per point. */
+export const PT_MM = 25.4 / 72;
+/** Where the baseline sits below the top of a 1 em line (Helvetica / Arial with line-height 1). */
+const BASELINE_EM = 0.847;
+
+/** Starting point for "Place the text myself": the built-in positions, as editable settings. */
+export function defaultTextLayout(size: CardSize): CardTextLayout {
+  const L = CARD_LAYOUT[size];
+  const lanyard = size === 'lanyard';
+  const align = lanyard ? ('centre' as const) : ('left' as const);
+  const text = (box: Box, pt: number, bold: boolean, a = align): TextPlacement => ({
+    show: true,
+    x: box.x,
+    // Centre the line in the old box.
+    y: Math.max(0, +(box.y + (box.h - pt * PT_MM) / 2).toFixed(1)),
+    w: box.w,
+    size: pt,
+    colour: '#000000',
+    align: a,
+    bold,
+  });
+  return {
+    name: text(L.name, lanyard ? 26 : 17, true),
+    role: {
+      ...text({ x: L.name.x, y: lanyard ? 6 : 1.5, w: L.name.w, h: lanyard ? 8 : 6 }, lanyard ? 18 : 11, true, 'left'),
+      adultColour: '#1F4D3F',
+      colour: '#00843D',
+      adultWord: 'Leader',
+      youthWord: 'Youth',
+      youthUsesSection: false,
+    },
+    group: text(L.group, lanyard ? 10 : 7.5, false),
+    qr: { x: L.qr.x, y: L.qr.y, size: L.qr.w },
+    code: text(L.code, lanyard ? 12 : 10, true),
+  };
+}
+
+export type LayoutTextKey = 'name' | 'role' | 'group' | 'code';
+
+/** The word printed for someone's role: the leader word for adults, otherwise the youth word or their section. */
+export function roleWord(card: Pick<Card, 'kind' | 'section'>, role: CardTextLayout['role']): string {
+  if (card.kind === 'adult') return role.adultWord;
+  return role.youthUsesSection ? bandLabel(card) : role.youthWord;
+}
+
+/** Each line of text on a card under a custom layout, with its colour worked out. */
+export function layoutTexts(layout: CardTextLayout, card: Card): { key: LayoutTextKey; text: string; p: TextPlacement }[] {
+  const role = { ...layout.role, colour: card.kind === 'adult' ? layout.role.adultColour : layout.role.colour };
+  const all: { key: LayoutTextKey; text: string; p: TextPlacement }[] = [
+    { key: 'role', text: roleWord(card, layout.role), p: role },
+    { key: 'name', text: card.name, p: layout.name },
+    { key: 'group', text: card.groupName, p: layout.group },
+    { key: 'code', text: card.shortCode, p: { ...layout.code, show: true } },
+  ];
+  return all.filter((t) => t.p.show && t.text);
+}
+
+/** Font size that fits the text in its box: shrinks long names down to just over half the chosen size. */
+export function fitPt(text: string, p: TextPlacement, widthMm: (text: string, pt: number, bold: boolean) => number): number {
+  let pt = p.size;
+  const min = Math.max(4, p.size * 0.55);
+  while (pt > min && widthMm(text, pt, p.bold) > p.w) pt -= 0.5;
+  return pt;
+}
+
+/** Keep a box on the card. */
+export function clampToCard(size: CardSize, x: number, y: number, w: number, h: number): { x: number; y: number } {
+  const spec = CARD_SIZES[size];
+  return { x: Math.min(Math.max(0, x), Math.max(0, spec.w - w)), y: Math.min(Math.max(0, y), Math.max(0, spec.h - h)) };
+}
 
 /** The camp logo, redrawn as a PNG (the PDF library can't read WebP). Null if there isn't one or it won't load. */
 export async function loadLogoPng(url: string | null): Promise<Uint8Array | null> {
@@ -230,7 +306,55 @@ export async function buildLanyardPdf(cards: Card[], size: CardSize, eventName: 
   /** Text baseline inside a box: a little above its bottom edge. */
   const baseline = (r: { y: number; h: number }, sizePt: number) => r.y + (r.h - sizePt * 0.72) / 2;
 
+  const custom = options.layout ?? null;
+
+  /** No-photo dot / camera and "No photos" in the top-right corner, for custom layouts (there's no band). */
+  const cornerMarker = (p: PDFPage, card: Card, x: number, y: number) => {
+    if (!card.noPhotos) return;
+    const showBadge = marker.photoMarker === 'red_dot' || marker.photoMarker === 'camera_icon';
+    const r = (lanyard ? 4 : 2.6) * MM;
+    const pad = L.safe * MM;
+    let right = x + w - pad;
+    const cy = y + h - pad - r;
+    if (showBadge) {
+      badge(p, right - r, cy, r);
+      right -= 2 * r + 1.5 * MM;
+    }
+    if (marker.photoMarkerLabel) {
+      const t = 'No photos';
+      const ts = lanyard ? 9 : 7.5;
+      const tw = bold.widthOfTextAtSize(t, ts);
+      p.drawRectangle({ x: right - tw - 1 * MM, y: cy - ts * 0.36 - 1 * MM, width: tw + 2 * MM, height: ts * 0.72 + 2 * MM, color: white });
+      p.drawText(t, { x: right - tw, y: cy - ts * 0.36, size: ts, font: bold, color: black });
+    }
+  };
+
+  const customFront = (p: PDFPage, card: Card, x: number, y: number, layout: CardTextLayout) => {
+    if (frontArt) p.drawImage(frontArt, { x, y, width: w, height: h });
+    const q = layout.qr;
+    drawQr(p, card.qr, x + q.x * MM, y + h - (q.y + q.size) * MM, q.size * MM);
+    for (const t of layoutTexts(layout, card)) {
+      const font = t.p.bold ? bold : regular;
+      const text = pdfSafe(t.text);
+      const pt = fitPt(text, t.p, (s, size, b) => (b ? bold : regular).widthOfTextAtSize(s, size) / MM);
+      const shown = truncate(font, text, t.p.w * MM, pt);
+      const tw = font.widthOfTextAtSize(shown, pt);
+      const boxX = x + t.p.x * MM;
+      const tx = t.p.align === 'left' ? boxX : t.p.align === 'right' ? boxX + t.p.w * MM - tw : boxX + (t.p.w * MM - tw) / 2;
+      const lineH = t.p.size * PT_MM;
+      const top = t.p.y + (lineH - pt * PT_MM) / 2;
+      const ty = y + h - (top + pt * PT_MM * BASELINE_EM) * MM;
+      if (t.key === 'code') {
+        // Keep the typed code readable on any artwork.
+        p.drawRectangle({ x: tx - 1.5 * MM, y: y + h - (t.p.y + lineH) * MM - 0.6 * MM, width: tw + 3 * MM, height: lineH * MM + 1.2 * MM, color: white });
+      }
+      p.drawText(shown, { x: tx, y: ty, size: pt, font, color: hex(t.p.colour) });
+    }
+    cornerMarker(p, card, x, y);
+  };
+
   const front = (p: PDFPage, card: Card, x: number, y: number) => {
+    if (custom) return customFront(p, card, x, y, custom);
     const colours = bandColours(card);
     const name = pdfSafe(card.name);
     const group = pdfSafe(card.groupName);
@@ -371,7 +495,7 @@ interface Guide {
 }
 
 /** The pencilled-in guides on the blank template: where CampCount prints, and where to keep important artwork. */
-function guides(size: CardSize, side: CardSide): Guide[] {
+function guides(size: CardSize, side: CardSide, layout: CardTextLayout | null = null): Guide[] {
   const spec = CARD_SIZES[size];
   const L = CARD_LAYOUT[size];
   const card = { x: 0, y: 0, w: spec.w, h: spec.h };
@@ -382,6 +506,16 @@ function guides(size: CardSize, side: CardSide): Guide[] {
     { box: inside(L.safe), kind: 'safe', label: '' },
   ];
   if (side === 'back') return list;
+  if (layout) {
+    // The event's own layout: a box where each thing prints.
+    const line = (p: TextPlacement) => ({ x: p.x, y: p.y, w: p.w, h: p.size * PT_MM });
+    if (layout.role.show) list.push({ box: line(layout.role), kind: 'zone', label: 'Leader / youth' });
+    if (layout.name.show) list.push({ box: line(layout.name), kind: 'zone', label: 'Name' });
+    if (layout.group.show) list.push({ box: line(layout.group), kind: 'zone', label: 'Scout group' });
+    list.push({ box: { x: layout.qr.x - 1, y: layout.qr.y - 1, w: layout.qr.size + 2, h: layout.qr.size + 2 }, kind: 'keep-clear', label: 'QR code: keep this white' });
+    list.push({ box: line(layout.code), kind: 'zone', label: 'Typed code' });
+    return list;
+  }
   const lanyard = size === 'lanyard';
   list.push({ box: L.band, kind: 'zone', label: lanyard ? 'Section band: Scout / Venturer / Rover / Leader' : 'Section band' });
   if (L.punch) list.push({ box: L.punch, kind: 'keep-clear', label: '' });
@@ -411,7 +545,7 @@ const NOTES_AT: Record<CardSize, Record<CardSide, { x: number; y: number[] } | n
 };
 
 /** The blank template as a PDF: one page per side, each exactly the size of a card. Opens in Illustrator, Affinity, Canva… */
-export async function buildTemplatePdf(size: CardSize): Promise<Uint8Array> {
+export async function buildTemplatePdf(size: CardSize, layout: CardTextLayout | null = null): Promise<Uint8Array> {
   const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
   const doc = await PDFDocument.create();
   doc.setTitle(`CampCount ${size === 'lanyard' ? 'lanyard' : 'wallet card'} template`);
@@ -426,7 +560,7 @@ export async function buildTemplatePdf(size: CardSize): Promise<Uint8Array> {
   for (const side of ['front', 'back'] as const) {
     const p = doc.addPage([W, H]);
     const r = (b: Box) => ({ x: b.x * MM, y: H - (b.y + b.h) * MM, width: b.w * MM, height: b.h * MM });
-    for (const g of guides(size, side)) {
+    for (const g of guides(size, side, layout)) {
       const rect = r(g.box);
       if (g.kind === 'cut') p.drawRectangle({ ...rect, borderColor: rgb(0, 0, 0), borderWidth: 0.75 });
       else if (g.kind === 'frame') p.drawRectangle({ ...rect, borderColor: grey, borderWidth: 0.4, borderDashArray: [1, 2] });
@@ -441,7 +575,7 @@ export async function buildTemplatePdf(size: CardSize): Promise<Uint8Array> {
     }
     const tag = TAG_AT[size][side];
     p.drawText(side === 'front' ? 'FRONT' : 'BACK', { x: tag.x * MM, y: H - tag.y * MM, size: 7, font: bold, color: blue });
-    const at = NOTES_AT[size][side];
+    const at = layout && side === 'front' ? null : NOTES_AT[size][side];
     if (at)
       NOTES[side].forEach((line, i) => {
         const ts = 5;
@@ -452,7 +586,7 @@ export async function buildTemplatePdf(size: CardSize): Promise<Uint8Array> {
 }
 
 /** One side of the blank template as a 300 dpi PNG, for design tools that prefer images. */
-export async function buildTemplatePng(size: CardSize, side: CardSide): Promise<Blob> {
+export async function buildTemplatePng(size: CardSize, side: CardSide, layout: CardTextLayout | null = null): Promise<Blob> {
   const { w, h } = artworkPixels(size);
   const px = w / CARD_SIZES[size].w; // pixels per mm
   const canvas = document.createElement('canvas');
@@ -463,7 +597,7 @@ export async function buildTemplatePng(size: CardSize, side: CardSide): Promise<
   g.fillRect(0, 0, w, h);
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  for (const guide of guides(size, side)) {
+  for (const guide of guides(size, side, layout)) {
     const { x, y, w: bw, h: bh } = guide.box;
     g.setLineDash([]);
     g.lineWidth = px * 0.25;
@@ -501,7 +635,7 @@ export async function buildTemplatePng(size: CardSize, side: CardSide): Promise<
   g.fillText(side === 'front' ? 'FRONT' : 'BACK', tag.x * px, tag.y * px);
   g.textAlign = 'center';
   g.font = `${Math.round(px * 1.8)}px system-ui, sans-serif`;
-  const at = NOTES_AT[size][side];
+  const at = layout && side === 'front' ? null : NOTES_AT[size][side];
   if (at) NOTES[side].forEach((line, i) => g.fillText(line, at.x * px, at.y[i]! * px));
   return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('png'))), 'image/png'));
 }

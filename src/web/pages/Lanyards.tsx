@@ -75,6 +75,7 @@ export function Lanyards() {
         logoPng,
         artwork: { front, back: backArt },
         printBand: event.lanyard.printBand,
+        layout: event.lanyard.layout[size],
       });
       const slug = event.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
       downloadPdf(bytes, `${slug}-${size === 'lanyard' ? 'lanyards' : 'cards'}.pdf`);
@@ -240,7 +241,7 @@ export function Lanyards() {
                       {side === 'back' ? (
                         <LanyardBack card={c} size={size} marker={event.lanyard} eventName={event.name} logoUrl={event.logoUrl} artwork={art.url(size, 'back')} />
                       ) : (
-                        <LanyardCard card={c} size={size} marker={event.lanyard} artwork={art.url(size, 'front')} printBand={event.lanyard.printBand} />
+                        <LanyardCard card={c} size={size} marker={event.lanyard} artwork={art.url(size, 'front')} printBand={event.lanyard.printBand} layout={event.lanyard.layout[size]} />
                       )}
                     </label>
                   </li>
