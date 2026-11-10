@@ -339,6 +339,8 @@ function LanyardCamera({ onToken }: { onToken: (token: string) => void }) {
  * Someone's own lanyard link (the QR on their card, opened on a phone):
  * see and change their activity bookings.
  */
+type Tab = 'bookings' | 'teams' | 'programme' | 'meals';
+
 export function MyActivities() {
   useTitle('Your activities');
   // The token is in the URL fragment, which browsers never send to a server.
@@ -347,7 +349,7 @@ export function MyActivities() {
   const [failed, setFailed] = useState(false);
   const person = usePerson(setError);
   const { setView } = person;
-  const [chosenTab, setChosenTab] = useState<'bookings' | 'teams' | 'programme' | null>(null);
+  const [chosenTab, setChosenTab] = useState<Tab | null>(null);
 
   useEffect(() => {
     if (!/^[A-Za-z0-9_-]{22}$/.test(token)) {
@@ -381,8 +383,9 @@ export function MyActivities() {
   const v = person.view;
   // Start where there's something to do: bookings when there are any (or any to make), otherwise the programme.
   const tab = chosenTab ?? (v.bookings.length || (v.open && v.sessions.length) ? 'bookings' : 'programme');
-  const setTab = (t: 'bookings' | 'teams' | 'programme') => setChosenTab(t);
+  const setTab = (t: Tab) => setChosenTab(t);
   const teamEvents = v.teamEvents ?? [];
+  const meals = (v.programme ?? []).filter((i) => i.kind === 'meal');
   return (
     <Frame title={v.person.name} subtitle={`${v.event.name} · ${formatDateRange(v.event.startsOn, v.event.endsOn)}`}>
       <SignupStatus error={error} done={person.done} />
@@ -395,6 +398,7 @@ export function MyActivities() {
           { value: 'bookings', label: 'Activities' },
           ...(teamEvents.length ? [{ value: 'teams' as const, label: 'Teams' }] : []),
           { value: 'programme', label: 'Programme' },
+          ...(meals.length ? [{ value: 'meals' as const, label: 'Meals' }] : []),
         ]}
       />
       {tab === 'teams' ? (
@@ -406,6 +410,8 @@ export function MyActivities() {
           onJoin={(id, name) => person.joinTeam(id, name)}
           onLeave={(id) => person.leaveTeam(id)}
         />
+      ) : tab === 'meals' ? (
+        <MealMenus meals={meals} tz={v.event.timezone} />
       ) : tab === 'bookings' ? (
         <SignupPanel view={v} busy={person.busy} onBook={(s) => person.book(s)} onCancel={(id) => person.cancel(id)} />
       ) : (
@@ -436,8 +442,62 @@ function ProgrammeRow({ it, tz }: { it: ProgrammeItem; tz: string }) {
           {[it.endsAt ? `until ${timeInZone(it.endsAt, tz)}` : null, it.location, KIND_WORD[it.kind] || null].filter(Boolean).join(' · ')}
         </span>
       </span>
-      {it.bookingRequired && <Badge tone="brand">Book first</Badge>}
+      {it.kind === 'activity' && <Places it={it} />}
     </li>
+  );
+}
+
+/** How full an activity is: "4 of 12 places left", "Full", or how many are booked when there's no limit. */
+function Places({ it }: { it: ProgrammeItem }) {
+  if (it.capacity === null) return it.booked > 0 ? <span className="meta num">{it.booked} booked</span> : null;
+  const left = Math.max(0, it.capacity - it.booked);
+  if (left === 0) return <Badge>Full</Badge>;
+  return (
+    <span className={left <= 2 ? 'meta num programme-places is-low' : 'meta num programme-places'}>
+      {left} of {it.capacity} {it.capacity === 1 ? 'place' : 'places'} left
+    </span>
+  );
+}
+
+/** Every meal, day by day, with its menu and ingredients, so people can check them against their dietary needs. */
+function MealMenus({ meals, tz }: { meals: ProgrammeItem[]; tz: string }) {
+  const timed = meals.filter((m) => m.startsAt);
+  const untimed = meals.filter((m) => !m.startsAt);
+  const days = [...new Set(timed.map((m) => dayInZone(m.startsAt!, tz)))];
+  const groups = [...days.map((d) => ({ key: d, label: dayLabel(d, 'long'), items: timed.filter((m) => dayInZone(m.startsAt!, tz) === d) })), ...(untimed.length ? [{ key: 'other', label: 'Other meals', items: untimed }] : [])];
+  const anyDetail = meals.some((m) => m.menu || m.ingredients);
+  return (
+    <section className="signup-section" aria-labelledby="meals-heading">
+      <h2 id="meals-heading">Meals</h2>
+      <p className="meta">
+        {anyDetail
+          ? 'What each meal is and what goes into it. If something here clashes with your dietary needs, tell a leader before camp.'
+          : "The menus haven't been added yet. Check back closer to camp."}
+      </p>
+      {groups.map((g) => (
+        <div key={g.key} className="list">
+          <h3 className="list-group-heading">{g.label}</h3>
+          <ul>
+            {g.items.map((m, i) => (
+              <li key={i} className="row meal-menu">
+                <span className="programme-time num">{m.startsAt ? timeInZone(m.startsAt, tz) : ''}</span>
+                <span className="row-main">
+                  <span className="row-title">{m.name}</span>
+                  {m.location && <span className="row-meta">{m.location}</span>}
+                  {m.menu ? <span className="meal-menu-text">{m.menu}</span> : <span className="row-meta">Menu to come</span>}
+                  {m.ingredients && (
+                    <span className="meal-ingredients">
+                      <strong>Ingredients: </strong>
+                      {m.ingredients}
+                    </span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </section>
   );
 }
 
@@ -493,7 +553,6 @@ function Programme({ items, tz }: { items: ProgrammeItem[]; tz: string }) {
           </ul>
         </div>
       )}
-      {items.some((i) => i.bookingRequired) && <p className="meta">Activities marked "Book first" need a booking. Book them on the Bookings tab, or at the sign-up screen.</p>}
     </section>
   );
 }

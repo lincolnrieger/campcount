@@ -46,6 +46,7 @@ import { PageHeader, EmptyState } from './ui';
 
 // The camera, PDF and spreadsheet code is heavy: load it only on the pages that need it.
 const Scan = lazy(() => import('./pages/Scan').then((m) => ({ default: m.Scan })));
+const ParticipantLinks = lazy(() => import('./pages/ParticipantLinks').then((m) => ({ default: m.ParticipantLinks })));
 const Lanyards = lazy(() => import('./pages/Lanyards').then((m) => ({ default: m.Lanyards })));
 const LanyardSettings = lazy(() => import('./pages/LanyardSettings').then((m) => ({ default: m.LanyardSettings })));
 const Import = lazy(() => import('./pages/Import').then((m) => ({ default: m.Import })));
@@ -186,6 +187,7 @@ function EventSiteApp({ site }: { site: Extract<SiteInfo, { kind: 'event' }> }) 
             <Route path="people/import" element={<Import />} />
             <Route path="people/lanyards" element={<Lanyards />} />
             <Route path="people/roll-sheet" element={<RollSheet />} />
+            <Route path="people/links" element={<ParticipantLinks />} />
             <Route path="people/:registrationId" element={<Person />} />
             <Route path="people/:registrationId/edit" element={<PersonEdit />} />
             <Route path="activities" element={<Activities />} />
@@ -259,6 +261,7 @@ function PlatformApp() {
             <Route path="people/import" element={<Import />} />
             <Route path="people/lanyards" element={<Lanyards />} />
             <Route path="people/roll-sheet" element={<RollSheet />} />
+            <Route path="people/links" element={<ParticipantLinks />} />
             <Route path="people/:registrationId" element={<Person />} />
             <Route path="people/:registrationId/edit" element={<PersonEdit />} />
             <Route path="activities" element={<Activities />} />

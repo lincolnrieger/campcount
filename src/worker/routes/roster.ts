@@ -506,13 +506,8 @@ async function auditStatementRun(c: AppContext, a: { action: string; eventId: st
   }).run();
 }
 
-/** Cards for printing. Returns live tokens, so it is restricted and audited like an export. */
-rosterRoutes.post('/credentials/print', async (c) => {
-  const eventId = c.req.param('eventId')!;
-  requirePermission(c, 'credentials.manage', { eventId });
-  const user = requireUser(c);
-  const { registrationIds } = await parseBody(c, z.strictObject({ registrationIds: z.array(z.uuid()).max(2000).optional() }));
-
+/** Everyone's active card, with its live link. Returns live tokens, so callers are restricted and audited like an export. */
+async function activeCards(c: AppContext, eventId: string, registrationIds?: string[]) {
   const { results } = await c.env.DB.prepare(
     `SELECT r.id, p.first_name, p.preferred_name, p.last_name, r.kind, r.section, r.group_name, r.photo_consent,
             cr.short_code, cr.token_ciphertext
@@ -530,19 +525,44 @@ rosterRoutes.post('/credentials/print', async (c) => {
   const origin = new URL(c.req.url).origin;
   const event = await c.env.DB.prepare(`SELECT feature_photo FROM events WHERE id = ?`).bind(eventId).first<{ feature_photo: number }>();
   const photos = event?.feature_photo === 1 && can(c.get('principal')!, 'photo.view_status', { eventId });
-  const cards = await Promise.all(
+  return Promise.all(
     rows.map(async (r) => ({
-      registrationId: r.id,
+      registrationId: r.id!,
       name: displayName(r.first_name!, r.preferred_name!, r.last_name!),
-      kind: r.kind,
-      section: r.section,
-      groupName: r.group_name,
+      kind: r.kind!,
+      section: r.section!,
+      groupName: r.group_name!,
       shortCode: formatShortCode(r.short_code!),
       // Anyone without a "yes" is treated as no consent, the same as at the scanner.
       noPhotos: photos && r.photo_consent !== 'yes',
       qr: credentialUrl(origin, await decryptToken(c.env, r.token_ciphertext!)),
     })),
   );
+}
+
+/** Cards for printing. */
+rosterRoutes.post('/credentials/print', async (c) => {
+  const eventId = c.req.param('eventId')!;
+  requirePermission(c, 'credentials.manage', { eventId });
+  const user = requireUser(c);
+  const { registrationIds } = await parseBody(c, z.strictObject({ registrationIds: z.array(z.uuid()).max(2000).optional() }));
+  const cards = await activeCards(c, eventId, registrationIds);
   await auditStatementRun(c, { action: 'credentials.print', eventId, userId: user.userId, count: cards.length });
   return c.json({ cards });
+});
+
+/**
+ * Each person's own page link (the same link as the QR on their lanyard),
+ * for sending out by email. Live tokens, so restricted and audited like printing.
+ */
+rosterRoutes.post('/credentials/links', async (c) => {
+  const eventId = c.req.param('eventId')!;
+  requirePermission(c, 'credentials.manage', { eventId });
+  const user = requireUser(c);
+  await parseBody(c, z.strictObject({}));
+  const cards = await activeCards(c, eventId);
+  await auditStatementRun(c, { action: 'credentials.links', eventId, userId: user.userId, count: cards.length });
+  return c.json({
+    links: cards.map((x) => ({ registrationId: x.registrationId, name: x.name, kind: x.kind, section: x.section, groupName: x.groupName, shortCode: x.shortCode, link: x.qr })),
+  });
 });

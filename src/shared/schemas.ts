@@ -249,11 +249,17 @@ const mealFields = {
   location: trimmed(120),
   startsAt: isoDateTime.nullable(),
   endsAt: isoDateTime.nullable(),
+  /** What's served, for example "Spaghetti bolognese, garden salad". */
+  menu: trimmed(1000),
+  /** What goes into it, so leaders and participants can check it against dietary needs. */
+  ingredients: trimmed(4000),
 };
 
 export const mealInputSchema = z.strictObject({
   ...mealFields,
   location: mealFields.location.default(''),
+  menu: mealFields.menu.default(''),
+  ingredients: mealFields.ingredients.default(''),
   startsAt: mealFields.startsAt.default(null),
   endsAt: mealFields.endsAt.default(null),
 });

@@ -34,7 +34,12 @@ export interface ProgrammeItem {
   startsAt: string | null;
   endsAt: string | null;
   kind: 'activity' | 'meal' | 'program';
-  bookingRequired: boolean;
+  /** Activities: the place limit (null when there isn't one) and how many are booked. */
+  capacity: number | null;
+  booked: number;
+  /** Meals: what's served and what goes into it. */
+  menu?: string;
+  ingredients?: string;
 }
 
 export function placesLeft(s: SignupSession): string {

@@ -145,8 +145,8 @@ operationsRoutes.post('/program/import', async (c) => {
   for (const m of input.meals) {
     statements.push(
       c.env.DB.prepare(
-        `INSERT INTO meal_services (id, event_id, name, location, starts_at, ends_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(crypto.randomUUID(), eventId, m.name, m.location, m.startsAt, m.endsAt, now, now),
+        `INSERT INTO meal_services (id, event_id, name, location, starts_at, ends_at, menu, ingredients, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(crypto.randomUUID(), eventId, m.name, m.location, m.startsAt, m.endsAt, m.menu, m.ingredients, now, now),
     );
   }
   statements.push(
@@ -197,13 +197,22 @@ operationsRoutes.get('/meals', async (c) => {
     requirePermission(c, 'meals.manage', { eventId });
   }
   const { results } = await c.env.DB.prepare(
-    `SELECT id, name, location, starts_at, ends_at, status FROM meal_services WHERE event_id = ?
+    `SELECT id, name, location, starts_at, ends_at, status, menu, ingredients FROM meal_services WHERE event_id = ?
       ORDER BY starts_at IS NULL, starts_at, name COLLATE NOCASE`,
   )
     .bind(eventId)
     .all<Record<string, unknown>>();
   return c.json({
-    meals: results.map((m) => ({ id: m.id, name: m.name, location: m.location, startsAt: m.starts_at, endsAt: m.ends_at, status: m.status })),
+    meals: results.map((m) => ({
+      id: m.id,
+      name: m.name,
+      location: m.location,
+      startsAt: m.starts_at,
+      endsAt: m.ends_at,
+      status: m.status,
+      menu: m.menu,
+      ingredients: m.ingredients,
+    })),
   });
 });
 
@@ -217,8 +226,8 @@ operationsRoutes.post('/meals', async (c) => {
   const now = nowIso();
   await c.env.DB.batch([
     c.env.DB.prepare(
-      `INSERT INTO meal_services (id, event_id, name, location, starts_at, ends_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(id, eventId, input.name, input.location, input.startsAt, input.endsAt, now, now),
+      `INSERT INTO meal_services (id, event_id, name, location, starts_at, ends_at, menu, ingredients, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(id, eventId, input.name, input.location, input.startsAt, input.endsAt, input.menu, input.ingredients, now, now),
     auditStatement(c.env.DB, { actor: { type: 'user', id: user.userId }, action: 'meal.create', eventId, targetType: 'meal', targetId: id }),
   ]);
   return c.json({ id }, 201);
@@ -231,7 +240,15 @@ operationsRoutes.patch('/meals/:mealId', async (c) => {
   const user = requireUser(c);
   const input = await parseBody(c, mealPatchSchema);
   await requireEditable(c, eventId);
-  const map: Record<string, string> = { name: 'name', location: 'location', startsAt: 'starts_at', endsAt: 'ends_at', status: 'status' };
+  const map: Record<string, string> = {
+    name: 'name',
+    location: 'location',
+    startsAt: 'starts_at',
+    endsAt: 'ends_at',
+    status: 'status',
+    menu: 'menu',
+    ingredients: 'ingredients',
+  };
   const keys = Object.keys(input).filter((k) => input[k as keyof typeof input] !== undefined);
   if (keys.length === 0) return c.json({ ok: true });
   const [update] = await c.env.DB.batch([

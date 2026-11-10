@@ -508,3 +508,17 @@
     break-inside: avoid;
   }
 }
+
+/* People › Participant links */
+.links-table td:first-child,
+.links-table td:nth-child(2) {
+  white-space: nowrap;
+}
+.link-cell {
+  min-width: 18rem;
+  width: 100%;
+}
+.input-link {
+  width: 100%;
+  font-size: var(--text-sm);
+}
