@@ -69,13 +69,14 @@
 }
 
 /* ---------- Scanner (full screen, light: readable in sun) ----------
- * One screen, no scrolling while scanning: a slim header, today's places to
- * scan, the camera filling whatever height is left, and the result under it.
- * Everything else is in the header's menu. Find and the list scroll.
+ * Built for outdoors: wet fingers, gloves, bright sun. Big type, solid
+ * colours for every answer, and every button at least 56px tall with room
+ * between them. The camera screen never scrolls: the place and count, the
+ * camera, the answer, and one big button for the list of who's missing.
  */
 .scanner {
   display: grid;
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
   height: 100vh;
   height: 100dvh;
   background: var(--surface);
@@ -93,129 +94,69 @@
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-.scanner-on-scan {
+.scanner-view-camera .scanner-inner {
   overflow: hidden;
+}
+.scanner-view-people .scanner-inner {
+  padding-bottom: var(--space-4);
 }
 .scanner-head {
   display: flex;
   flex: none;
   align-items: center;
   gap: var(--space-2);
-  padding-bottom: var(--space-2);
-  border-bottom: var(--border-width) solid var(--divider);
 }
-.scanner-head .icon-btn:first-child {
+.scanner-head > .icon-btn:first-child {
   margin-left: calc(-1 * var(--space-2));
 }
-.scanner-head .icon-btn:last-child {
+.scanner-head > .icon-btn:last-child {
   margin-right: calc(-1 * var(--space-2));
-}
-/* Today's places, one tap to switch. Scrolls sideways when there are many. */
-.scan-places {
-  display: flex;
-  flex: none;
-  gap: var(--space-2);
-  margin: 0 calc(-1 * var(--space-4));
-  padding: 0 var(--space-4);
-  overflow-x: auto;
-  scrollbar-width: none;
-  scroll-padding: 0 var(--space-4);
-}
-.scan-places::-webkit-scrollbar {
-  display: none;
-}
-.scan-place {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: var(--control);
-  padding: 0 var(--space-4);
-  border: var(--border-width) solid var(--border-control);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--ink);
-  font: inherit;
-  font-weight: var(--weight-bold);
-  white-space: nowrap;
-  cursor: pointer;
-}
-.scan-place[aria-current='page'] {
-  border-color: var(--brand);
-  background: var(--brand);
-  color: var(--on-brand);
-}
-.scan-place-time {
-  font-weight: var(--weight-regular);
-}
-.scan-place-dot {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  background: var(--success-solid);
-}
-.scanner-menu {
-  display: grid;
-  gap: var(--space-4);
-}
-.scanner-menu .row-button > .icon:first-child {
-  flex: none;
-  color: var(--brand);
-}
-.scanner-menu-account {
-  display: grid;
-  gap: var(--space-3);
-  padding-top: var(--space-4);
-  border-top: var(--border-width) solid var(--divider);
 }
 .scanner-title {
   flex: 1;
   min-width: 0;
 }
 .scanner-title h1 {
+  display: -webkit-box;
+  font-size: var(--text-xl);
+  line-height: var(--leading-tight);
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
+.scanner-count {
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  color: var(--ink-2);
+}
+.scanner-change {
+  flex: none;
+  border-width: 2px;
+  border-color: var(--ink);
+}
+/* No signal / waiting / blocked: a solid strip you can't miss. Hidden when all is well. */
 .scanner-sync {
   display: flex;
+  flex: none;
   align-items: center;
-  gap: var(--space-1);
-  font-size: var(--text-sm);
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
   font-weight: var(--weight-bold);
-  color: var(--ink-3);
-}
-.scanner-sync span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: var(--leading-tight);
+  color: #fff;
 }
 .scanner-sync .icon {
   flex: none;
 }
 .sync-warn {
-  color: var(--warning-fg);
+  background: var(--warning-solid);
 }
 .sync-stop {
-  color: var(--error-fg);
-}
-.scanner-count {
-  display: grid;
-  flex: none;
-  justify-items: end;
-  line-height: var(--leading-tight);
-}
-.scanner-count-value {
-  font-size: var(--text-xl);
-  font-weight: var(--weight-bold);
-}
-.scanner-count-of {
-  font-size: var(--text-base);
-  color: var(--ink-3);
-}
-.scanner-count-words {
-  font-size: var(--text-sm);
-  color: var(--ink-3);
+  background: var(--error-solid);
 }
 .scanner-body {
   display: flex;
@@ -224,8 +165,18 @@
   gap: var(--space-3);
   min-height: 0;
 }
-.scanner-body > .segmented {
+.scanner .segmented {
   flex: none;
+  border-width: 2px;
+  border-color: var(--ink);
+}
+.scanner .segmented label {
+  min-height: calc(var(--control-lg) - 8px);
+  font-size: var(--text-lg);
+  color: var(--ink);
+}
+.scanner .segmented label:has(input:checked) {
+  color: var(--on-brand);
 }
 .viewfinder {
   position: relative;
@@ -234,7 +185,7 @@
   width: 100%;
   overflow: hidden;
   container-type: size;
-  border: var(--border-width) solid var(--border-control);
+  border: 2px solid var(--ink);
   border-radius: var(--radius);
   background: var(--surface-sunken);
 }
@@ -256,7 +207,8 @@
   place-items: center;
   padding: var(--space-5);
   text-align: center;
-  color: var(--ink-2);
+  font-size: var(--text-lg);
+  color: var(--ink);
 }
 /* A square in the middle of the camera, whatever shape the camera box is. */
 .viewfinder-guide {
@@ -267,20 +219,41 @@
   width: min(70cqw, 70cqh);
   aspect-ratio: 1;
   transform: translate(-50%, -50%);
-  border: 3px solid #fff;
+  border: 4px solid #fff;
   border-radius: var(--radius);
   box-shadow: 0 0 0 100vmax rgb(255 255 255 / 0.3);
 }
+.scanner-big {
+  min-height: var(--control-lg);
+  font-size: var(--text-lg);
+}
+.scanner-people-btn {
+  flex: none;
+  justify-content: flex-start;
+  border-width: 2px;
+  border-color: var(--ink);
+}
+.scanner-people-count {
+  margin-left: auto;
+  min-width: 2.5rem;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius);
+  background: var(--ink);
+  color: #fff;
+  text-align: center;
+}
+
+/* The answer after each scan: solid colour and white words, readable in full sun. */
 .scan-result {
   display: grid;
   flex: none;
   gap: var(--space-1);
-  min-height: 6.5rem;
+  min-height: 6rem;
   max-height: 55%;
   overflow-y: auto;
   align-content: center;
   padding: var(--space-3) var(--space-4);
-  border: var(--border-width) solid var(--divider);
+  border: 2px solid var(--divider);
   border-radius: var(--radius);
   background: var(--canvas);
   color: var(--ink);
@@ -289,6 +262,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  font-size: var(--text-lg);
   font-weight: var(--weight-bold);
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -298,29 +272,28 @@
   font-weight: var(--weight-bold);
   line-height: var(--leading-tight);
   overflow-wrap: anywhere;
-  color: var(--ink);
 }
 .scan-result-meta {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 .scan-result-idle .scan-result-meta {
   color: var(--ink-2);
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
+}
+.scan-result-ok,
+.scan-result-warn,
+.scan-result-stop {
+  border-color: transparent;
+  color: #fff;
 }
 .scan-result-ok {
-  border-color: var(--success-border);
-  background: var(--success-bg);
-  color: var(--success-fg);
+  background: var(--success-solid);
 }
 .scan-result-warn {
-  border-color: var(--warning-border);
-  background: var(--warning-bg);
-  color: var(--warning-fg);
+  background: var(--warning-solid);
 }
 .scan-result-stop {
-  border-color: var(--error-border);
-  background: var(--error-bg);
-  color: var(--error-fg);
+  background: var(--error-solid);
 }
 .scan-flag {
   display: flex;
@@ -329,18 +302,18 @@
   gap: var(--space-2);
   margin-top: var(--space-2);
   padding: var(--space-1) var(--space-3);
-  border: 2px solid var(--ink);
   border-radius: var(--radius);
-  background: var(--surface);
+  background: #fff;
   color: var(--ink);
   font-weight: var(--weight-bold);
 }
-/* Dietary needs at a meal: solid red, full width, big words. */
+/* Dietary needs at a meal: solid red, white border so it stands apart from a green answer. */
 .diet-alert {
   display: grid;
   gap: var(--space-1);
   margin-top: var(--space-2);
   padding: var(--space-3) var(--space-4);
+  border: 3px solid #fff;
   border-radius: var(--radius);
   background: var(--error-solid);
   color: #fff;
@@ -363,24 +336,95 @@
 .diet-alert-note {
   font-weight: var(--weight-bold);
 }
-.scanner-panel,
-.scanner-list {
+
+/* Who's missing / who's here: big names, a big button on each. */
+.scanner-people {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-3);
   align-content: start;
   width: 100%;
   max-width: var(--form-max);
-  padding-top: var(--space-2);
+}
+.scanner-people .search .input {
+  min-height: var(--control-lg);
+  font-size: var(--text-lg);
+  border-width: 2px;
+  border-color: var(--ink);
+}
+.scanner-people-empty {
+  padding: var(--space-5) 0;
+  font-size: var(--text-lg);
+  color: var(--ink-2);
+  text-align: center;
+}
+.scanner-people-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: var(--border-width) solid var(--divider);
+}
+.scanner-person {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--row-large);
+  padding: var(--space-2) 0;
+  border-bottom: var(--border-width) solid var(--divider);
+}
+.scanner-person-main {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+.scanner-person-name {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  overflow-wrap: anywhere;
+}
+.scanner-person-meta {
+  color: var(--ink-2);
+}
+.scanner-person > .icon {
+  flex: none;
+  margin-right: var(--space-3);
+  color: var(--success-solid);
+}
+.scanner-person-btn {
+  flex: none;
+  min-width: 6.5rem;
+  min-height: 3rem;
+}
+.scanner-person-btn.btn-secondary {
+  border-width: 2px;
+  border-color: var(--ink);
+}
+/* Back to camera stays under your thumb while the list scrolls. */
+.scanner-dock {
+  padding: var(--space-3) var(--space-4) calc(var(--space-3) + env(safe-area-inset-bottom));
+  border-top: var(--border-width) solid var(--divider);
+  background: var(--surface);
+}
+.scanner-dock .btn {
+  max-width: var(--form-max);
+}
+.scanner-settings {
+  display: grid;
+  gap: var(--space-4);
+}
+.scanner-settings-account {
+  display: grid;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+  border-top: var(--border-width) solid var(--divider);
 }
 .scanner .notice {
   color: var(--ink);
 }
-/* Very short screens (small phones, landscape): drop the frills before the camera shrinks. */
+/* Very short screens (small phones, landscape): drop the helper text before the camera shrinks. */
 @media (max-height: 560px) {
-  .scanner-sync,
-  .scanner-count-words {
-    display: none;
-  }
   .scan-result {
     min-height: 0;
   }
@@ -395,7 +439,7 @@
   .scanner-body {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 26rem);
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
     gap: var(--space-4) var(--space-6);
   }
   .scanner-body > .segmented {
@@ -403,13 +447,17 @@
   }
   .viewfinder {
     grid-column: 1;
-    grid-row: 2;
+    grid-row: 2 / -1;
   }
   .scan-result {
     grid-column: 2;
-    grid-row: 1 / -1;
+    grid-row: 1 / 3;
     align-self: start;
     max-height: 100%;
+  }
+  .scanner-people-btn {
+    grid-column: 2;
+    grid-row: 3;
   }
 }
 
