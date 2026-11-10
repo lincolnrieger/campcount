@@ -28,29 +28,8 @@ export function isOnNow(t: { startsAt?: string | null; endsAt?: string | null },
 }
 
 // Kept in the device's IndexedDB store, which is wiped on sign-out.
-const LAST_KEY = 'ui:last-scan';
 const EVENT_KEY = 'ui:scan-event';
 const cacheKey = (eventId: string) => `ui:scan-targets:${eventId}`;
-
-export interface LastScan {
-  eventId: string;
-  to: string;
-  label: string;
-}
-
-export function rememberLastScan(last: LastScan) {
-  void saveSnapshot(LAST_KEY, last).catch(() => undefined);
-}
-
-export function useLastScan(): LastScan | null {
-  const [last, setLast] = useState<LastScan | null>(null);
-  useEffect(() => {
-    loadSnapshot<LastScan>(LAST_KEY)
-      .then((l) => setLast(l ?? null))
-      .catch(() => undefined);
-  }, []);
-  return last;
-}
 
 export function rememberScanEvent(eventId: string) {
   void saveSnapshot(EVENT_KEY, eventId).catch(() => undefined);

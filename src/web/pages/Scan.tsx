@@ -3,14 +3,16 @@ import type { FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import type { ContextType, Direction, PersonState } from '../../shared/scanRules';
 import { matchesSearch, searchRank } from '../../shared/search';
-import { useSyncStatus } from '../offline/sync';
+import { contextEntries } from '../offline/db';
+import { syncNow, useSyncStatus } from '../offline/sync';
+import { ApiFailure, api } from '../api';
 import { createDetector } from '../scan/decoder';
-import { rememberLastScan, useEventSummary } from '../scan/targets';
+import { useEventSummary } from '../scan/targets';
 import type { Feedback, ScanInput, Snapshot, SnapshotPerson } from '../scan/useScanSession';
 import { useScanSession } from '../scan/useScanSession';
 import { useSession } from '../session';
 import { useTitle } from '../shell';
-import { Badge, Button, ButtonLink, Choice, Icon, IconButton, Loading, Notice, SearchField, Segmented, Skeleton, SkeletonRows, useConfirm } from '../ui';
+import { Badge, Button, ButtonLink, Choice, Icon, IconButton, Loading, Notice, SearchField, Segmented, Skeleton, SkeletonRows, useConfirm, useToast } from '../ui';
 import { scanOnly } from './EventLayout';
 
 const SAME_CODE_COOLDOWN_MS = 3000;
@@ -135,6 +137,7 @@ export function Scan() {
   const location = useLocation();
   const navigate = useNavigate();
   const confirm = useConfirm();
+  const toast = useToast();
   const station = me?.kind === 'station';
   const eventSummary = useEventSummary(me?.kind === 'user' ? eventId : null);
   // People who only scan live in the scanner: no close button, their account is a tab.
@@ -251,10 +254,6 @@ export function Scan() {
       })
       .catch(() => undefined);
   }, [ready]);
-  const contextName = session.snapshot?.context.name;
-  useEffect(() => {
-    if (contextName && me?.kind === 'user') rememberLastScan({ eventId, to: location.pathname, label: contextName });
-  }, [contextName, eventId, location.pathname, me?.kind]);
   // Warm the fallback decoder while online so the service worker caches it for offline use.
   useEffect(() => {
     void import('jsqr');
@@ -281,6 +280,34 @@ export function Scan() {
       total: session.snapshot?.people.filter((p) => !p.withdrawn).length ?? 0,
     };
   }, [session.states, session.snapshot]);
+
+  /** Take someone off Eaten / Checked in, after their scan has reached the server. */
+  const removePerson = async (p: SnapshotPerson) => {
+    const ctx = session.snapshot?.context;
+    if (!ctx || ctx.type === 'site' || !contextId) return;
+    const name = p.fullName ?? p.name;
+    const from = ctx.type === 'meal' ? 'Eaten' : 'Checked in';
+    const ok = await confirm({
+      title: `Remove ${name} from ${from}?`,
+      body: <p>They go back to Not yet and can be scanned again. The scan stays in their history, marked as undone.</p>,
+      confirm: 'Remove',
+      danger: true,
+    });
+    if (!ok) return;
+    await syncNow();
+    const waiting = (await contextEntries(`${eventId}:${type}:${contextId}`)).some((e) => !e.synced && e.registrationId === p.id);
+    if (waiting) {
+      toast(`${name}'s scan hasn't uploaded yet. Try again once there's signal.`, { tone: 'error' });
+      return;
+    }
+    try {
+      await api(`/events/${eventId}/scan/${type}/${contextId}/people/${p.id}/remove`, { body: {} });
+      await session.refresh();
+      toast(`${name} removed from ${from}`);
+    } catch (err) {
+      toast(err instanceof ApiFailure && err.status !== 0 ? err.message : 'No signal. Try again once you have signal.', { tone: 'error' });
+    }
+  };
 
   const close = () => {
     resumeCamera = camera === 'on';
@@ -405,7 +432,7 @@ export function Scan() {
           </div>
         )}
 
-        {tab === 'list' && <WhoList snapshot={session.snapshot} states={session.states.map} />}
+        {tab === 'list' && <WhoList snapshot={session.snapshot} states={session.states.map} onRemove={ctx.type === 'site' ? undefined : (p) => void removePerson(p)} />}
 
         {tab === 'more' && (
           <div className="scanner-panel">
@@ -548,7 +575,7 @@ function FindByName({ people, onPick, onCode }: { people: SnapshotPerson[]; onPi
  * / not yet at an activity, on site / not arrived at the gate. Built from the
  * list saved on this phone plus its own scans, so it works with no signal.
  */
-function WhoList({ snapshot, states }: { snapshot: Snapshot; states: Map<string, PersonState> }) {
+function WhoList({ snapshot, states, onRemove }: { snapshot: Snapshot; states: Map<string, PersonState>; onRemove?: (p: SnapshotPerson) => void }) {
   const ctx = snapshot.context;
   const [show, setShow] = useState<'not' | 'done'>('not');
   const [q, setQ] = useState('');
@@ -602,6 +629,11 @@ function WhoList({ snapshot, states }: { snapshot: Snapshot; states: Map<string,
                 </span>
                 {ctx.type === 'meal' && p.dietaryAlert && <Badge tone="error">{isAllergy(p.dietaryAlert) ? 'Allergy' : 'Dietary'}</Badge>}
                 {s?.lastAcceptedAt && <span className="meta num">{clock(s.lastAcceptedAt)}</span>}
+                {onRemove && show === 'done' && (
+                  <Button small kind="ghost" onClick={() => onRemove(p)} aria-label={`Remove ${name(p)}`}>
+                    Remove
+                  </Button>
+                )}
               </li>
             );
           })}
