@@ -34,7 +34,7 @@ Sections, shown only when the person's role can use them:
   - A top bar with the logo and name.
   - A bottom tab bar with the first three sections, plus More for the rest and Account.
 
-The scanner is full screen and never scrolls while scanning: title, count and upload status, a row of today's places to scan (one tap switches, the camera keeps running), the camera filling the rest, and the result under it. The ⋯ menu has Find someone, the list (On site, Eaten or Checked in, where a meal or activity scan can be removed), Everything you can scan, Beep, and account. Close returns to the Scan buttons.
+The scanner is built for outdoors (sun, rain, wet fingers) and for people who only scan. It is full screen and the camera screen never scrolls: the place and a plain count ("12 of 45 eaten"), Change (pick another place) and Settings (beep, account) at the top, the camera, a solid green / amber / red answer after each scan, and one big button with who's still to come ("Not eaten yet 33"). That opens the list: search, Not yet / Done, a big Served / Check in / Arrived button on each name for anyone without a lanyard, and Undo on the done side at meals and activities. Back to camera stays at the bottom. The upload status only shows when there's a problem (no signal, scans waiting, blocked). Close returns to the Scan buttons.
 
 ## Conventions
 

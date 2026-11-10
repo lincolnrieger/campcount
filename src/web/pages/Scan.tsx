@@ -7,16 +7,14 @@ import { contextEntries } from '../offline/db';
 import { syncNow, useSyncStatus } from '../offline/sync';
 import { ApiFailure, api } from '../api';
 import { createDetector } from '../scan/decoder';
-import type { ScanTarget } from '../scan/targets';
-import { isOnNow, useEventSummary, useScanTargets } from '../scan/targets';
-import type { EventSummary } from '../types';
-import { timeInZone, todayInZone } from '../../shared/time';
+import { useEventSummary } from '../scan/targets';
 import type { Feedback, ScanInput, Snapshot, SnapshotPerson } from '../scan/useScanSession';
 import { useScanSession } from '../scan/useScanSession';
 import { useSession } from '../session';
 import { useTitle } from '../shell';
 import { Badge, Button, ButtonLink, Choice, Icon, IconButton, Loading, Notice, SearchField, Segmented, Sheet, Skeleton, SkeletonRows, useConfirm, useToast } from '../ui';
 import { scanOnly } from './EventLayout';
+import { ScanSwitcher } from './ScanHub';
 
 const SAME_CODE_COOLDOWN_MS = 3000;
 const TZ = 'Australia/Adelaide';
@@ -45,30 +43,31 @@ function signal(tone: Feedback['tone'], sound: boolean) {
   }
 }
 
-/** Upload state for this phone, one short line under the scanner's title: synced, waiting, offline or blocked. */
-function SyncLine() {
+/**
+ * Only shown when something needs attention: no signal, scans waiting, or
+ * uploads blocked. When everything has uploaded there's nothing to read.
+ */
+function SyncProblem() {
   const s = useSyncStatus();
   let text: string;
-  let tone: 'ok' | 'warn' | 'stop' = 'ok';
+  let tone: 'warn' | 'stop' = 'warn';
   let icon: 'sync' | 'offline' | 'warning' = 'sync';
   if (s.state === 'blocked') {
-    text = s.message ?? 'Upload blocked';
+    text = s.message ?? 'Scans are not uploading. Ask the camp organiser.';
     tone = 'stop';
     icon = 'warning';
-  } else if (s.pending > 0) {
-    text = `${s.pending} to upload${s.state === 'offline' ? ', no signal' : ''}`;
-    tone = 'warn';
-    icon = s.state === 'offline' ? 'offline' : 'sync';
+  } else if (s.pending > 0 && s.state === 'offline') {
+    text = `No signal. ${s.pending} scan${s.pending === 1 ? ' is' : 's are'} saved on this phone and will upload later.`;
+    icon = 'offline';
   } else if (s.state === 'offline') {
-    text = 'No signal. Scans are kept on this phone';
-    tone = 'warn';
+    text = 'No signal. Keep scanning: scans are saved on this phone.';
     icon = 'offline';
   } else {
-    text = s.lastSyncAt ? `All uploaded ${clock(s.lastSyncAt)}` : 'All uploaded';
+    return null;
   }
   return (
     <p className={`scanner-sync sync-${tone}`} role="status">
-      <Icon name={icon} size={16} />
+      <Icon name={icon} size={20} />
       <span>{text}</span>
     </p>
   );
@@ -102,7 +101,7 @@ function ScanResult({ feedback, contextType }: { feedback: Feedback | null; cont
     return (
       <div className="scan-result scan-result-idle" role="status">
         <p className="scan-result-word">Ready</p>
-        <p className="scan-result-meta">Hold a lanyard's QR code inside the square.</p>
+        <p className="scan-result-meta">Point the camera at a lanyard's QR code.</p>
       </div>
     );
   }
@@ -143,12 +142,12 @@ export function Scan() {
   const toast = useToast();
   const station = me?.kind === 'station';
   const eventSummary = useEventSummary(me?.kind === 'user' ? eventId : null);
-  // People who only scan live in the scanner: no close button, their account is in the menu.
+  // People who only scan live in the scanner: no close button, their account is under Settings.
   const scanOnlyUser = me?.kind === 'user' && eventSummary !== null && scanOnly(eventSummary);
   useTitle(session.snapshot ? `Scan: ${session.snapshot.context.type === 'site' ? 'Gate' : session.snapshot.context.name}` : 'Scan');
 
-  const [tab, setTab] = useState<'scan' | 'find' | 'list'>('scan');
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [view, setView] = useState<'camera' | 'people'>('camera');
+  const [sheet, setSheet] = useState<'none' | 'change' | 'settings' | 'code'>('none');
   const [direction, setDirection] = useState<Direction>('in');
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [camera, setCamera] = useState<'off' | 'starting' | 'on' | 'denied' | 'unavailable'>('off');
@@ -262,10 +261,10 @@ export function Scan() {
   useEffect(() => {
     void import('jsqr');
   }, []);
-  // The camera rests while Find or the list is open, and comes back with the scanner.
+  // The camera rests while the list is open, and comes back with the scanner.
   const cameraWasOn = useRef(false);
   useEffect(() => {
-    if (tab !== 'scan') {
+    if (view !== 'camera') {
       if (streamRef.current) {
         cameraWasOn.current = true;
         stopCamera();
@@ -274,7 +273,7 @@ export function Scan() {
       cameraWasOn.current = false;
       void startRef.current();
     }
-  }, [tab, stopCamera]);
+  }, [view, stopCamera]);
 
   const counts = useMemo(() => {
     const values = [...session.states.map.values()];
@@ -292,9 +291,9 @@ export function Scan() {
     const name = p.fullName ?? p.name;
     const from = ctx.type === 'meal' ? 'Eaten' : 'Checked in';
     const ok = await confirm({
-      title: `Remove ${name} from ${from}?`,
-      body: <p>They go back to Not yet and can be scanned again. The scan stays in their history, marked as undone.</p>,
-      confirm: 'Remove',
+      title: `Undo ${name}?`,
+      body: <p>Takes them off {from}, so they can be scanned again. It stays in their history, marked as undone.</p>,
+      confirm: 'Undo',
       danger: true,
     });
     if (!ok) return;
@@ -307,7 +306,7 @@ export function Scan() {
     try {
       await api(`/events/${eventId}/scan/${type}/${contextId}/people/${p.id}/remove`, { body: {} });
       await session.refresh();
-      toast(`${name} removed from ${from}`);
+      toast(`${name} taken off ${from}`);
     } catch (err) {
       toast(err instanceof ApiFailure && err.status !== 0 ? err.message : 'No signal. Try again once you have signal.', { tone: 'error' });
     }
@@ -347,30 +346,34 @@ export function Scan() {
 
   const ctx = session.snapshot.context;
   const title = ctx.type === 'site' ? 'Gate' : ctx.name;
-  // The running count, top right: big number, a few words under it.
-  const count =
-    ctx.type === 'meal'
-      ? { value: counts.present, of: counts.total, words: 'served' }
-      : ctx.type === 'site'
-        ? { value: counts.present, of: counts.total, words: 'on site' }
-        : { value: counts.people, of: null, words: 'checked in' };
-  const listLabel = ctx.type === 'meal' ? 'Eaten' : ctx.type === 'site' ? 'On site' : 'Checked in';
-  const listCount = ctx.type === 'meal' || ctx.type === 'site' ? counts.present : counts.people;
-  const backToScan = () => setTab('scan');
-  const openView = (v: 'find' | 'list') => {
-    setMenuOpen(false);
-    setTab(v);
+  const words = wordsFor(session.snapshot, counts);
+  const done = ctx.type === 'activity' ? counts.people : counts.present;
+  const backToCamera = () => setView('camera');
+
+  /** Check someone in from the list (no lanyard). Big results — and every dietary alert — show on the camera screen. */
+  const checkIn = async (p: SnapshotPerson) => {
+    const name = p.fullName ?? p.name;
+    const ok = await confirm({
+      title: words.ask(name),
+      body: <p>{[p.group, 'For someone without their lanyard.'].filter(Boolean).join('. ')}</p>,
+      confirm: words.action,
+    });
+    if (!ok) return;
+    try {
+      const result = await session.record({ kind: 'manual', registrationId: p.id }, 'in');
+      const alert = type === 'meal' && result.person?.dietaryAlert;
+      signal(alert ? 'stop' : result.tone, sound);
+      setFeedback(result);
+      if (alert || result.tone !== 'ok') backToCamera();
+      else toast(`${name}: ${result.title}`);
+    } catch {
+      // The list is still loading.
+    }
   };
-  const currentKey = ctx.type === 'site' ? 'site' : `${ctx.type}:${ctx.id}`;
-  const switchTo = (t: ScanTarget) => {
-    if (t.key === currentKey) return;
-    resumeCamera = camera === 'on';
-    stopCamera();
-    navigate(t.to, { replace: true });
-  };
+
   return (
-    <div className="scanner">
-      <div className={`scanner-inner scanner-on-${tab}`}>
+    <div className={`scanner scanner-view-${view}`}>
+      <div className="scanner-inner">
         <header className="scanner-head">
           {!station && !scanOnlyUser && (
             <IconButton label="Close scanner" onClick={close}>
@@ -379,23 +382,20 @@ export function Scan() {
           )}
           <div className="scanner-title">
             <h1>{title}</h1>
-            <SyncLine />
+            <p className="scanner-count num">{words.count(done, counts.total)}</p>
           </div>
-          <p className="scanner-count num">
-            <span className="scanner-count-value">
-              {count.value}
-              {count.of !== null && count.of > 0 && <span className="scanner-count-of">/{count.of}</span>}
-            </span>
-            <span className="scanner-count-words">{count.words}</span>
-          </p>
-          <IconButton label="Menu" aria-haspopup="dialog" onClick={() => setMenuOpen(true)}>
-            <Icon name="more" size={24} />
+          {eventSummary && !station && (
+            <Button className="scanner-change" onClick={() => setSheet('change')}>
+              Change
+            </Button>
+          )}
+          <IconButton label="Settings" aria-haspopup="dialog" onClick={() => setSheet('settings')}>
+            <Icon name="user" size={24} />
           </IconButton>
         </header>
+        <SyncProblem />
 
-        {eventSummary && !station && <ScanPlaces event={eventSummary} currentKey={currentKey} onPick={switchTo} />}
-
-        <div className="scanner-body" hidden={tab !== 'scan'}>
+        <div className="scanner-body" hidden={view !== 'camera'}>
           {twoWay && (
             <Segmented
               block
@@ -413,12 +413,12 @@ export function Scan() {
             {camera !== 'on' && (
               <div className="viewfinder-cover">
                 {camera === 'denied' ? (
-                  <p>The camera is blocked. Allow it for this site in your browser's settings, or use Find someone in the menu.</p>
+                  <p>The camera is blocked. Allow it for this site in your browser's settings. Until then, use the list below to check people in.</p>
                 ) : camera === 'unavailable' ? (
-                  <p>This browser can't use the camera. Use Find someone in the menu instead.</p>
+                  <p>This phone's browser can't use the camera. Use the list below to check people in.</p>
                 ) : (
-                  <Button kind="primary" onClick={() => void startCamera()} busy={camera === 'starting'} busyLabel="Starting camera…">
-                    <Icon name="camera" />
+                  <Button kind="primary" className="scanner-big" onClick={() => void startCamera()} busy={camera === 'starting'} busyLabel="Starting camera…">
+                    <Icon name="camera" size={24} />
                     Start camera
                   </Button>
                 )}
@@ -427,83 +427,62 @@ export function Scan() {
             {camera === 'on' && <span className="viewfinder-guide" aria-hidden="true" />}
           </div>
           <ScanResult feedback={feedback} contextType={ctx.type} />
+          <Button className="scanner-big scanner-people-btn" block onClick={() => setView('people')}>
+            <Icon name="search" size={24} />
+            <span>{words.not}</span>
+            <span className="scanner-people-count num">{words.notCount}</span>
+          </Button>
         </div>
 
-        {tab !== 'scan' && (
-          <Button kind="primary" block onClick={backToScan}>
-            <Icon name="scan" />
-            Back to scanning
-          </Button>
+        {view === 'people' && (
+          <PeopleList
+            snapshot={session.snapshot}
+            states={session.states.map}
+            words={words}
+            onCheckIn={(p) => void checkIn(p)}
+            onUndo={ctx.type === 'site' ? undefined : (p) => void removePerson(p)}
+            onTypeCode={() => setSheet('code')}
+          />
         )}
-
-        {tab === 'find' && (
-          <div className="scanner-panel">
-            <h2>Find someone without their lanyard</h2>
-            <FindByName
-              people={session.snapshot.people}
-              onCode={(code) => {
-                backToScan();
-                void record({ kind: 'code', code });
-              }}
-              onPick={async (p) => {
-                const name = p.fullName ?? p.name;
-                const ok = await confirm({
-                  title: `Record ${name}?`,
-                  body: <p>{p.group}. This is saved as a hand entry, without their card.</p>,
-                  confirm: 'Record',
-                });
-                if (!ok) return;
-                backToScan();
-                void record({ kind: 'manual', registrationId: p.id });
-              }}
-            />
-          </div>
-        )}
-
-        {tab === 'list' && <WhoList snapshot={session.snapshot} states={session.states.map} onRemove={ctx.type === 'site' ? undefined : (p) => void removePerson(p)} />}
       </div>
 
-      <Sheet open={menuOpen} title="Menu" onClose={() => setMenuOpen(false)}>
-        <div className="scanner-menu">
-          <ul className="list">
-            <li>
-              <button type="button" className="row row-button" onClick={() => openView('find')}>
-                <Icon name="search" />
-                <span className="row-main">
-                  <span className="row-title">Find someone</span>
-                  <span className="row-meta">By name, or the code on their card</span>
-                </span>
-                <Icon name="chevron" />
-              </button>
-            </li>
-            <li>
-              <button type="button" className="row row-button" onClick={() => openView('list')}>
-                <Icon name="check" />
-                <span className="row-main">
-                  <span className="row-title">
-                    {listLabel} <span className="num">({listCount})</span>
-                  </span>
-                  <span className="row-meta">{ctx.type === 'site' ? "Who has and hasn't arrived" : ctx.type === 'meal' ? "Who has and hasn't eaten. Remove someone here" : "Who has and hasn't checked in"}</span>
-                </span>
-                <Icon name="chevron" />
-              </button>
-            </li>
-            {!station && (
-              <li>
-                <button type="button" className="row row-button" onClick={() => navigate(`/scan?event=${eventId}&pick=1`)}>
-                  <Icon name="scan" />
-                  <span className="row-main">
-                    <span className="row-title">Everything you can scan</span>
-                    <span className="row-meta">Other days and the full list</span>
-                  </span>
-                  <Icon name="chevron" />
-                </button>
-              </li>
-            )}
-          </ul>
+      {view === 'people' && (
+        <div className="scanner-dock">
+          <Button kind="primary" className="scanner-big" block onClick={backToCamera}>
+            <Icon name="camera" size={24} />
+            Back to camera
+          </Button>
+        </div>
+      )}
+
+      {eventSummary && !station && (
+        <ScanSwitcher
+          event={eventSummary}
+          currentKey={ctx.type === 'site' ? 'site' : `${ctx.type}:${ctx.id}`}
+          open={sheet === 'change'}
+          onClose={() => setSheet('none')}
+          onSwitch={() => {
+            resumeCamera = camera === 'on' || cameraWasOn.current;
+            stopCamera();
+          }}
+        />
+      )}
+
+      <Sheet open={sheet === 'code'} title="Type the code from a card" onClose={() => setSheet('none')}>
+        <CodeEntry
+          onCode={(code) => {
+            setSheet('none');
+            backToCamera();
+            void record({ kind: 'code', code });
+          }}
+        />
+      </Sheet>
+
+      <Sheet open={sheet === 'settings'} title="Settings" onClose={() => setSheet('none')}>
+        <div className="scanner-settings">
           <Choice checked={sound} onChange={(e) => setSound(e.target.checked)} label="Beep on each scan" description="The phone also buzzes if it can." />
           {session.fromCache && <Notice tone="warning">Using the list saved on this phone. Scans from other phones show up once you have signal.</Notice>}
-          <div className="scanner-menu-account">
+          <div className="scanner-settings-account">
             <p className="meta">{session.snapshot.event.name}</p>
             {station ? (
               <>
@@ -534,199 +513,207 @@ export function Scan() {
   );
 }
 
-/** Last list of places, so switching between them doesn't flash an empty row while the next scanner loads. */
-let placesCache: { eventId: string; targets: ScanTarget[] } | null = null;
-
-/**
- * Today's places to scan, always across the top of the scanner: one tap
- * switches, and the camera carries on. The full list is in the menu.
- */
-function ScanPlaces({ event, currentKey, onPick }: { event: EventSummary; currentKey: string; onPick: (t: ScanTarget) => void }) {
-  const loaded = useScanTargets(event).targets;
-  const targets = loaded ?? (placesCache?.eventId === event.id ? placesCache.targets : null);
-  useEffect(() => {
-    if (loaded) placesCache = { eventId: event.id, targets: loaded };
-  }, [loaded, event.id]);
-  const currentRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    currentRef.current?.scrollIntoView({ block: 'nearest', inline: 'center' });
-  }, [targets, currentKey]);
-  if (!targets) return null;
-  const today = todayInZone(event.timezone);
-  const order = { site: 0, meal: 1, activity: 1 } as const;
-  const shown = targets
-    .filter((t) => t.key === currentKey || t.day === null || t.day === today)
-    .sort((a, b) => order[a.type] - order[b.type] || (a.startsAt ?? '￿').localeCompare(b.startsAt ?? '￿') || a.label.localeCompare(b.label));
-  if (shown.length < 2) return null;
-  // Same activity more than once today: tell the sessions apart by start time.
-  const repeated = new Set(shown.map((t) => t.label).filter((l, i, all) => all.indexOf(l) !== i));
-  return (
-    <nav className="scan-places" aria-label="Places to scan">
-      {shown.map((t) => {
-        const current = t.key === currentKey;
-        return (
-          <button key={t.key} ref={current ? currentRef : undefined} type="button" className="scan-place" aria-current={current ? 'page' : undefined} onClick={() => onPick(t)}>
-            {isOnNow(t) && !current && <span className="scan-place-dot" aria-hidden="true" />}
-            {t.type === 'site' ? 'Gate' : t.label}
-            {repeated.has(t.label) && t.startsAt && <span className="scan-place-time num">{timeInZone(t.startsAt, event.timezone)}</span>}
-            {isOnNow(t) && <span className="visually-hidden"> (on now)</span>}
-          </button>
-        );
-      })}
-    </nav>
-  );
+interface Words {
+  /** Heading of the list of who's still to come, and the big button that opens it. */
+  not: string;
+  notCount: number;
+  done: string;
+  doneCount: number;
+  /** Short label for the list's own switch. */
+  notShort: string;
+  /** The button on each name in "not yet", and the question before it records. */
+  action: string;
+  ask: (name: string) => string;
+  count: (done: number, total: number) => string;
+  allDone: string;
+  noneDone: string;
 }
 
-/** Search the list saved on this phone (works offline), or type the code printed on the card. */
-function FindByName({ people, onPick, onCode }: { people: SnapshotPerson[]; onPick: (p: SnapshotPerson) => void; onCode: (code: string) => void }) {
-  const [q, setQ] = useState('');
-  const [typing, setTyping] = useState(false);
-  const [code, setCode] = useState('');
-  const matches = q.trim()
-    ? people
-        .filter((p) => matchesSearch(q, p.fullName ?? p.name, p.memberNumber))
-        .sort((a, b) => searchRank(q, a.fullName ?? a.name) - searchRank(q, b.fullName ?? b.name) || (a.fullName ?? a.name).localeCompare(b.fullName ?? b.name))
-        .slice(0, 30)
-    : [];
-  if (typing) {
-    const submit = (e: FormEvent) => {
-      e.preventDefault();
-      onCode(code);
+/** Plain words for each kind of place. */
+function wordsFor(snapshot: Snapshot, counts: { present: number; people: number; total: number }): Words {
+  const ctx = snapshot.context;
+  const people = snapshot.people.filter((p) => !p.withdrawn);
+  if (ctx.type === 'meal') {
+    return {
+      not: 'Not eaten yet',
+      notCount: counts.total - counts.present,
+      done: 'Eaten',
+      doneCount: counts.present,
+      notShort: 'Not yet',
+      action: 'Served',
+      ask: (n) => `Mark ${n} as served?`,
+      count: (d, t) => `${d} of ${t} eaten`,
+      allDone: 'Everyone has eaten.',
+      noneDone: 'No one has eaten yet.',
     };
-    return (
-      <form className="form" onSubmit={submit}>
-        <div className="field">
-          <label htmlFor="typed-code" className="field-label">
-            Code printed under the QR
-          </label>
-          <input
-            id="typed-code"
-            className="input input-code"
-            autoCapitalize="characters"
-            autoComplete="off"
-            spellCheck={false}
-            maxLength={9}
-            value={code}
-            // eslint-disable-next-line jsx-a11y/no-autofocus
-            autoFocus
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
-            placeholder="K7QM-3XRP"
-          />
-        </div>
-        <div className="btn-row">
-          <Button type="submit" kind="primary" disabled={code.replace(/-/g, '').length !== 8}>
-            Record
-          </Button>
-          <Button kind="ghost" onClick={() => setTyping(false)}>
-            Search by name instead
-          </Button>
-        </div>
-      </form>
-    );
   }
-  return (
-    <>
-      {/* They opened the Find tab to type a name: put them straight in the box. */}
-      {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
-      <SearchField id="name-q" label="Name or membership number" value={q} onChange={setQ} autoFocus />
-      {q.trim() === '' ? (
-        <p className="meta">Start typing. Even one letter works. It's saved as a hand entry.</p>
-      ) : matches.length === 0 ? (
-        <p className="meta">No one on this list matches "{q}".</p>
-      ) : (
-        <ul className="list">
-          {matches.map((p) => (
-            <li key={p.id}>
-              <button type="button" className="row row-button" onClick={() => onPick(p)}>
-                <span className="row-main">
-                  <span className="row-title">{p.fullName ?? p.name}</span>
-                  <span className="row-meta">{p.group}</span>
-                </span>
-                <Icon name="chevron" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <div>
-        <Button kind="ghost" onClick={() => setTyping(true)}>
-          <Icon name="keyboard" />
-          Type the card code instead
-        </Button>
-      </div>
-    </>
-  );
+  if (ctx.type === 'site') {
+    return {
+      not: 'Not arrived yet',
+      notCount: counts.total - counts.people,
+      done: 'Arrived',
+      doneCount: counts.people,
+      notShort: 'Not arrived',
+      action: 'Arrived',
+      ask: (n) => `Mark ${n} as arrived?`,
+      count: () => `${counts.present} on site`,
+      allDone: 'Everyone has arrived.',
+      noneDone: 'No one has arrived yet.',
+    };
+  }
+  const booked = people.filter((p) => p.booked).length;
+  const bookedDone = people.filter((p) => p.booked && (p.state?.visits ?? 0) > 0).length;
+  return {
+    not: booked > 0 ? 'Not here yet' : 'Not checked in',
+    // Bookings: who's booked and not here. Otherwise everyone who hasn't come.
+    notCount: booked > 0 ? Math.max(booked - bookedDone, 0) : counts.total - counts.people,
+    done: 'Checked in',
+    doneCount: counts.people,
+    notShort: booked > 0 ? 'Not here' : 'Not yet',
+    action: 'Check in',
+    ask: (n) => `Check in ${n}?`,
+    count: (d) => (booked > 0 ? `${d} of ${booked} here` : `${d} checked in`),
+    allDone: booked > 0 ? 'Everyone booked is here.' : 'Everyone has checked in.',
+    noneDone: 'No one has checked in yet.',
+  };
 }
 
 /**
- * Who has and hasn't been scanned here: eaten / not yet at a meal, checked in
- * / not yet at an activity, on site / not arrived at the gate. Built from the
- * list saved on this phone plus its own scans, so it works with no signal.
+ * Who still needs to come, and who has: search, then a big button on each
+ * name. Built from the list saved on this phone plus its own scans, so it
+ * works with no signal.
  */
-function WhoList({ snapshot, states, onRemove }: { snapshot: Snapshot; states: Map<string, PersonState>; onRemove?: (p: SnapshotPerson) => void }) {
+function PeopleList({
+  snapshot,
+  states,
+  words,
+  onCheckIn,
+  onUndo,
+  onTypeCode,
+}: {
+  snapshot: Snapshot;
+  states: Map<string, PersonState>;
+  words: Words;
+  onCheckIn: (p: SnapshotPerson) => void;
+  onUndo?: (p: SnapshotPerson) => void;
+  onTypeCode: () => void;
+}) {
   const ctx = snapshot.context;
   const [show, setShow] = useState<'not' | 'done'>('not');
   const [q, setQ] = useState('');
   const people = snapshot.people.filter((p) => !p.withdrawn);
-  // At an activity with bookings, "Not yet" is who's booked and hasn't come. Otherwise it's everyone.
   const bookings = ctx.type === 'activity' && people.some((p) => p.booked);
-  const done = people.filter((p) => (states.get(p.id)?.visits ?? 0) > 0);
-  const notYet = people.filter((p) => (states.get(p.id)?.visits ?? 0) === 0 && (!bookings || p.booked));
-  const words =
-    ctx.type === 'meal'
-      ? { not: 'Not yet', done: 'Eaten', allDone: 'Everyone has eaten.', none: 'No one has eaten yet.' }
-      : ctx.type === 'site'
-        ? { not: 'Not arrived', done: 'Arrived', allDone: 'Everyone has arrived.', none: 'No one has arrived yet.' }
-        : { not: bookings ? 'Booked, not here' : 'Not yet', done: 'Checked in', allDone: 'Everyone booked has checked in.', none: 'No one has checked in yet.' };
+  const isDone = (p: SnapshotPerson) => (states.get(p.id)?.visits ?? 0) > 0;
+  const done = people.filter(isDone);
+  const notYet = people.filter((p) => !isDone(p) && (!bookings || p.booked));
   const name = (p: SnapshotPerson) => p.fullName ?? p.name;
-  const list = (show === 'done' ? done : notYet)
+  const searching = q.trim() !== '';
+  // Searching looks through everyone, so a walk-in who didn't book can still be found.
+  const list = (searching ? people : show === 'done' ? done : notYet)
     .filter((p) => matchesSearch(q, name(p), p.memberNumber))
-    .sort((a, b) => (show === 'done' ? (states.get(b.id)?.lastAcceptedAt ?? '').localeCompare(states.get(a.id)?.lastAcceptedAt ?? '') : name(a).localeCompare(name(b))));
+    .sort((a, b) =>
+      searching
+        ? searchRank(q, name(a)) - searchRank(q, name(b)) || name(a).localeCompare(name(b))
+        : show === 'done'
+          ? (states.get(b.id)?.lastAcceptedAt ?? '').localeCompare(states.get(a.id)?.lastAcceptedAt ?? '')
+          : name(a).localeCompare(name(b)),
+    )
+    .slice(0, searching ? 40 : undefined);
   const status = (p: SnapshotPerson) => {
     const s = states.get(p.id);
     if (!s?.lastAcceptedAt) return null;
-    if (ctx.type === 'activity' && ctx.rules.type === 'activity' && ctx.rules.trackSignOut) return s.present ? 'Here' : 'Left';
-    if (ctx.type === 'site') return s.present ? 'On site' : 'Left';
-    return null;
+    const at = clock(s.lastAcceptedAt);
+    if (ctx.type === 'site' || (ctx.rules.type === 'activity' && ctx.rules.trackSignOut)) return `${s.present ? (ctx.type === 'site' ? 'On site' : 'Here') : 'Left'} · ${at}`;
+    return at;
   };
   return (
-    <div className="scanner-list">
-      <Segmented
-        block
-        label="Show"
-        value={show}
-        onChange={setShow}
-        options={[
-          { value: 'not', label: `${words.not} (${notYet.length})` },
-          { value: 'done', label: `${words.done} (${done.length})` },
-        ]}
-      />
-      <SearchField id="who-q" label="Search names" value={q} onChange={setQ} />
+    <div className="scanner-people">
+      {/* They opened the list to find someone or see who's missing: the box is right there, but no keyboard until they tap it. */}
+      <SearchField id="people-q" label="Search for a name" value={q} onChange={setQ} />
+      {!searching && (
+        <Segmented
+          block
+          label="Show"
+          value={show}
+          onChange={setShow}
+          options={[
+            { value: 'not', label: `${words.notShort} (${notYet.length})` },
+            { value: 'done', label: `${words.done} (${done.length})` },
+          ]}
+        />
+      )}
       {list.length === 0 ? (
-        <p className="meta">{q ? `No one matches "${q}".` : show === 'not' ? words.allDone : words.none}</p>
+        <p className="scanner-people-empty">{searching ? `No one called "${q}" is on this list.` : show === 'not' ? words.allDone : words.noneDone}</p>
       ) : (
-        <ul className="list">
+        <ul className="scanner-people-list">
           {list.map((p) => {
-            const s = states.get(p.id);
-            const st = status(p);
+            const here = isDone(p);
+            const st = here ? status(p) : null;
             return (
-              <li key={p.id} className="row">
-                <span className="row-main">
-                  <span className="row-title">{name(p)}</span>
-                  <span className="row-meta">{[p.group, st].filter(Boolean).join(' · ')}</span>
+              <li key={p.id} className={here ? 'scanner-person is-done' : 'scanner-person'}>
+                <span className="scanner-person-main">
+                  <span className="scanner-person-name">{name(p)}</span>
+                  <span className="scanner-person-meta">{[p.group, st].filter(Boolean).join(' · ')}</span>
+                  {ctx.type === 'meal' && p.dietaryAlert && (
+                    <span>
+                      <Badge tone="error">{isAllergy(p.dietaryAlert) ? 'Allergy' : 'Dietary needs'}</Badge>
+                    </span>
+                  )}
                 </span>
-                {ctx.type === 'meal' && p.dietaryAlert && <Badge tone="error">{isAllergy(p.dietaryAlert) ? 'Allergy' : 'Dietary'}</Badge>}
-                {s?.lastAcceptedAt && <span className="meta num">{clock(s.lastAcceptedAt)}</span>}
-                {onRemove && show === 'done' && (
-                  <Button small kind="ghost" onClick={() => onRemove(p)} aria-label={`Remove ${name(p)}`}>
-                    Remove
+                {!here ? (
+                  <Button kind="primary" className="scanner-person-btn" onClick={() => onCheckIn(p)} aria-label={`${words.action}: ${name(p)}`}>
+                    {words.action}
                   </Button>
+                ) : onUndo ? (
+                  <Button className="scanner-person-btn" onClick={() => onUndo(p)} aria-label={`Undo: ${name(p)}`}>
+                    Undo
+                  </Button>
+                ) : (
+                  <Icon name="check" size={24} label={words.done} />
                 )}
               </li>
             );
           })}
         </ul>
       )}
+      <Button kind="ghost" onClick={onTypeCode}>
+        <Icon name="keyboard" />
+        Type the code from a card
+      </Button>
     </div>
+  );
+}
+
+/** The 8-character code printed under each lanyard's QR, for when the camera won't read it. */
+function CodeEntry({ onCode }: { onCode: (code: string) => void }) {
+  const [code, setCode] = useState('');
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    onCode(code);
+  };
+  return (
+    <form className="form" onSubmit={submit}>
+      <div className="field">
+        <label htmlFor="typed-code" className="field-label">
+          Code printed under the QR
+        </label>
+        <input
+          id="typed-code"
+          className="input input-code"
+          autoCapitalize="characters"
+          autoComplete="off"
+          spellCheck={false}
+          maxLength={9}
+          value={code}
+          // eslint-disable-next-line jsx-a11y/no-autofocus
+          autoFocus
+          onChange={(e) => setCode(e.target.value.toUpperCase())}
+          placeholder="K7QM-3XRP"
+        />
+      </div>
+      <Button type="submit" kind="primary" block disabled={code.replace(/-/g, '').length !== 8}>
+        Record
+      </Button>
+    </form>
   );
 }
