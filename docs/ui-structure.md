@@ -34,7 +34,7 @@ Sections, shown only when the person's role can use them:
   - A top bar with the logo and name.
   - A bottom tab bar with the first three sections, plus More for the rest and Account.
 
-The scanner is full screen. Close returns to the Scan buttons.
+The scanner is full screen and never scrolls on the Scan tab: title, count and upload status, the camera filling the rest, and the result under it. Tabs along the bottom: Scan, Find (by name or card code), the list (On site, Eaten or Checked in) and More (beep, scan something else, account). Close returns to the Scan buttons.
 
 ## Conventions
 
