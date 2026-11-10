@@ -69,13 +69,13 @@
 }
 
 /* ---------- Scanner (full screen, light: readable in sun) ----------
- * One screen, no scrolling on the Scan tab: a slim header, the camera filling
- * whatever height is left, the result under it, and the tabs at the bottom.
- * Find, the list and More scroll inside the space above the tabs.
+ * One screen, no scrolling while scanning: a slim header, today's places to
+ * scan, the camera filling whatever height is left, and the result under it.
+ * Everything else is in the header's menu. Find and the list scroll.
  */
 .scanner {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
   height: 100vh;
   height: 100dvh;
   background: var(--surface);
@@ -89,7 +89,7 @@
   width: 100%;
   max-width: var(--content-max);
   margin: 0 auto;
-  padding: var(--space-2) var(--space-4) var(--space-3);
+  padding: var(--space-2) var(--space-4) calc(var(--space-3) + env(safe-area-inset-bottom));
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -104,8 +104,69 @@
   padding-bottom: var(--space-2);
   border-bottom: var(--border-width) solid var(--divider);
 }
-.scanner-head .icon-btn {
+.scanner-head .icon-btn:first-child {
   margin-left: calc(-1 * var(--space-2));
+}
+.scanner-head .icon-btn:last-child {
+  margin-right: calc(-1 * var(--space-2));
+}
+/* Today's places, one tap to switch. Scrolls sideways when there are many. */
+.scan-places {
+  display: flex;
+  flex: none;
+  gap: var(--space-2);
+  margin: 0 calc(-1 * var(--space-4));
+  padding: 0 var(--space-4);
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-padding: 0 var(--space-4);
+}
+.scan-places::-webkit-scrollbar {
+  display: none;
+}
+.scan-place {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control);
+  padding: 0 var(--space-4);
+  border: var(--border-width) solid var(--border-control);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: var(--weight-bold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.scan-place[aria-current='page'] {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: var(--on-brand);
+}
+.scan-place-time {
+  font-weight: var(--weight-regular);
+}
+.scan-place-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--success-solid);
+}
+.scanner-menu {
+  display: grid;
+  gap: var(--space-4);
+}
+.scanner-menu .row-button > .icon:first-child {
+  flex: none;
+  color: var(--brand);
+}
+.scanner-menu-account {
+  display: grid;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+  border-top: var(--border-width) solid var(--divider);
 }
 .scanner-title {
   flex: 1;
@@ -310,41 +371,6 @@
   width: 100%;
   max-width: var(--form-max);
   padding-top: var(--space-2);
-}
-/* Scan · Find · list · More, along the bottom like the app's tab bar. */
-.scanner-tabs {
-  z-index: var(--z-nav);
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  padding-bottom: env(safe-area-inset-bottom);
-  border-top: var(--border-width) solid var(--divider);
-  background: var(--surface);
-}
-.scanner-tabs button {
-  display: grid;
-  justify-items: center;
-  align-content: center;
-  gap: 2px;
-  min-width: 0;
-  min-height: var(--control-lg);
-  padding: 0 var(--space-1);
-  border: 0;
-  background: none;
-  color: var(--ink-2);
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-  cursor: pointer;
-}
-.scanner-tabs button span {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.scanner-tabs button[aria-current='page'] {
-  color: var(--brand);
-  box-shadow: inset 0 3px 0 var(--brand);
 }
 .scanner .notice {
   color: var(--ink);

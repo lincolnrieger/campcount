@@ -144,6 +144,33 @@ describe('scan upload', () => {
     expect(count!.n).toBe(2);
   });
 
+  it('lets a meal leader remove someone from Eaten on the scanner, keeping the history', async () => {
+    const c = await camp();
+    const meal = await staff(c.eventId, 'meal_leader');
+    const ctx = { contextType: 'meal', contextId: c.mealId };
+    const who = c.cards[0]!.registrationId;
+    await upload(c.eventId, meal.cookie, [await scanItem(ctx, c.cards[0]!.token), await scanItem(ctx, c.cards[0]!.token)]);
+    const remove = () => api(`/events/${c.eventId}/scan/meal/${c.mealId}/people/${who}/remove`, { cookie: meal.cookie, body: {} });
+
+    expect((await json(await remove())).undone).toBe(2);
+    const snap = await json(await api(`/events/${c.eventId}/scan/meal/${c.mealId}/snapshot`, { cookie: meal.cookie }));
+    expect(snap.people.find((p: any) => p.id === who).state?.visits ?? 0).toBe(0);
+    // Nothing deleted: the two scans stay, each with a void correction, and it's in the audit log.
+    const rows = await testEnv.DB.prepare(`SELECT outcome FROM scans WHERE context_id = ? AND registration_id = ?`).bind(c.mealId, who).all<{ outcome: string }>();
+    expect(rows.results.filter((r) => r.outcome === 'void')).toHaveLength(2);
+    expect(rows.results).toHaveLength(4);
+    const audit = await testEnv.DB.prepare(`SELECT count(*) AS n FROM audit_log WHERE action = 'attendance.reset' AND target_id = ?`).bind(c.mealId).first<{ n: number }>();
+    expect(audit!.n).toBe(1);
+    // Removing again does nothing, and they can be served again.
+    expect((await json(await remove())).undone).toBe(0);
+    const again = await json(await upload(c.eventId, meal.cookie, [await scanItem(ctx, c.cards[0]!.token)]));
+    expect(again.results[0].outcome).toBe('accepted');
+
+    // Someone who can't scan this meal can't remove anyone from it.
+    const gate = await staff(c.eventId, 'scanner');
+    expect((await api(`/events/${c.eventId}/scan/meal/${c.mealId}/people/${who}/remove`, { cookie: gate.cookie, body: {} })).status).toBe(403);
+  });
+
   it('two leaders scanning the same person at once count once', async () => {
     const c = await camp();
     const a = await staff(c.eventId, 'meal_leader');

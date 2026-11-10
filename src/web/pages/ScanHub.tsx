@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import type { ScanTarget } from '../scan/targets';
-import { canScan, isOnNow, rememberScanEvent, useLastScan, useScanEvent, useScanTargets } from '../scan/targets';
+import { canScan, isOnNow, rememberScanEvent, useScanEvent, useScanTargets } from '../scan/targets';
 import type { EventSummary } from '../types';
 import { scanOnly } from './EventLayout';
 import { useApi } from '../useApi';
@@ -13,7 +13,6 @@ export function ScanHub() {
   const { data, error, loading, reload } = useApi<{ events: EventSummary[] }>('/events');
   const [params, setParams] = useSearchParams();
   const stored = useScanEvent();
-  const last = useLastScan();
   const events = (data?.events ?? []).filter(canScan);
   const wanted = params.get('event') ?? stored;
   const event = events.find((e) => e.id === wanted) ?? events[0] ?? null;
@@ -59,21 +58,6 @@ export function ScanHub() {
               ))}
             </select>
           </div>
-        )}
-        {last && last.eventId === event.id && (
-          <ul className="list">
-            <li className="row row-large row-link">
-              <span className="row-main">
-                <span className="row-meta">Carry on scanning</span>
-                <span className="row-title">
-                  <Link to={last.to}>{last.label}</Link>
-                </span>
-              </span>
-              <span className="row-chevron">
-                <Icon name="chevron" />
-              </span>
-            </li>
-          </ul>
         )}
         <ScanTargetPicker event={event} autoOpen={scanOnly(event) && !params.get('pick')} />
       </div>

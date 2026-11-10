@@ -264,6 +264,53 @@ scanRoutes.post('/scans/:scanId/void', async (c) => {
   return c.json({ id });
 });
 
+/**
+ * "Remove" on the scanner's Eaten / Checked in list: undo someone's scans at
+ * this meal or activity, so they're back in "Not yet". Scans are never changed
+ * or deleted: each gets a void correction, and the audit log records who did
+ * it. Anyone who can scan here can do it, including a scanning station.
+ */
+scanRoutes.post('/scan/:type/:id/people/:registrationId/remove', async (c) => {
+  const eventId = c.req.param('eventId')!;
+  const params = contextParams.safeParse({ type: c.req.param('type'), id: c.req.param('id') });
+  const registrationId = z.uuid().safeParse(c.req.param('registrationId'));
+  if (!params.success || !params.data.id || params.data.type === 'site' || !registrationId.success) throw notFound();
+  const { principal, ctx } = await authorisedContext(c, eventId, params.data.type, params.data.id);
+  const event = (await getEventRow(c.env.DB, eventId))!;
+  if (event.status !== 'open') throw conflict('Scans can only be changed while the event is open.');
+  const { results } = await c.env.DB.prepare(
+    `SELECT s.id, s.direction FROM scans s
+      WHERE s.event_id = ? AND s.context_type = ? AND s.context_id = ? AND s.registration_id = ?
+        AND s.outcome IN ('accepted', 'duplicate', 'review')
+        AND NOT EXISTS (SELECT 1 FROM scans c WHERE c.supersedes_id = s.id)`,
+  )
+    .bind(eventId, ctx.type, ctx.id, registrationId.data)
+    .all<{ id: string; direction: string }>();
+  if (results.length === 0) return c.json({ undone: 0 });
+  const now = nowIso();
+  const actorUser = principal.kind === 'user' ? principal.userId : null;
+  const actorStation = principal.kind === 'station' ? principal.stationId : null;
+  const reason = ctx.type === 'meal' ? 'Removed from Eaten on the scanner' : 'Removed from Checked in on the scanner';
+  await c.env.DB.batch([
+    ...results.map((s) =>
+      c.env.DB.prepare(
+        `INSERT INTO scans (id, event_id, context_type, context_id, registration_id, direction, method, device_time, server_time,
+            device_id, actor_user_id, actor_station_id, outcome, supersedes_id, correction_reason)
+         VALUES (?, ?, ?, ?, ?, ?, 'correction', ?, ?, 'server', ?, ?, 'void', ?, ?)`,
+      ).bind(crypto.randomUUID(), eventId, ctx.type, ctx.id, registrationId.data, s.direction, now, now, actorUser, actorStation, s.id, reason),
+    ),
+    auditStatement(c.env.DB, {
+      actor: actorStation ? { type: 'station', id: actorStation } : { type: 'user', id: actorUser! },
+      action: 'attendance.reset',
+      eventId,
+      targetType: ctx.type,
+      targetId: params.data.id,
+      detail: { scans: results.length, registrationId: registrationId.data, via: 'scanner' },
+    }),
+  ]);
+  return c.json({ undone: results.length });
+});
+
 /** Recent scans in a context, for the scanner's history and director corrections. */
 async function recent(c: AppContext) {
   const eventId = c.req.param('eventId')!;

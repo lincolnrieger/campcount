@@ -22,7 +22,7 @@ Sections, shown only when the person's role can use them:
 | Section | Holds |
 | --- | --- |
 | Home | Open camp: counts that filter (On site, Not arrived, Left camp), Find a person, everyone listed with Not arrived first, and Arrived/Left by hand. Draft camp: the Get ready checklist, ending with Open event. |
-| Scan | Big buttons: On now, then Gate, then the day's meals and activities. One tap opens the full-screen scanner. People who only scan land here. |
+| Scan | Big buttons: On now, then Gate, then the day's meals and activities. One tap opens the full-screen scanner. People who only scan go straight into the scanner when there's only one thing on. |
 | People | Search, one filter, and a table (computers) or list (phones). The ⋯ menu has Import from MyScout, Print lanyards, Print roll sheet and Select people to delete. A person has Right now, Dietary needs, Activities, History (with Undo this scan) and Details, plus Edit details. |
 | Activities | Day tabs, then rows. Each activity has who's booked and who's here, Check in, and Add someone. |
 | Meals | Day tabs. Add a day of meals adds breakfast, lunch and dinner in one go. |
@@ -34,7 +34,7 @@ Sections, shown only when the person's role can use them:
   - A top bar with the logo and name.
   - A bottom tab bar with the first three sections, plus More for the rest and Account.
 
-The scanner is full screen and never scrolls on the Scan tab: title, count and upload status, the camera filling the rest, and the result under it. Tabs along the bottom: Scan, Find (by name or card code), the list (On site, Eaten or Checked in) and More (beep, scan something else, account). Close returns to the Scan buttons.
+The scanner is full screen and never scrolls while scanning: title, count and upload status, a row of today's places to scan (one tap switches, the camera keeps running), the camera filling the rest, and the result under it. The ⋯ menu has Find someone, the list (On site, Eaten or Checked in, where a meal or activity scan can be removed), Everything you can scan, Beep, and account. Close returns to the Scan buttons.
 
 ## Conventions
 
