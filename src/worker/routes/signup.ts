@@ -4,7 +4,7 @@ import { normaliseShortCode } from '../../shared/credentials';
 import { displayName } from '../../shared/names';
 import type { AppContext, AppEnv } from '../context';
 import { parseBody, requirePermission, requirePrincipal, requireUser } from '../context';
-import { ApiError, conflict, notFound } from '../lib/errors';
+import { ApiError, badRequest, conflict, notFound } from '../lib/errors';
 import { hmacHex, randomToken, timingSafeEqualHex } from '../lib/crypto';
 import { nowIso } from '../lib/time';
 import { limitPerKey, limitPublicNetwork } from '../lib/rateLimit';
@@ -14,6 +14,8 @@ import { contextState, loadContext } from '../services/contexts';
 import { can } from '../services/principal';
 import { addMember, createTeam, participantTeams, removeMember, teamEventRow, teamRow } from '../services/teams';
 import { teamNameSchema } from '../../shared/schemas';
+import { sectionWord } from '../../shared/lanyardDesign';
+import { activitiesDone, collect, meIsValid, readMe, standing, writeMe } from '../services/sideQuest';
 
 /**
  * Activity sign-up. People book activity sessions themselves:
@@ -35,6 +37,7 @@ interface SignupEvent {
   starts_on: string;
   ends_on: string;
   feature_self_signup: number;
+  feature_side_quest: number;
   signup_code: string | null;
 }
 
@@ -116,13 +119,16 @@ interface Person {
   credentialId: string;
   event: SignupEvent;
   name: string;
+  firstName: string;
+  kind: 'youth' | 'adult';
+  section: string;
   groupName: string;
 }
 
 async function personFor(c: AppContext, { registrationId, credentialId }: Pass): Promise<Person> {
   const row = await c.env.DB.prepare(
-    `SELECT r.id, r.group_name, p.first_name, p.preferred_name, p.last_name,
-            e.id AS event_id, e.name AS event_name, e.status, e.timezone, e.starts_on, e.ends_on, e.feature_self_signup, e.signup_code
+    `SELECT r.id, r.group_name, r.kind, r.section, p.first_name, p.preferred_name, p.last_name,
+            e.id AS event_id, e.name AS event_name, e.status, e.timezone, e.starts_on, e.ends_on, e.feature_self_signup, e.feature_side_quest, e.signup_code
        FROM registrations r JOIN people p ON p.id = r.person_id JOIN events e ON e.id = r.event_id
        JOIN credentials cr ON cr.registration_id = r.id AND cr.id = ? AND cr.status = 'active'
       WHERE r.id = ? AND r.status = 'active'`,
@@ -134,6 +140,9 @@ async function personFor(c: AppContext, { registrationId, credentialId }: Pass):
     registrationId,
     credentialId,
     name: displayName(String(row.first_name), String(row.preferred_name), String(row.last_name)),
+    firstName: String(row.preferred_name || row.first_name),
+    kind: row.kind === 'adult' ? 'adult' : 'youth',
+    section: String(row.section ?? ''),
     groupName: String(row.group_name),
     event: {
       id: String(row.event_id),
@@ -143,6 +152,7 @@ async function personFor(c: AppContext, { registrationId, credentialId }: Pass):
       starts_on: String(row.starts_on),
       ends_on: String(row.ends_on),
       feature_self_signup: Number(row.feature_self_signup),
+      feature_side_quest: Number(row.feature_side_quest),
       signup_code: row.signup_code as string | null,
     },
   };
@@ -196,8 +206,9 @@ async function programme(db: D1Database, eventId: string) {
   ].sort((x, y) => (x.startsAt ?? '').localeCompare(y.startsAt ?? '') || x.name.localeCompare(y.name));
 }
 
-async function personView(c: AppContext, p: Person) {
-  const [list, booked, programmeList, teams] = await Promise.all([
+async function personView(c: AppContext, p: Person, opts: { sideQuest?: boolean } = {}) {
+  const sideQuestOn = opts.sideQuest === true && p.event.feature_side_quest === 1;
+  const [list, booked, programmeList, teams, done, quest] = await Promise.all([
     sessions(c.env.DB, p.event.id),
     c.env.DB.prepare(
       `SELECT b.activity_id, b.source, a.name, a.location, a.starts_at, a.ends_at
@@ -208,10 +219,15 @@ async function personView(c: AppContext, p: Person) {
       .all<{ activity_id: string; source: string; name: string; location: string; starts_at: string | null; ends_at: string | null }>(),
     programme(c.env.DB, p.event.id),
     participantTeams(c.env.DB, p.event.id, p.registrationId),
+    activitiesDone(c.env.DB, p.event.id, p.registrationId),
+    sideQuestOn ? standing(c.env.DB, p.event.id, p.registrationId) : Promise.resolve(null),
   ]);
   return {
     pass: await makePass(c, p),
-    person: { name: p.name, groupName: p.groupName },
+    person: { name: p.name, firstName: p.firstName, groupName: p.groupName, section: p.section, sectionWord: sectionWord(p.kind, p.section) },
+    activitiesDone: done,
+    // Only on someone's own link, and only once the camp has turned the game on.
+    sideQuest: quest,
     event: { name: p.event.name, timezone: p.event.timezone, startsOn: p.event.starts_on, endsOn: p.event.ends_on },
     open: signupOpen(p.event),
     sessions: list,
@@ -234,7 +250,7 @@ export const publicSignupRoutes = new Hono<AppEnv>();
 async function eventByCode(c: AppContext, code: string): Promise<SignupEvent> {
   if (!/^[A-Za-z0-9_-]{10,64}$/.test(code)) throw notFound();
   const e = await c.env.DB.prepare(
-    `SELECT id, name, status, timezone, starts_on, ends_on, feature_self_signup, signup_code FROM events WHERE signup_code = ?`,
+    `SELECT id, name, status, timezone, starts_on, ends_on, feature_self_signup, feature_side_quest, signup_code FROM events WHERE signup_code = ?`,
   )
     .bind(code)
     .first<SignupEvent>();
@@ -253,11 +269,20 @@ publicSignupRoutes.get('/event/:code', async (c) => {
 });
 
 const identifySchema = z.union([
-  z.strictObject({ token: z.string().regex(/^[A-Za-z0-9_-]{22}$/), code: z.string().max(64).optional() }),
+  // A lanyard link opened on a phone (or the kiosk camera, with the screen's code).
+  // claim: "this is my card", making this phone belong to this person.
+  z.strictObject({ token: z.string().regex(/^[A-Za-z0-9_-]{22}$/), code: z.string().max(64).optional(), claim: z.boolean().optional() }),
   z.strictObject({ shortCode: z.string().trim().max(12), code: z.string().max(64) }),
 ]);
 
-/** Scan a lanyard (token) or type its printed code (with the screen's event code). */
+/**
+ * Scan a lanyard (token) or type its printed code (with the screen's event code).
+ *
+ * Someone's own link, opened on a phone, also makes that phone theirs (a
+ * signed cookie). If the camp plays the Side Quest and the phone already
+ * belongs to someone else at the camp, opening this link collects this
+ * person for them instead of showing this person's page.
+ */
 publicSignupRoutes.post('/identify', async (c) => {
   const input = await parseBody(c, identifySchema);
   await limitPublicNetwork(c, 'signup-identify');
@@ -279,7 +304,44 @@ publicSignupRoutes.post('/identify', async (c) => {
   });
   // A lanyard from another event can't be used at this event's screen.
   if (input.code && person.event.signup_code !== input.code) throw notRecognised();
-  return c.json(await personView(c, person));
+
+  // The kiosk and typed codes are shared screens: they never belong to anyone.
+  const ownLink = 'token' in input && !input.code;
+  if (!ownLink) return c.json(await personView(c, person));
+
+  const scanned = { registrationId: person.registrationId, credentialId: person.credentialId };
+  const claim = 'claim' in input && input.claim === true;
+  const me = claim ? null : await readMe(c);
+  const mine = me && me.registrationId === person.registrationId;
+  const someoneElse = me && !mine && (await meIsValid(c.env.DB, me, person.event.id));
+
+  if (someoneElse && person.event.feature_side_quest === 1) {
+    const fresh = await collect(c.env.DB, person.event.id, me.registrationId, person.registrationId);
+    const owner = await personFor(c, me).catch(() => null);
+    if (owner) {
+      return c.json({
+        collect: {
+          fresh,
+          friend: { firstName: person.firstName, section: person.section, sectionWord: sectionWord(person.kind, person.section) },
+          owner: { firstName: owner.firstName },
+          standing: await standing(c.env.DB, person.event.id, owner.registrationId),
+        },
+      });
+    }
+  }
+  // Without the game, a phone that's someone else's just shows this card's page, as before.
+  if (!someoneElse) await writeMe(c, scanned);
+  return c.json(await personView(c, person, { sideQuest: !someoneElse }));
+});
+
+/** The page of whoever this phone belongs to (after collecting a friend, or opening /c without a link). */
+publicSignupRoutes.post('/me', async (c) => {
+  await parseBody(c, z.strictObject({}));
+  await limitPublicNetwork(c, 'signup-identify');
+  const me = await readMe(c);
+  const person = me ? await personFor(c, me).catch(() => null) : null;
+  if (!person) throw new ApiError(404, 'not_recognised', 'Scan your own lanyard with your phone camera to open your page.');
+  return c.json(await personView(c, person, { sideQuest: true }));
 });
 
 const bookingSchema = z.strictObject({ pass: z.string().max(200), activityId: z.uuid() });
@@ -551,6 +613,41 @@ signupRoutes.delete('/activities/:activityId/bookings/:registrationId', async (c
   ]);
   if (res!.meta.changes !== 1) throw notFound();
   return c.json({ ok: true });
+});
+
+/**
+ * Move someone's booking from this activity to another (another session of
+ * the same thing, or something else entirely): one step, so they're never
+ * left with no booking or two. Like other staff bookings it ignores the
+ * capacity limit. Needs booking rights on both activities.
+ */
+signupRoutes.post('/activities/:activityId/bookings/:registrationId/move', async (c) => {
+  const eventId = c.req.param('eventId')!;
+  const from = c.req.param('activityId');
+  const registrationId = c.req.param('registrationId');
+  const { to } = await parseBody(c, z.strictObject({ to: z.uuid() }));
+  requireBookings(c, eventId, from);
+  requireBookings(c, eventId, to);
+  const user = requireUser(c);
+  if (to === from) throw badRequest('Choose a different activity.');
+  const ok = await c.env.DB.prepare(
+    `SELECT a.name FROM activities a, registrations r, activity_bookings b
+      WHERE a.id = ? AND a.event_id = ? AND a.status = 'active'
+        AND r.id = ? AND r.event_id = ? AND r.status = 'active'
+        AND b.activity_id = ? AND b.registration_id = r.id`,
+  )
+    .bind(to, eventId, registrationId, eventId, from)
+    .first<{ name: string }>();
+  if (!ok) throw notFound();
+  await c.env.DB.batch([
+    c.env.DB.prepare(`DELETE FROM activity_bookings WHERE activity_id = ? AND registration_id = ? AND event_id = ?`).bind(from, registrationId, eventId),
+    c.env.DB.prepare(
+      `INSERT INTO activity_bookings (activity_id, registration_id, event_id, source, created_at) VALUES (?, ?, ?, 'manual', ?)
+       ON CONFLICT (activity_id, registration_id) DO NOTHING`,
+    ).bind(to, registrationId, eventId, nowIso()),
+    auditStatement(c.env.DB, { actor: { type: 'user', id: user.userId }, action: 'booking.move', eventId, targetType: 'registration', targetId: registrationId, detail: { from, to } }),
+  ]);
+  return c.json({ ok: true, to: { id: to, name: ok.name } });
 });
 
 /**

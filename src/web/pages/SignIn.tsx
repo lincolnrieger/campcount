@@ -3,7 +3,6 @@ import type { FormEvent, ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { ApiFailure, api } from '../api';
 import { Button, Choice, Field, Loading, Notice, Segmented, Skeleton } from '../ui';
-import { BrandMark } from '../ui/AppShell';
 import { useSession } from '../session';
 import type { Me } from '../types';
 import { useTitle } from '../shell';
@@ -13,10 +12,7 @@ export function PublicFrame({ children }: { children: ReactNode }) {
   return (
     <main className="public" id="main">
       <div className="public-card">
-        <p className="public-brand">
-          <BrandMark />
-          CampCount
-        </p>
+        <img className="public-logo" src="/logo.png" alt="CampCount" width={112} height={112} />
         {children}
       </div>
     </main>

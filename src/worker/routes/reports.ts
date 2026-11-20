@@ -10,6 +10,7 @@ import { devices, loadEventModel, loadEventModelForDashboard, localTime, openIte
 import { can } from '../services/principal';
 import type { EventRow } from './events';
 import { getEventRow } from './events';
+import { leaderboard } from '../services/sideQuest';
 
 export const reportRoutes = new Hono<AppEnv>();
 
@@ -33,6 +34,14 @@ reportRoutes.get('/live', async (c) => {
     openItems: items.length,
     devices: devices(model),
   });
+});
+
+/** Super Splash Side Quest: who has collected the most people (for prizes). Staff only; participants only ever see first names and counts. */
+reportRoutes.get('/side-quest', async (c) => {
+  const eventId = c.req.param('eventId')!;
+  requirePermission(c, 'reports.view', { eventId });
+  const ev = await event(c, eventId);
+  return c.json({ enabled: ev.feature_side_quest === 1, ...(await leaderboard(c.env.DB, eventId)) });
 });
 
 /** Where everyone is right now: on or off site, which activity, and where they were last scanned. */

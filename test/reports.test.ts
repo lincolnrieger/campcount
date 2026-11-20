@@ -196,6 +196,10 @@ describe('retention', () => {
     const at = (days: number) => new Date(Date.parse(closed!.closed_at) + days * 86400_000).toISOString();
 
     await testEnv.DB.prepare(`UPDATE registrations SET extra_fields = '{"Medical":"Asthma"}' WHERE event_id = ?`).bind(c.eventId).run();
+    const regs = await testEnv.DB.prepare(`SELECT id FROM registrations WHERE event_id = ? LIMIT 2`).bind(c.eventId).all<{ id: string }>();
+    await testEnv.DB.prepare(`INSERT INTO side_quest_collections (event_id, collector_id, collected_id, created_at) VALUES (?, ?, ?, ?)`)
+      .bind(c.eventId, regs.results[0]!.id, regs.results[1]!.id, new Date().toISOString())
+      .run();
     await runMaintenance(testEnv, at(89));
     expect((await testEnv.DB.prepare(`SELECT count(*) AS n FROM dietary_entries WHERE event_id = ?`).bind(c.eventId).first<{ n: number }>())!.n).toBe(1);
 
@@ -207,6 +211,8 @@ describe('retention', () => {
     expect(consent.results).toEqual([{ photo_consent: 'unknown' }]);
     const extra = await testEnv.DB.prepare(`SELECT DISTINCT extra_fields FROM registrations WHERE event_id = ?`).bind(c.eventId).all();
     expect(extra.results).toEqual([{ extra_fields: '{}' }]);
+    const quest = await testEnv.DB.prepare(`SELECT count(*) AS n FROM side_quest_collections WHERE event_id = ?`).bind(c.eventId).first<{ n: number }>();
+    expect(quest!.n).toBe(0);
 
     await runMaintenance(testEnv, at(731));
     const event = await testEnv.DB.prepare(`SELECT records_purged_at, archive_summary FROM events WHERE id = ?`).bind(c.eventId).first<{ records_purged_at: string; archive_summary: string }>();

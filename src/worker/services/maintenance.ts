@@ -5,7 +5,7 @@ import { loadEventModel, summarise } from './reports';
 
 /** Retention periods (docs/requirements.md §8). */
 export const RETENTION = {
-  sensitiveDays: 90, // dietary entries, photo consent, card tokens, extra imported columns
+  sensitiveDays: 90, // dietary entries, photo consent, card tokens, extra imported columns, side quest collections
   recordsDays: 730, // registrations and scans, kept for the annual report
 } as const;
 
@@ -42,6 +42,8 @@ export async function runMaintenance(env: Env, now = nowIso()): Promise<{ sensit
   for (const { id } of sensitive.results) {
     await env.DB.batch([
       env.DB.prepare(`DELETE FROM dietary_entries WHERE event_id = ?`).bind(id),
+      // Who collected whom in the Side Quest: a map of children's friendships, so it goes with the sensitive data.
+      env.DB.prepare(`DELETE FROM side_quest_collections WHERE event_id = ?`).bind(id),
       env.DB.prepare(
         `UPDATE registrations SET photo_consent = 'unknown', dietary_source_hash = NULL, dietary_review_pending = 0, extra_fields = '{}', updated_at = ? WHERE event_id = ?`,
       ).bind(now, id),

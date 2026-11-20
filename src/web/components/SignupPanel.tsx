@@ -17,7 +17,11 @@ export interface SignupSession {
 
 export interface SignupView {
   pass: string;
-  person: { name: string; groupName: string };
+  person: { name: string; groupName: string; firstName?: string; section?: string; sectionWord?: string };
+  /** Different activities they've been checked in to. */
+  activitiesDone?: number;
+  /** The Side Quest, on their own link when the camp plays it. */
+  sideQuest?: SideQuestStanding | null;
   event: { name: string; timezone: string; startsOn: string; endsOn: string };
   open: boolean;
   sessions: SignupSession[];
@@ -26,6 +30,22 @@ export interface SignupView {
   programme?: ProgrammeItem[];
   /** Team events (Soccer, Basketball…) and the person's own teams. */
   teamEvents?: ParticipantTeamEvent[];
+}
+
+export interface SideQuestStanding {
+  collected: number;
+  total: number;
+  rank: number | null;
+  players: number;
+  board: { place: number; name: string; collected: number; isYou: boolean }[];
+  quests: { key: string; label: string; collected: number; total: number; done: boolean }[];
+}
+
+export interface CollectResult {
+  fresh: boolean;
+  friend: { firstName: string; section: string; sectionWord: string };
+  owner: { firstName: string };
+  standing: SideQuestStanding;
 }
 
 export interface ProgrammeItem {

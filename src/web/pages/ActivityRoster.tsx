@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router';
 import { ApiFailure, api } from '../api';
 import { deleteContext } from '../confirmDelete';
 import { recordByHand } from '../scan/manual';
+import type { Activity } from '../model';
 import { useApi } from '../useApi';
 import { matchesSearch, searchRank } from '../../shared/search';
 import { dayInZone, dayLabel, timeInZone, timeRange } from '../../shared/time';
@@ -82,10 +83,14 @@ export function ActivityRoster() {
   const manage = can('activities.manage') && (event.status === 'draft' || event.status === 'open');
   const [show, setShow] = useState<Show>('tocome');
   const [q, setQ] = useState('');
-  const [adding, setAdding] = useState(false);
+  // Opened from the scanner's "Add someone to come": start with the add sheet open.
+  const [adding, setAdding] = useState(() => new URLSearchParams(window.location.search).get('add') === '1');
   const [find, setFind] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
+  const [moving, setMoving] = useState<{ id: string; name: string } | null>(null);
   const tz = event.timezone;
+  // Moving needs booking rights on the other activity too: event managers, and scanners (who book on any activity).
+  const canMove = can('activities.manage') || (can('activity.bookings') && can('site.scan'));
   const list = `${base}/activities`;
 
   usePolling(reload, 20_000);
@@ -132,7 +137,7 @@ export function ActivityRoster() {
       else await api(`${path}/bookings/${p.id}`, { method: 'DELETE' });
       await reload();
       toast(
-        add ? `${p.name} booked` : `${p.name}'s booking removed`,
+        add ? `${p.name} added to To come` : `${p.name}'s booking removed`,
         add
           ? {}
           : {
@@ -348,11 +353,12 @@ export function ActivityRoster() {
                         <span className="visually-hidden"> {p.name}</span>
                       </Button>
                     )}
-                    {((data.canCheckIn && p.visits > 0 && event.status === 'open') || (data.canBook && p.booked && !p.present)) && (
+                    {((data.canCheckIn && p.visits > 0 && event.status === 'open') || (data.canBook && p.booked && !p.present) || (canMove && p.booked)) && (
                       <Menu
                         label={`More for ${p.name}`}
                         items={[
                           data.canCheckIn && p.visits > 0 && event.status === 'open' && { label: p.booked ? 'Move back to To come' : 'Undo check-in', onSelect: () => void moveBack(p) },
+                          canMove && p.booked && event.status !== 'completed' && { label: 'Move to another activity…', onSelect: () => setMoving(p) },
                           data.canBook && p.booked && !p.present && { label: 'Remove booking', danger: true, onSelect: () => void booking(p, false) },
                         ]}
                       />
@@ -364,6 +370,21 @@ export function ActivityRoster() {
           </ul>
         )}
       </div>
+
+      {moving && (
+        <MoveSheet
+          eventId={event.id}
+          tz={tz}
+          from={{ id: a.id, name: a.name }}
+          person={moving}
+          onClose={() => setMoving(null)}
+          onMoved={async (to) => {
+            setMoving(null);
+            toast(`${moving.name} moved to ${to}`);
+            await reload();
+          }}
+        />
+      )}
 
       <Sheet
         open={adding}
@@ -377,7 +398,7 @@ export function ActivityRoster() {
         {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
         <SearchField id="walkin-q" label="Anyone on camp: type a name" value={find} onChange={setFind} autoFocus />
         {find.trim() === '' ? (
-          <p className="meta">{data.canCheckIn ? 'Sign in a walk-in, or book someone for this session.' : 'Book someone for this session.'}</p>
+          <p className="meta">{data.canBook ? 'Add someone to the list of people to come, or check in a walk-in now.' : 'Check in a walk-in.'}</p>
         ) : walkIns.length === 0 ? (
           <p className="meta">No one else on camp matches "{find}".</p>
         ) : (
@@ -391,7 +412,7 @@ export function ActivityRoster() {
                 <span className="row-side">
                   {data.canBook && (
                     <Button small busy={busy === p.id} onClick={() => void booking(p, true)}>
-                      Book<span className="visually-hidden"> {p.name}</span>
+                      Add to come<span className="visually-hidden">: {p.name}</span>
                     </Button>
                   )}
                   {canScan && (
@@ -406,5 +427,91 @@ export function ActivityRoster() {
         )}
       </Sheet>
     </>
+  );
+}
+
+/** Pick where to move someone's booking: other sessions of the same activity first, then everything else. */
+function MoveSheet({
+  eventId,
+  tz,
+  from,
+  person,
+  onClose,
+  onMoved,
+}: {
+  eventId: string;
+  tz: string;
+  from: { id: string; name: string };
+  person: { id: string; name: string };
+  onClose: () => void;
+  onMoved: (to: string) => Promise<void>;
+}) {
+  const { data, error } = useApi<{ activities: Activity[] }>(`/events/${eventId}/activities`);
+  const [q, setQ] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+  const options = (data?.activities ?? []).filter((x) => x.id !== from.id && x.status === 'active' && x.kind !== 'program' && !x.teamEvent && matchesSearch(q, x.name, x.location));
+  const same = options.filter((x) => x.name.toLowerCase() === from.name.toLowerCase());
+  const others = options.filter((x) => x.name.toLowerCase() !== from.name.toLowerCase());
+  const when = (x: Activity) => (x.startsAt ? `${dayLabel(dayInZone(x.startsAt, tz))}, ${timeRange(x.startsAt, x.endsAt, tz)}` : 'Any time');
+
+  async function move(to: Activity) {
+    setBusy(to.id);
+    setFailure(null);
+    try {
+      await api(`/events/${eventId}/activities/${from.id}/bookings/${person.id}/move`, { body: { to: to.id } });
+      await onMoved(to.name);
+    } catch (err) {
+      setFailure(err instanceof ApiFailure ? err.message : 'No connection. Try again.');
+      setBusy(null);
+    }
+  }
+
+  const row = (x: Activity) => (
+    <li key={x.id} className="row">
+      <span className="row-main">
+        <span className="row-title">{x.name}</span>
+        <span className="row-meta">{[when(x), x.location, x.capacity !== null ? `${x.booked} of ${x.capacity} booked` : null].filter(Boolean).join(' · ')}</span>
+      </span>
+      <span className="row-side">
+        <Button small kind="primary" busy={busy === x.id} busyLabel="Moving…" disabled={busy !== null} onClick={() => void move(x)}>
+          Move here<span className="visually-hidden"> to {x.name}, {when(x)}</span>
+        </Button>
+      </span>
+    </li>
+  );
+
+  return (
+    <Sheet open title={`Move ${person.name}`} onClose={onClose}>
+      <p className="meta">Their booking for {from.name} moves to the one you choose. The place limit doesn't stop you here.</p>
+      {failure && (
+        <Notice tone="error">
+          <p>{failure}</p>
+        </Notice>
+      )}
+      <SearchField id="move-q" label="Find an activity" value={q} onChange={setQ} />
+      {error ? (
+        <p className="meta">Activities couldn't be loaded. Check your signal and try again.</p>
+      ) : !data ? (
+        <SkeletonRows rows={4} action />
+      ) : options.length === 0 ? (
+        <p className="meta">No other activities{q ? ` match "${q}"` : ''}.</p>
+      ) : (
+        <>
+          {same.length > 0 && (
+            <div className="list">
+              <h3 className="list-group-heading">Other {from.name} sessions</h3>
+              <ul>{same.map(row)}</ul>
+            </div>
+          )}
+          {others.length > 0 && (
+            <div className="list">
+              <h3 className="list-group-heading">{same.length ? 'Other activities' : 'Activities'}</h3>
+              <ul>{others.map(row)}</ul>
+            </div>
+          )}
+        </>
+      )}
+    </Sheet>
   );
 }

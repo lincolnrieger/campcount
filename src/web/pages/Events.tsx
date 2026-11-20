@@ -145,6 +145,7 @@ const DEFAULT_FEATURES: EventFeatures = {
   dietary: true,
   photo: false,
   selfSignup: false,
+  sideQuest: false,
 };
 
 /** "What will you use?": one checkbox per feature, with a one-line hint. */

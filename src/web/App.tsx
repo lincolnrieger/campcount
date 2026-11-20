@@ -51,7 +51,7 @@ const LanyardDesigner = lazy(() => import('./pages/LanyardDesigner').then((m) =>
 const LanyardPrint = lazy(() => import('./pages/LanyardPrint').then((m) => ({ default: m.LanyardPrint })));
 const Import = lazy(() => import('./pages/Import').then((m) => ({ default: m.Import })));
 const SignupKiosk = lazy(() => import('./pages/Signup').then((m) => ({ default: m.SignupKiosk })));
-const MyActivities = lazy(() => import('./pages/Signup').then((m) => ({ default: m.MyActivities })));
+const Participant = lazy(() => import('./pages/Participant').then((m) => ({ default: m.Participant })));
 
 function PageLoading() {
   return (
@@ -168,7 +168,7 @@ function EventSiteApp({ site }: { site: Extract<SiteInfo, { kind: 'event' }> }) 
         <Route path="/set-password" element={<PasswordLink />} />
         <Route path="/pair" element={<Pair />} />
         <Route path="/signup/:code" element={<SignupKiosk />} />
-        <Route path="/c" element={<MyActivities />} />
+        <Route path="/c" element={<Participant />} />
         <Route
           path="/events/:eventId/scan/:type/:contextId?"
           element={
@@ -239,7 +239,7 @@ function PlatformApp() {
         <Route path="/set-password" element={<PasswordLink />} />
         <Route path="/pair" element={<Pair />} />
         <Route path="/signup/:code" element={<SignupKiosk />} />
-        <Route path="/c" element={<MyActivities />} />
+        <Route path="/c" element={<Participant />} />
         {/* The scanner is full screen: no sidebar or tab bar. */}
         <Route
           path="/events/:eventId/scan/:type/:contextId?"

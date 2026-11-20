@@ -304,7 +304,7 @@ export function NewCamp() {
   const [startsOn, setStartsOn] = useState('');
   const [endsOn, setEndsOn] = useState('');
   const [location, setLocation] = useState('');
-  const [features, setFeatures] = useState<EventFeatures>({ activities: true, meals: true, site: true, dietary: true, photo: false, selfSignup: false });
+  const [features, setFeatures] = useState<EventFeatures>({ activities: true, meals: true, site: true, dietary: true, photo: false, selfSignup: false, sideQuest: false });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
 

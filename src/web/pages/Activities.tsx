@@ -109,9 +109,7 @@ export function Activities() {
   const counts = (a: Activity) => {
     const ctx = contexts.get(`activity:${a.id}`);
     const here = ctx ? (a.trackSignOut ? ctx.presentNow : ctx.people) : null;
-    return [a.capacity ? `${a.booked} of ${a.capacity} places booked` : a.booked ? `${a.booked} booked` : null, here !== null ? `${here} ${a.trackSignOut ? 'here' : 'checked in'}` : null]
-      .filter(Boolean)
-      .join(' · ');
+    return here !== null && here > 0 ? `${here} ${a.trackSignOut ? 'here now' : 'checked in'}` : '';
   };
 
   return (
@@ -152,13 +150,11 @@ export function Activities() {
                     <Link to={a.id}>{a.name}</Link>
                   </span>
                   <span className="row-meta">
-                    {[searching && a.startsAt ? dayLabel(dayOf(a)) : null, a.location || null, counts(a) || null].filter(Boolean).join(' · ') || 'No bookings yet'}
+                    {[searching && a.startsAt ? dayLabel(dayOf(a)) : null, a.location || null, counts(a) || null].filter(Boolean).join(' · ')}
                   </span>
-                  {(a.status === 'cancelled' || a.bookingRequired || (a.capacity !== null && a.booked >= a.capacity)) && (
+                  {a.status === 'cancelled' && (
                     <span className="activity-badges">
-                      {a.status === 'cancelled' && <Badge>Cancelled</Badge>}
-                      {a.status !== 'cancelled' && a.capacity !== null && a.booked >= a.capacity && <Badge tone="warning">Full</Badge>}
-                      {a.bookingRequired && <Badge tone="brand">Booking required</Badge>}
+                      <Badge>Cancelled</Badge>
                     </span>
                   )}
                 </span>

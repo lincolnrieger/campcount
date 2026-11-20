@@ -59,7 +59,7 @@ describe('activity sign-up', () => {
   it('books by scanned lanyard or typed card code, enforcing places and clashes', async () => {
     const c = await camp();
     const me = await json(await api('/public/signup/identify', { body: { token: c.card('100').token, code: c.code } }));
-    expect(me.person).toEqual({ name: 'First100 P.', groupName: 'Example Troop' });
+    expect(me.person).toMatchObject({ name: 'First100 P.', firstName: 'First100', groupName: 'Example Troop', sectionWord: 'Scout' });
 
     let res = await json(await api('/public/signup/book', { body: { pass: me.pass, activityId: c.kayak9 } }));
     expect(res.bookings.map((b: { activityId: string }) => b.activityId)).toEqual([c.kayak9]);

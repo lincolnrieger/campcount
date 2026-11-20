@@ -135,6 +135,25 @@ proof of where someone is now and **not** a substitute for an emergency
 headcount or roll call. In an emergency, follow the Scouts SA emergency
 procedure and do a physical headcount.
 
+## Super Splash Side Quest (optional, secret)
+
+A game for campers, off unless you turn it on (Settings › Event details ›
+Super Splash Side Quest). Don't announce it: kids find it.
+
+- When a camper opens their own lanyard QR on their phone, that phone
+  becomes theirs. If they then scan someone else's lanyard with the phone
+  camera, they **collect** that person: a full-screen "Splash!" with how
+  many friends they've collected, out of how many at camp, and their place
+  on the Side Quest table. Scanning someone twice shows "Bah bahhhh!".
+- Their page then shows the Side Quest: quests to collect every Joey, Cub,
+  Scout, Venturer, Rover, and all the leaders and event team, and a short
+  table (top three, plus the people either side of them, first names only).
+- Staff see the full leaderboard, with full names, under Reports, for prizes.
+- The kiosk and typed codes never collect. A parent's phone with siblings:
+  tap "This is my card, not a friend's" to switch whose phone it is.
+- Who collected whom is deleted with the camp's other sensitive data, 90
+  days after it closes.
+
 ## Practising with demo mode
 
 Platform admins can open Admin, then Demo camps, to create a practice camp
