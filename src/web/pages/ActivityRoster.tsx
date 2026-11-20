@@ -483,7 +483,7 @@ function MoveSheet({
 
   return (
     <Sheet open title={`Move ${person.name}`} onClose={onClose}>
-      <p className="meta">Their booking for {from.name} moves to the one you choose. Places limits don't stop you here.</p>
+      <p className="meta">Their booking for {from.name} moves to the one you choose. The place limit doesn't stop you here.</p>
       {failure && (
         <Notice tone="error">
           <p>{failure}</p>

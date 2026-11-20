@@ -334,6 +334,16 @@ publicSignupRoutes.post('/identify', async (c) => {
   return c.json(await personView(c, person, { sideQuest: !someoneElse }));
 });
 
+/** The page of whoever this phone belongs to (after collecting a friend, or opening /c without a link). */
+publicSignupRoutes.post('/me', async (c) => {
+  await parseBody(c, z.strictObject({}));
+  await limitPublicNetwork(c, 'signup-identify');
+  const me = await readMe(c);
+  const person = me ? await personFor(c, me).catch(() => null) : null;
+  if (!person) throw new ApiError(404, 'not_recognised', 'Scan your own lanyard with your phone camera to open your page.');
+  return c.json(await personView(c, person, { sideQuest: true }));
+});
+
 const bookingSchema = z.strictObject({ pass: z.string().max(200), activityId: z.uuid() });
 
 publicSignupRoutes.post('/book', async (c) => {

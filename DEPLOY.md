@@ -38,8 +38,9 @@ whole account straight away.
 2. Cloudflare Workers Builds deploys it automatically. That run:
    - applies database migrations `0016_load_indexes.sql` (new indexes) and
      `0017_lanyard_designer.sql` (two new tables for lanyard designs and their
-     images). Both only add things, so they're safe while the old version is
-     running;
+     images), `0018_scanner_bookings.sql` (scanners can add people to come)
+     and `0019_side_quest.sql` (the Side Quest switch and its table). All
+     only add things, so they're safe while the old version is running;
    - creates the two new rate limits (`AUTH_NETWORK_LIMITER`,
      `PUBLIC_NETWORK_LIMITER`) from `wrangler.jsonc`.
 3. In Cloudflare, open **Workers & Pages › campcount › Deployments** and

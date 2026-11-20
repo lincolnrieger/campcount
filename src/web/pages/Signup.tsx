@@ -5,14 +5,13 @@ import { parseCredentialPayload } from '../../shared/credentials';
 import { ApiFailure, api } from '../api';
 import { SessionBoard, SignupPanel } from '../components/SignupPanel';
 import { TeamsPanel } from '../components/TeamsPanel';
-import type { ProgrammeItem, SignupSession, SignupView } from '../components/SignupPanel';
-import { dayInZone, dayLabel, timeInZone } from '../../shared/time';
+import type { SignupSession, SignupView } from '../components/SignupPanel';
 import { createDetector } from '../scan/decoder';
 import { useTitle } from '../shell';
 import { useSiteEvent } from '../site';
 import { BrandMark } from '../ui/AppShell';
 import { SiteLogo } from '../ui/SiteShell';
-import { Badge, Button, Field, Icon, Loading, Notice, Segmented, SkeletonRows, formatDateRange } from '../ui';
+import { Button, Field, Icon, Loading, Notice, Segmented, formatDateRange } from '../ui';
 import { usePolling } from '../usePolling';
 
 /** Back to the start screen after this long without a tap, so the next person starts fresh. */
@@ -40,7 +39,7 @@ function Frame({ title, subtitle, children, kiosk = false }: { title: string; su
 }
 
 /** What just happened (booked, cancelled, or what went wrong), pinned to the bottom of the screen so it's seen wherever you tapped. */
-function SignupStatus({ error, done }: { error: string | null; done: string | null }) {
+export function SignupStatus({ error, done }: { error: string | null; done: string | null }) {
   return (
     <div className="signup-status" role="status" aria-live="polite">
       {error ? (
@@ -59,7 +58,7 @@ function SignupStatus({ error, done }: { error: string | null; done: string | nu
 }
 
 /** Book, cancel and refresh for one identified person. */
-function usePerson(onError: (text: string) => void) {
+export function usePerson(onError: (text: string) => void) {
   const [view, setView] = useState<SignupView | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
@@ -332,227 +331,5 @@ function LanyardCamera({ onToken }: { onToken: (token: string) => void }) {
       )}
       {state === 'on' && <span className="viewfinder-guide" aria-hidden="true" />}
     </div>
-  );
-}
-
-/**
- * Someone's own lanyard link (the QR on their card, opened on a phone):
- * see and change their activity bookings.
- */
-type Tab = 'bookings' | 'teams' | 'programme' | 'meals';
-
-export function MyActivities() {
-  useTitle('Your activities');
-  // The token is in the URL fragment, which browsers never send to a server.
-  const [token] = useState(() => window.location.hash.slice(1));
-  const [error, setError] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
-  const person = usePerson(setError);
-  const { setView } = person;
-  const [chosenTab, setChosenTab] = useState<Tab | null>(null);
-
-  useEffect(() => {
-    if (!/^[A-Za-z0-9_-]{22}$/.test(token)) {
-      setFailed(true);
-      return;
-    }
-    api<SignupView>('/public/signup/identify', { body: { token } })
-      .then(setView)
-      .catch(() => setFailed(true));
-  }, [token, setView]);
-
-  if (failed) {
-    return (
-      <Frame title="Your activities">
-        <Notice tone="warning" title="This card isn't active">
-          <p>It may have been replaced. Ask a leader for help.</p>
-        </Notice>
-      </Frame>
-    );
-  }
-  if (!person.view) {
-    return (
-      <Frame title="Your activities">
-        <Loading what="your activities">
-          <SkeletonRows rows={2} />
-          <SkeletonRows rows={4} action />
-        </Loading>
-      </Frame>
-    );
-  }
-  const v = person.view;
-  // Start where there's something to do: bookings when there are any (or any to make), otherwise the programme.
-  const tab = chosenTab ?? (v.bookings.length || (v.open && v.sessions.length) ? 'bookings' : 'programme');
-  const setTab = (t: Tab) => setChosenTab(t);
-  const teamEvents = v.teamEvents ?? [];
-  const meals = (v.programme ?? []).filter((i) => i.kind === 'meal');
-  return (
-    <Frame title={v.person.name} subtitle={`${v.event.name} · ${formatDateRange(v.event.startsOn, v.event.endsOn)}`}>
-      <SignupStatus error={error} done={person.done} />
-      <Segmented
-        block
-        label="Show"
-        value={tab}
-        onChange={setTab}
-        options={[
-          { value: 'bookings', label: 'Activities' },
-          ...(teamEvents.length ? [{ value: 'teams' as const, label: 'Teams' }] : []),
-          { value: 'programme', label: 'Programme' },
-          ...(meals.length ? [{ value: 'meals' as const, label: 'Meals' }] : []),
-        ]}
-      />
-      {tab === 'teams' ? (
-        <TeamsPanel
-          teamEvents={teamEvents}
-          tz={v.event.timezone}
-          busy={person.busy}
-          onCreate={(id, name) => person.createTeam(id, name)}
-          onJoin={(id, name) => person.joinTeam(id, name)}
-          onLeave={(id) => person.leaveTeam(id)}
-        />
-      ) : tab === 'meals' ? (
-        <MealMenus meals={meals} tz={v.event.timezone} />
-      ) : tab === 'bookings' ? (
-        <SignupPanel view={v} busy={person.busy} onBook={(s) => person.book(s)} onCancel={(id) => person.cancel(id)} />
-      ) : (
-        <>
-          <OnNow items={v.programme ?? []} tz={v.event.timezone} />
-          <Programme items={v.programme ?? []} tz={v.event.timezone} />
-        </>
-      )}
-    </Frame>
-  );
-}
-
-const nowish = (it: ProgrammeItem, now: number) => {
-  if (!it.startsAt) return false;
-  const start = Date.parse(it.startsAt);
-  const end = it.endsAt ? Date.parse(it.endsAt) : start + 60 * 60_000;
-  return now >= start - 5 * 60_000 && now < end;
-};
-const KIND_WORD: Record<ProgrammeItem['kind'], string> = { activity: '', meal: 'Meal', program: '' };
-
-function ProgrammeRow({ it, tz }: { it: ProgrammeItem; tz: string }) {
-  return (
-    <li className="row">
-      <span className="programme-time num">{it.startsAt ? timeInZone(it.startsAt, tz) : ''}</span>
-      <span className="row-main">
-        <span className="row-title">{it.name}</span>
-        <span className="row-meta">
-          {[it.endsAt ? `until ${timeInZone(it.endsAt, tz)}` : null, it.location, KIND_WORD[it.kind] || null].filter(Boolean).join(' · ')}
-        </span>
-      </span>
-      {it.kind === 'activity' && <Places it={it} />}
-    </li>
-  );
-}
-
-/** How full an activity is: "4 of 12 places left", "Full", or how many are booked when there's no limit. */
-function Places({ it }: { it: ProgrammeItem }) {
-  if (it.capacity === null) return it.booked > 0 ? <span className="meta num">{it.booked} booked</span> : null;
-  const left = Math.max(0, it.capacity - it.booked);
-  if (left === 0) return <Badge>Full</Badge>;
-  return (
-    <span className={left <= 2 ? 'meta num programme-places is-low' : 'meta num programme-places'}>
-      {left} of {it.capacity} {it.capacity === 1 ? 'place' : 'places'} left
-    </span>
-  );
-}
-
-/** Every meal, day by day, with its menu and ingredients, so people can check them against their dietary needs. */
-function MealMenus({ meals, tz }: { meals: ProgrammeItem[]; tz: string }) {
-  const timed = meals.filter((m) => m.startsAt);
-  const untimed = meals.filter((m) => !m.startsAt);
-  const days = [...new Set(timed.map((m) => dayInZone(m.startsAt!, tz)))];
-  const groups = [...days.map((d) => ({ key: d, label: dayLabel(d, 'long'), items: timed.filter((m) => dayInZone(m.startsAt!, tz) === d) })), ...(untimed.length ? [{ key: 'other', label: 'Other meals', items: untimed }] : [])];
-  const anyDetail = meals.some((m) => m.menu || m.ingredients);
-  return (
-    <section className="signup-section" aria-labelledby="meals-heading">
-      <h2 id="meals-heading">Meals</h2>
-      <p className="meta">
-        {anyDetail
-          ? 'What each meal is and what goes into it. If something here clashes with your dietary needs, tell a leader before camp.'
-          : "The menus haven't been added yet. Check back closer to camp."}
-      </p>
-      {groups.map((g) => (
-        <div key={g.key} className="list">
-          <h3 className="list-group-heading">{g.label}</h3>
-          <ul>
-            {g.items.map((m, i) => (
-              <li key={i} className="row meal-menu">
-                <span className="programme-time num">{m.startsAt ? timeInZone(m.startsAt, tz) : ''}</span>
-                <span className="row-main">
-                  <span className="row-title">{m.name}</span>
-                  {m.location && <span className="row-meta">{m.location}</span>}
-                  {m.menu ? <span className="meal-menu-text">{m.menu}</span> : <span className="row-meta">Menu to come</span>}
-                  {m.ingredients && (
-                    <span className="meal-ingredients">
-                      <strong>Ingredients: </strong>
-                      {m.ingredients}
-                    </span>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
-    </section>
-  );
-}
-
-/** What's happening right now, at the top, so a glance answers "where should I be?". */
-function OnNow({ items, tz }: { items: ProgrammeItem[]; tz: string }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 60_000);
-    return () => clearInterval(t);
-  }, []);
-  const on = items.filter((i) => nowish(i, now));
-  if (on.length === 0) return null;
-  return (
-    <section className="signup-section" aria-labelledby="on-now">
-      <h2 id="on-now">On now</h2>
-      <ul className="list">
-        {on.map((it, i) => (
-          <ProgrammeRow key={i} it={it} tz={tz} />
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-/** The whole camp programme, day by day, then the activities you can do any time. */
-function Programme({ items, tz }: { items: ProgrammeItem[]; tz: string }) {
-  const timed = items.filter((i) => i.startsAt);
-  const anyTime = items.filter((i) => !i.startsAt && i.kind === 'activity');
-  if (items.length === 0) return null;
-  const days = [...new Set(timed.map((i) => dayInZone(i.startsAt!, tz)))];
-  return (
-    <section className="signup-section" aria-labelledby="programme">
-      <h2 id="programme">Camp programme</h2>
-      {days.map((d) => (
-        <div key={d} className="list">
-          <h3 className="list-group-heading">{dayLabel(d, 'long')}</h3>
-          <ul>
-            {timed
-              .filter((i) => dayInZone(i.startsAt!, tz) === d)
-              .map((it, i) => (
-                <ProgrammeRow key={i} it={it} tz={tz} />
-              ))}
-          </ul>
-        </div>
-      ))}
-      {anyTime.length > 0 && (
-        <div className="list">
-          <h3 className="list-group-heading">Activities you can do</h3>
-          <ul>
-            {anyTime.map((it, i) => (
-              <ProgrammeRow key={i} it={it} tz={tz} />
-            ))}
-          </ul>
-        </div>
-      )}
-    </section>
   );
 }

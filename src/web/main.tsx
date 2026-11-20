@@ -16,6 +16,7 @@ import './styles/screens-activities.css';
 import './styles/screens-settings.css';
 import './styles/screens-admin.css';
 import './styles/screens-lanyards.css';
+import './styles/screens-participant.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

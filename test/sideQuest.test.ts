@@ -146,3 +146,15 @@ describe('Super Splash Side Quest', () => {
     expect((await api(`/events/${c.eventId}/side-quest`, { cookie: scanner.cookie })).status).toBe(403);
   });
 });
+
+describe('the phone owner page', () => {
+  it('opens the page of whoever the phone belongs to, and nothing without one', async () => {
+    const c = await camp();
+    const ava = phone();
+    await ava.open(c.token('Ava'));
+    await ava.open(c.token('Ben'));
+    const mine = await api('/public/signup/me', { body: {}, headers: { Cookie: ava.cookie } });
+    expect((await json(mine)).person.firstName).toBe('Ava');
+    expect((await api('/public/signup/me', { body: {} })).status).toBe(404);
+  });
+});

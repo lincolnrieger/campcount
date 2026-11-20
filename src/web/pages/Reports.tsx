@@ -254,6 +254,8 @@ export function Reports() {
           )}
         </Section>
 
+        {event.features.sideQuest && <SideQuestBoard eventId={event.id} />}
+
         <Section title="Downloads" id="downloads">
           {exports.loading && !exports.data ? (
             <Loading what="downloads" rows={3} />
@@ -310,5 +312,46 @@ export function Reports() {
         {ask && <ReasonForm label={ask.label} defaultReason={ask.defaultReason} submitLabel={ask.submitLabel} onSubmit={ask.run} onCancel={() => setAsk(null)} />}
       </Sheet>
     </>
+  );
+}
+
+/** Super Splash Side Quest: who has collected the most people, for prizes. Full names here; participants only ever see first names. */
+function SideQuestBoard({ eventId }: { eventId: string }) {
+  const { data } = useApi<{ collections: number; rows: { registrationId: string; place: number; name: string; groupName: string; section: string; collected: number }[] }>(
+    `/events/${eventId}/side-quest`,
+  );
+  return (
+    <Section title="Super Splash Side Quest" id="side-quest">
+      <p className="meta">
+        The secret game: campers collect each other by scanning lanyards with their own phone.
+        {data ? ` ${data.rows.length} ${data.rows.length === 1 ? 'player' : 'players'}, ${data.collections} ${data.collections === 1 ? 'person' : 'people'} collected.` : ''}
+      </p>
+      {!data ? null : data.rows.length === 0 ? (
+        <p className="meta">No one has found it yet.</p>
+      ) : (
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th scope="col" className="cell-num">Place</th>
+                <th scope="col">Name</th>
+                <th scope="col">Group</th>
+                <th scope="col" className="cell-num">Collected</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.rows.slice(0, 20).map((r) => (
+                <tr key={r.registrationId}>
+                  <td className="cell-num">{r.place}</td>
+                  <td>{r.name}</td>
+                  <td>{[r.section, r.groupName].filter(Boolean).join(' · ')}</td>
+                  <td className="cell-num">{r.collected}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Section>
   );
 }

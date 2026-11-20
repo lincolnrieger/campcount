@@ -794,3 +794,27 @@
     min-height: 24rem;
   }
 }
+
+/* Phones and tablets: everything you tap in the designer is at least 44px. */
+@media (max-width: 1023.98px) {
+  .chip,
+  .chip-small,
+  .input-small,
+  .select-small,
+  .layer-name,
+  .text-toggle {
+    min-height: var(--control);
+  }
+  .icon-toggle {
+    min-width: var(--control);
+    height: var(--control);
+  }
+  .layer-lock {
+    width: var(--control);
+    height: var(--control);
+  }
+  .swatch {
+    width: var(--control);
+    height: var(--control);
+  }
+}
