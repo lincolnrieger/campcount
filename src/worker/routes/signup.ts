@@ -7,6 +7,7 @@ import { parseBody, requirePermission, requirePrincipal, requireUser } from '../
 import { ApiError, conflict, notFound } from '../lib/errors';
 import { hmacHex, randomToken, timingSafeEqualHex } from '../lib/crypto';
 import { nowIso } from '../lib/time';
+import { limitPerKey, limitPublicNetwork } from '../lib/rateLimit';
 import { auditStatement } from '../services/audit';
 import { hashToken } from '../services/credentials';
 import { contextState, loadContext } from '../services/contexts';
@@ -74,16 +75,6 @@ async function sessions(db: D1Database, eventId: string): Promise<SignupSession[
 
 const signupOpen = (e: SignupEvent) => e.feature_self_signup === 1 && (e.status === 'open' || e.status === 'draft');
 
-async function rateLimit(c: AppContext, key: string): Promise<void> {
-  if (!c.env.AUTH_LIMITER) return;
-  const { success } = await c.env.AUTH_LIMITER.limit({ key });
-  if (!success) throw new ApiError(429, 'rate_limited', 'Too many tries. Wait a minute and try again.');
-}
-
-const limitByIp = (c: AppContext, bucket: string) => {
-  const ip = c.req.header('CF-Connecting-IP');
-  return ip ? rateLimit(c, `${bucket}:${ip}`) : Promise.resolve();
-};
 
 /** A short-lived pass for one person, so each booking doesn't need the lanyard again. */
 async function makePass(c: AppContext, registrationId: string): Promise<string> {
@@ -96,6 +87,17 @@ async function readPass(c: AppContext, pass: string): Promise<string> {
   const bad = () => new ApiError(401, 'signed_out', 'Scan your lanyard again to carry on.');
   if (!registrationId || !expires || !mac || Number(expires) < Date.now()) throw bad();
   if (!timingSafeEqualHex(mac, await hmacHex(c.env.AUTH_SECRET, `signup:${registrationId}:${expires}`))) throw bad();
+  return registrationId;
+}
+
+/**
+ * Check a pass, then limit that one person's changes (10 a minute). Limiting
+ * per person rather than per network means a whole camp on one Wi-Fi can
+ * sign up at once.
+ */
+async function limitedPass(c: AppContext, pass: string): Promise<string> {
+  const registrationId = await readPass(c, pass);
+  await limitPerKey(c, `signup:${registrationId}`, 'Too many changes at once. Wait a minute and try again.');
   return registrationId;
 }
 
@@ -245,7 +247,7 @@ const identifySchema = z.union([
 /** Scan a lanyard (token) or type its printed code (with the screen's event code). */
 publicSignupRoutes.post('/identify', async (c) => {
   const input = await parseBody(c, identifySchema);
-  await limitByIp(c, 'signup-identify');
+  await limitPublicNetwork(c, 'signup-identify');
   const notRecognised = () => new ApiError(404, 'not_recognised', "That card wasn't recognised. Check the code, or ask a leader.");
   let row: { registration_id: string; event_id: string } | null;
   if ('token' in input) {
@@ -271,8 +273,8 @@ const bookingSchema = z.strictObject({ pass: z.string().max(200), activityId: z.
 
 publicSignupRoutes.post('/book', async (c) => {
   const { pass, activityId } = await parseBody(c, bookingSchema);
-  await limitByIp(c, 'signup-book');
-  const person = await personFor(c, await readPass(c, pass));
+  await limitPublicNetwork(c, 'signup-book');
+  const person = await personFor(c, await limitedPass(c, pass));
   if (!signupOpen(person.event)) throw conflict('Activity sign-up is closed.');
   const activity = await c.env.DB.prepare(
     `SELECT id, name, starts_at, ends_at, capacity FROM activities WHERE id = ? AND event_id = ? AND status = 'active' AND signup_open = 1
@@ -326,8 +328,8 @@ publicSignupRoutes.post('/book', async (c) => {
 
 publicSignupRoutes.post('/cancel', async (c) => {
   const { pass, activityId } = await parseBody(c, bookingSchema);
-  await limitByIp(c, 'signup-book');
-  const person = await personFor(c, await readPass(c, pass));
+  await limitPublicNetwork(c, 'signup-book');
+  const person = await personFor(c, await limitedPass(c, pass));
   const res = await c.env.DB.prepare(`DELETE FROM activity_bookings WHERE activity_id = ? AND registration_id = ? AND source = 'self_signup'`)
     .bind(activityId, person.registrationId)
     .run();
@@ -372,8 +374,8 @@ const teamJoinSchema = z.strictObject({ pass: z.string().max(200), teamId: z.uui
 /** Make a new team, with yourself on it. */
 publicSignupRoutes.post('/team/create', async (c) => {
   const { pass, activityId, name } = await parseBody(c, teamCreateSchema);
-  await limitByIp(c, 'signup-book');
-  const person = await personFor(c, await readPass(c, pass));
+  await limitPublicNetwork(c, 'signup-book');
+  const person = await personFor(c, await limitedPass(c, pass));
   const te = await openTeamEvent(c, person, activityId);
   await notAlreadyOnATeam(c, activityId, person.registrationId);
   const teamId = await createTeam(c.env.DB, person.event.id, te, name);
@@ -389,8 +391,8 @@ publicSignupRoutes.post('/team/create', async (c) => {
 
 publicSignupRoutes.post('/team/join', async (c) => {
   const { pass, teamId } = await parseBody(c, teamJoinSchema);
-  await limitByIp(c, 'signup-book');
-  const person = await personFor(c, await readPass(c, pass));
+  await limitPublicNetwork(c, 'signup-book');
+  const person = await personFor(c, await limitedPass(c, pass));
   const team = await teamRow(c.env.DB, person.event.id, teamId);
   if (!team) throw notFound();
   const te = await openTeamEvent(c, person, team.activity_id);
@@ -410,8 +412,8 @@ publicSignupRoutes.post('/team/join', async (c) => {
 /** Leave your team. A team nobody is left on goes too. */
 publicSignupRoutes.post('/team/leave', async (c) => {
   const { pass, teamId } = await parseBody(c, teamJoinSchema);
-  await limitByIp(c, 'signup-book');
-  const person = await personFor(c, await readPass(c, pass));
+  await limitPublicNetwork(c, 'signup-book');
+  const person = await personFor(c, await limitedPass(c, pass));
   const team = await teamRow(c.env.DB, person.event.id, teamId);
   if (!team) throw notFound();
   await openTeamEvent(c, person, team.activity_id);

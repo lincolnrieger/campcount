@@ -24,7 +24,13 @@
       "migrations_dir": "migrations"
     }
   ],
-  "ratelimits": [{ "name": "AUTH_LIMITER", "namespace_id": "3001", "simple": { "limit": 10, "period": 60 } }],
+  // AUTH_LIMITER is per person or email. The two NETWORK limiters are per internet
+  // address, and are deliberately high: a whole camp can share one address.
+  "ratelimits": [
+    { "name": "AUTH_LIMITER", "namespace_id": "3001", "simple": { "limit": 10, "period": 60 } },
+    { "name": "AUTH_NETWORK_LIMITER", "namespace_id": "3002", "simple": { "limit": 300, "period": 60 } },
+    { "name": "PUBLIC_NETWORK_LIMITER", "namespace_id": "3003", "simple": { "limit": 1500, "period": 60 } }
+  ],
   "triggers": { "crons": ["17 3 * * *"] },
   // Cloudflare Email Service binding for sign-in codes (enable sending for the domain first).
   "send_email": [{ "name": "EMAIL" }],
@@ -45,7 +51,11 @@
           "migrations_dir": "migrations"
         }
       ],
-      "ratelimits": [{ "name": "AUTH_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }],
+      "ratelimits": [
+        { "name": "AUTH_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
+        { "name": "AUTH_NETWORK_LIMITER", "namespace_id": "1002", "simple": { "limit": 300, "period": 60 } },
+        { "name": "PUBLIC_NETWORK_LIMITER", "namespace_id": "1003", "simple": { "limit": 1500, "period": 60 } }
+      ],
       "triggers": { "crons": [] }
     }
   }

@@ -11,6 +11,7 @@ import { parseBody, requirePermission } from '../context';
 import { ApiError, conflict, forbidden, notFound } from '../lib/errors';
 import { addMinutes, nowIso } from '../lib/time';
 import { sha256Hex } from '../lib/crypto';
+import { limitAuthNetwork } from '../lib/rateLimit';
 import { auditStatement } from '../services/audit';
 import type { ScanContext } from '../services/contexts';
 import { canScan, loadContext, loadTimeline } from '../services/contexts';
@@ -348,11 +349,7 @@ export const pairingRoutes = new Hono<AppEnv>();
 
 pairingRoutes.post('/pair', async (c) => {
   const { code } = await parseBody(c, z.strictObject({ code: z.string().trim().min(8).max(12) }));
-  const ip = c.req.header('CF-Connecting-IP');
-  if (ip && c.env.AUTH_LIMITER) {
-    const { success } = await c.env.AUTH_LIMITER.limit({ key: `pair:${ip}` });
-    if (!success) throw new ApiError(429, 'rate_limited', 'Too many attempts. Wait a minute and try again.');
-  }
+  await limitAuthNetwork(c, 'pair');
   const now = nowIso();
   const station = await c.env.DB.prepare(
     `SELECT s.id, s.expires_at, s.event_id FROM stations s JOIN events e ON e.id = s.event_id
