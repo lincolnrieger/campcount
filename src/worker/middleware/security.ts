@@ -13,6 +13,7 @@ export const securityHeaders: MiddlewareHandler<AppEnv> = async (c, next) => {
   h.set('Referrer-Policy', 'no-referrer');
   h.set('X-Frame-Options', 'DENY');
   h.set('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+  h.set('X-Robots-Tag', 'noindex, nofollow');
   if (c.env.ENVIRONMENT === 'production') {
     h.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains');
   }

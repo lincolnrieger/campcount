@@ -1,0 +1,3 @@
+# CampCount is a private tool for running camps. Nothing here is for search engines.
+User-agent: *
+Disallow: /

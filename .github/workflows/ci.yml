@@ -12,8 +12,9 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # Actions are pinned to exact commits so a changed tag can't change what runs.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -24,3 +25,19 @@ jobs:
       - run: npm run build
       - name: Dependency audit (production dependencies)
         run: npm audit --omit=dev --audit-level=high
+      - name: No secrets in the built site
+        run: |
+          if grep -rEl 'AUTH_SECRET|-----BEGIN|sk_live|sk-ant-|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,}' dist/client; then
+            echo "Something that looks like a secret is in the built site." && exit 1
+          fi
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Scan the whole history for secrets (gitleaks)
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
