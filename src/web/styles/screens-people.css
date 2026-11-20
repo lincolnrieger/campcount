@@ -88,7 +88,7 @@
   display: grid;
   gap: var(--space-3);
   margin-bottom: var(--space-4);
-  border-left: 4px solid var(--success-solid);
+  border-color: var(--success-border);
 }
 .nothing-list {
   display: grid;
