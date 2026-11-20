@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import type { Consent2GoTab } from '../../shared/consent2go';
+import { prepareConsent2Go } from '../../shared/consent2go';
 import { useNavigate } from 'react-router';
 import { csvCell, parseDelimited } from '../../shared/csv';
 import type { ColumnMapping, PreparedRow, TargetField } from '../../shared/myscout';
@@ -8,7 +10,7 @@ import type { DietaryEntryInput, ImportRow } from '../../shared/schemas';
 import { ApiFailure, api } from '../api';
 import { DietaryEditor } from '../components/DietaryEditor';
 import { Badge, Button, ButtonLink, Choice, CountTile, Icon, LoadError, Loading, Notice, PageHeader, Section, Skeleton, Stepper, plural, useToast } from '../ui';
-import { readFirstSheet } from '../import/xlsx';
+import { readFirstSheet, readSheets } from '../import/xlsx';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
 
@@ -52,6 +54,10 @@ function downloadCsv(filename: string, rows: string[][]) {
 }
 
 const STEPS: Step[] = ['file', 'map', 'check', 'dietary', 'done'];
+/** Consent2Go files have fixed columns, so there's nothing to match. */
+const C2G_STEPS: Step[] = ['file', 'check', 'dietary', 'done'];
+type Source = 'myscout' | 'consent2go';
+const SOURCE_NAME: Record<Source, string> = { myscout: 'MyScout', consent2go: 'Consent2Go' };
 const STEP_LABEL: Record<Step, string> = { file: 'Choose file', map: 'Match columns', check: 'Check', dietary: 'Dietary review', done: 'Done' };
 
 /** People › Import from MyScout: a step-by-step import that reads the file in the browser. */
@@ -61,6 +67,8 @@ export function Import() {
   const toast = useToast();
   const context = useApi<ImportContext>(`/events/${event.id}/import/context`);
   const [step, setStep] = useState<Step>('file');
+  const [source, setSource] = useState<Source>(() => (new URLSearchParams(window.location.search).get('source') === 'consent2go' ? 'consent2go' : 'myscout'));
+  const [tabs, setTabs] = useState<Consent2GoTab[]>([]);
   const [fileName, setFileName] = useState('');
   const [table, setTable] = useState<{ headers: string[]; rows: string[][] } | null>(null);
   const [mapping, setMapping] = useState<ColumnMapping>({});
@@ -87,6 +95,18 @@ export function Import() {
     setError(null);
     setBusy(true);
     try {
+      if (source === 'consent2go') {
+        if (!/\.xlsx$/i.test(file.name)) throw new Error('Choose the Excel workbook (.xlsx) exported from Consent2Go.');
+        const { prepared: next, tabs: found } = prepareConsent2Go(await readSheets(await file.arrayBuffer()));
+        if (next.length === 0) throw new Error('No people found. Check it’s the Consent2Go export, with a "Student ID" column on each tab.');
+        setFileName(file.name);
+        setTabs(found);
+        setPrepared(next);
+        setPlan(null);
+        setRows([]);
+        setStep('check');
+        return;
+      }
       let parsed: { headers: string[]; rows: string[][] };
       if (/\.xlsx$/i.test(file.name)) {
         const all = (await readFirstSheet(await file.arrayBuffer())).filter((r) => r.some((c) => c.trim()));
@@ -137,7 +157,7 @@ export function Import() {
     try {
       const built = rows.length ? rows : await buildRows();
       setRows(built);
-      const res = await api<{ plan: Plan }>(`/events/${event.id}/import/preview`, { body: { rows: built, withdrawMissing: withdraw } });
+      const res = await api<{ plan: Plan }>(`/events/${event.id}/import/preview`, { body: { rows: built, withdrawMissing: source === 'myscout' && withdraw, source } });
       setPlan(res.plan);
     } catch (err) {
       setError(err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.');
@@ -152,7 +172,7 @@ export function Import() {
     try {
       const body = rows.map((r) => (reviewing && dietary[r.memberNumber] ? { ...r, dietary: dietary[r.memberNumber] } : r));
       const res = await api<{ counts: Plan['counts'] }>(`/events/${event.id}/import/commit`, {
-        body: { rows: body, withdrawMissing, sourceLabel: fileName },
+        body: { rows: body, withdrawMissing: source === 'myscout' && withdrawMissing, sourceLabel: fileName, source },
       });
       setResult(res.counts);
       setStep('done');
@@ -165,7 +185,14 @@ export function Import() {
   }
 
   const back = { to: `${base}/people`, label: 'People' };
-  const header = <PageHeader title="Import from MyScout" back={back} />;
+  const header = (
+    <PageHeader
+      title={`Import from ${SOURCE_NAME[source]}`}
+      back={back}
+      summary={source === 'consent2go' ? 'Adds consent, dietary needs and swimming and medication details to people from MyScout, matched on membership number.' : undefined}
+    />
+  );
+  const steps = source === 'consent2go' ? C2G_STEPS : STEPS;
   if (context.loading && !context.data)
     return (
       <>
@@ -188,7 +215,7 @@ export function Import() {
     <>
       {header}
       <div className="sections import">
-        <Stepper steps={STEPS.map((s) => STEP_LABEL[s])} current={STEPS.indexOf(step)} />
+        <Stepper steps={steps.map((s) => STEP_LABEL[s])} current={steps.indexOf(step)} />
         {error && (
           <Notice tone="error" title="That didn't work">
             <p>{error}</p>
@@ -197,20 +224,44 @@ export function Import() {
 
         {step === 'file' && (
           <Section title="Choose file" id="file">
+            <fieldset className="source-choice">
+              <legend className="field-label">Where is the file from?</legend>
+              {(['myscout', 'consent2go'] as const).map((s) => (
+                <label key={s} className="source-option">
+                  <input type="radio" name="source" checked={source === s} onChange={() => setSource(s)} />
+                  <span className="choice-text">
+                    {SOURCE_NAME[s]}
+                    <span className="meta">
+                      {s === 'myscout'
+                        ? 'The registration list: who is coming, their section and group. Import this first.'
+                        : 'Activity consent and dietary needs. Each tab is a group. People are matched to MyScout by membership number (Student ID).'}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
             <div className="prose">
-              <p>
-                Use the participant export from MyScout, as an Excel workbook (.xlsx) or a CSV file. Include adults: CampCount works out who is youth and who is
-                a leader.
-              </p>
-              <p className="meta">The file stays on this computer. Only the columns CampCount needs are sent.</p>
+              {source === 'myscout' ? (
+                <p>
+                  Use the participant export from MyScout, as an Excel workbook (.xlsx) or a CSV file. Include adults: CampCount works out who is youth and who
+                  is a leader.
+                </p>
+              ) : (
+                <p>
+                  Use the Consent2Go export (.xlsx), with every group’s tab. Section comes from the tab: Joeys, Scouts or Venturers, and everyone else is a
+                  leader. People already registered keep their MyScout name, section and group; Consent2Go adds photo consent, dietary needs, swimming
+                  ability and medication permissions. Anyone not in MyScout yet is added.
+                </p>
+              )}
+              <p className="meta">The file stays on this computer. Only the columns CampCount needs are sent. Parent and emergency contacts are never sent.</p>
             </div>
             <label className="dropzone">
               <Icon name="download" size={24} />
               <strong>{busy ? 'Reading…' : 'Choose a file'}</strong>
-              <span className="meta">.xlsx, .csv or tab-separated text</span>
+              <span className="meta">{source === 'consent2go' ? '.xlsx from Consent2Go' : '.xlsx, .csv or tab-separated text'}</span>
               <input
                 type="file"
-                accept=".xlsx,.csv,.tsv,.txt,text/csv"
+                accept={source === 'consent2go' ? '.xlsx' : '.xlsx,.csv,.tsv,.txt,text/csv'}
                 onChange={(e) => {
                   const f = e.target.files?.[0];
                   if (f) void loadFile(f);
@@ -291,12 +342,24 @@ export function Import() {
             {!plan ? (
               <>
                 <p>{plural(valid.length, 'person is', 'people are')} ready to compare with this event's list. Nothing is saved yet.</p>
+                {source === 'consent2go' && tabs.length > 0 && (
+                  <ul className="list">
+                    {tabs.map((t) => (
+                      <li key={t.name} className="row">
+                        <span className="row-main">
+                          <span className="row-title">{t.name}</span>
+                          <span className="row-meta">{t.skipped ?? plural(t.people, 'person', 'people')}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {invalid.length > 0 && <Problems invalid={invalid} />}
                 <div className="btn-row">
                   <Button kind="primary" busy={busy} busyLabel="Checking…" disabled={valid.length === 0} onClick={() => void preview()}>
                     Next
                   </Button>
-                  <Button onClick={() => setStep('map')}>Back</Button>
+                  <Button onClick={() => setStep(source === 'consent2go' ? 'file' : 'map')}>Back</Button>
                 </div>
               </>
             ) : (
@@ -308,6 +371,7 @@ export function Import() {
                   {reviewing && <CountTile value={plan.counts.dietaryPending} label="Dietary to review" tone="warning" />}
                 </div>
                 {invalid.length > 0 && <Problems invalid={invalid} />}
+                {source === 'myscout' && (
                 <Choice
                   checked={withdrawMissing}
                   onChange={(e) => {
@@ -317,6 +381,7 @@ export function Import() {
                   label={<strong>Mark people not in this file as withdrawn</strong>}
                   description={`Use this when the file is the complete, current list.${withdrawMissing ? ` ${plural(plan.counts.withdraw, 'person', 'people')} will be withdrawn. Their records are kept.` : ''}`}
                 />
+                )}
                 {plan.counts.update > 0 && (
                   <details className="more-options">
                     <summary>
@@ -353,7 +418,7 @@ export function Import() {
                     onClick={() => {
                       setPlan(null);
                       setRows([]);
-                      setStep('map');
+                      setStep(source === 'consent2go' ? 'file' : 'map');
                     }}
                   >
                     Back
@@ -367,7 +432,7 @@ export function Import() {
         {step === 'dietary' && plan && (
           <Section title="Dietary review" id="dietary">
             <p className="prose">
-              Turn each note into dietary needs. Record food needs only; other medical information stays in MyScout. The notes themselves are not saved.
+              Turn each note into dietary needs. Record food needs only; other medical information stays in {SOURCE_NAME[source]}. The notes themselves are not saved.
             </p>
             <NothingToRecord pending={pending} dietary={dietary} onMark={(keys) => setDietary({ ...dietary, ...Object.fromEntries(keys.map((k) => [k, []])) })} onUndo={(keys) => setDietary(Object.fromEntries(Object.entries(dietary).filter(([k]) => !keys.includes(k))))} />
             <ul className="review-list">
@@ -432,8 +497,8 @@ function Problems({ invalid }: { invalid: PreparedRow[] }) {
     <Notice tone="warning" title={`${plural(invalid.length, 'row has', 'rows have')} problems and will be skipped`}>
       <ul className="problem-list">
         {invalid.slice(0, 8).map((p) => (
-          <li key={p.line}>
-            Line {p.line}
+          <li key={p.where ?? p.line}>
+            {p.where ?? `Line ${p.line}`}
             {p.row.memberNumber && ` (member ${p.row.memberNumber})`}: {p.errors.join('; ')}
           </li>
         ))}
@@ -442,8 +507,8 @@ function Problems({ invalid }: { invalid: PreparedRow[] }) {
         small
         onClick={() =>
           downloadCsv('campcount-import-problems.csv', [
-            ['Line', 'Membership number', 'Problem'],
-            ...invalid.map((p) => [String(p.line), p.row.memberNumber, p.errors.join('; ')]),
+            ['Where', 'Membership number', 'Problem'],
+            ...invalid.map((p) => [p.where ?? `Line ${p.line}`, p.row.memberNumber, p.errors.join('; ')]),
           ])
         }
       >

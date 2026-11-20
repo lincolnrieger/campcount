@@ -23,6 +23,15 @@ to recover the system. Keep a printed copy at camp HQ.
    next time slot, which you can adjust. Each session is scanned separately,
    and the Scan tab marks whatever is on now. Scanners can scan the gate and every
    activity; Meal team can scan every meal.
+4b. **Import Consent2Go** (People, ⋯, Import from Consent2Go), after MyScout:
+   - Use the Excel export with every group's tab. Section comes from the tab
+     name (Joeys, Scouts, Venturers; everyone else is a leader). "Student ID"
+     must be the Scouts SA membership number: that's how people are matched.
+   - People already imported from MyScout keep their name, section and
+     group. Consent2Go adds photo consent, dietary needs (reviewed before
+     saving), swimming ability and medication permissions. Blanks never
+     wipe anything. Anyone not in MyScout yet is added.
+   - Parent and emergency contacts never leave your computer.
 5. **Design and print lanyards** (People, ⋯, Design lanyards, then the Print tab):
    - Design the front and back on a computer: card size (CR80 or large),
      text, the person's details, colours, images and the camp logo. Changes

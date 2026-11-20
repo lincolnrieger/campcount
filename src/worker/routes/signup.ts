@@ -272,7 +272,7 @@ const identifySchema = z.union([
   // A lanyard link opened on a phone (or the kiosk camera, with the screen's code).
   // claim: "this is my card", making this phone belong to this person.
   z.strictObject({ token: z.string().regex(/^[A-Za-z0-9_-]{22}$/), code: z.string().max(64).optional(), claim: z.boolean().optional() }),
-  z.strictObject({ shortCode: z.string().trim().max(12), code: z.string().max(64) }),
+  z.strictObject({ shortCode: z.string().trim().max(24), code: z.string().max(64) }),
 ]);
 
 /**
@@ -670,7 +670,8 @@ signupRoutes.get('/activities/:activityId/attendance', async (c) => {
       .bind(activityId.data)
       .first<Record<string, string | number | null>>(),
     c.env.DB.prepare(
-      `SELECT r.id, p.first_name, p.preferred_name, p.last_name, r.group_name, r.section, r.kind, r.photo_consent
+      `SELECT r.id, p.first_name, p.preferred_name, p.last_name, r.group_name, r.section, r.kind, r.photo_consent,
+              json_extract(r.extra_fields, '$."Swimming ability"') AS swimming
          FROM registrations r JOIN people p ON p.id = r.person_id
         WHERE r.event_id = ? AND r.status = 'active' ORDER BY p.last_name COLLATE NOCASE, p.first_name COLLATE NOCASE`,
     )
@@ -696,6 +697,8 @@ signupRoutes.get('/activities/:activityId/attendance', async (c) => {
       visits: s?.visits ?? 0,
       lastAt: s?.lastAcceptedAt ?? null,
       ...(photos ? { noPhotos: p.photo_consent === 'no' } : {}),
+      // From Consent2Go: useful for leaders of water activities.
+      ...(p.swimming ? { swimming: p.swimming } : {}),
     };
   };
   return c.json({

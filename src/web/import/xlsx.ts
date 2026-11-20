@@ -1,5 +1,5 @@
 /**
- * Minimal reader for the first worksheet of an .xlsx file, entirely in the
+ * Minimal reader for the worksheets of an .xlsx file, entirely in the
  * browser (no upload, no third-party library). Supports what spreadsheet
  * exports contain: shared strings, inline strings, numbers and booleans.
  */
@@ -63,41 +63,57 @@ function textOf(el: Element): string {
   return [...el.getElementsByTagName('t')].map((t) => t.textContent ?? '').join('');
 }
 
-export async function readFirstSheet(file: ArrayBuffer): Promise<string[][]> {
+/** Every worksheet in the workbook, in tab order, with its tab name. */
+export async function readSheets(file: ArrayBuffer): Promise<{ name: string; rows: string[][] }[]> {
   const view = new DataView(file);
   const entries = readEntries(view);
   const find = (name: string) => entries.find((e) => e.name === name);
   const parse = (xml: string) => new DOMParser().parseFromString(xml, 'application/xml');
 
-  const workbook = parse(await readEntry(view, find('xl/workbook.xml')!));
-  const firstSheet = workbook.getElementsByTagName('sheet')[0];
-  if (!firstSheet) throw new Error('This workbook has no sheets.');
-  const relId = firstSheet.getAttribute('r:id');
-  const rels = parse(await readEntry(view, find('xl/_rels/workbook.xml.rels')!));
-  const target = [...rels.getElementsByTagName('Relationship')].find((r) => r.getAttribute('Id') === relId)?.getAttribute('Target');
-  if (!target) throw new Error('Could not find the first sheet.');
-  const sheetPath = target.startsWith('/') ? target.slice(1) : `xl/${target}`;
+  const workbookEntry = find('xl/workbook.xml');
+  const relsEntry = find('xl/_rels/workbook.xml.rels');
+  if (!workbookEntry || !relsEntry) throw new Error('This file is not a valid .xlsx workbook.');
+  const workbook = parse(await readEntry(view, workbookEntry));
+  const rels = parse(await readEntry(view, relsEntry));
+  const sheets = [...workbook.getElementsByTagName('sheet')];
+  if (sheets.length === 0) throw new Error('This workbook has no sheets.');
 
   const sharedEntry = find('xl/sharedStrings.xml');
   const shared = sharedEntry ? [...parse(await readEntry(view, sharedEntry)).getElementsByTagName('si')].map(textOf) : [];
 
-  const sheet = parse(await readEntry(view, find(sheetPath)!));
-  const rows: string[][] = [];
-  for (const rowEl of sheet.getElementsByTagName('row')) {
-    const row: string[] = [];
-    for (const c of rowEl.getElementsByTagName('c')) {
-      const index = columnIndex(c.getAttribute('r') ?? '');
-      const type = c.getAttribute('t');
-      const v = c.getElementsByTagName('v')[0]?.textContent ?? '';
-      let value: string;
-      if (type === 's') value = shared[Number(v)] ?? '';
-      else if (type === 'inlineStr') value = textOf(c);
-      else if (type === 'b') value = v === '1' ? 'TRUE' : 'FALSE';
-      else value = v;
-      while (row.length < index) row.push('');
-      row[index] = value;
+  const out: { name: string; rows: string[][] }[] = [];
+  for (const sheetEl of sheets) {
+    const relId = sheetEl.getAttribute('r:id');
+    const target = [...rels.getElementsByTagName('Relationship')].find((r) => r.getAttribute('Id') === relId)?.getAttribute('Target');
+    if (!target) continue;
+    const sheetPath = target.startsWith('/') ? target.slice(1) : `xl/${target}`;
+    const entry = find(sheetPath);
+    if (!entry) continue;
+    const sheet = parse(await readEntry(view, entry));
+    const rows: string[][] = [];
+    for (const rowEl of sheet.getElementsByTagName('row')) {
+      const row: string[] = [];
+      for (const c of rowEl.getElementsByTagName('c')) {
+        const index = columnIndex(c.getAttribute('r') ?? '');
+        const type = c.getAttribute('t');
+        const v = c.getElementsByTagName('v')[0]?.textContent ?? '';
+        let value: string;
+        if (type === 's') value = shared[Number(v)] ?? '';
+        else if (type === 'inlineStr') value = textOf(c);
+        else if (type === 'b') value = v === '1' ? 'TRUE' : 'FALSE';
+        else value = v;
+        while (row.length < index) row.push('');
+        row[index] = value;
+      }
+      rows.push(row);
     }
-    rows.push(row);
+    out.push({ name: sheetEl.getAttribute('name') ?? `Sheet ${out.length + 1}`, rows });
   }
-  return rows;
+  return out;
+}
+
+/** The first worksheet only (MyScout exports have one). */
+export async function readFirstSheet(file: ArrayBuffer): Promise<string[][]> {
+  const sheets = await readSheets(file);
+  return sheets[0]?.rows ?? [];
 }

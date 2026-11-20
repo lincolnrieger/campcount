@@ -206,7 +206,8 @@ describe('credentials', () => {
     expect(first.cards).toHaveLength(2);
     expect(second.cards[0].qr).toBe(first.cards[0].qr);
     expect(first.cards[0].qr).toMatch(/^https:\/\/campcount\.test\/c#[A-Za-z0-9_-]{22}$/);
-    expect(first.cards[0].shortCode).toMatch(/^[2-9A-Z]{4}-[2-9A-Z]{4}$/);
+    // The typed code on the card is the person's membership number.
+    expect(first.cards.map((c: { shortCode: string }) => c.shortCode).sort()).toEqual(['10001', '10002']);
 
     const token = first.cards[0].qr.split('#')[1];
     const stored = await testEnv.DB.prepare(`SELECT token_hash, token_ciphertext FROM credentials WHERE token_hash = ?`)

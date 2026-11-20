@@ -41,6 +41,8 @@ interface RosterPerson {
   visits: number;
   lastAt: string | null;
   noPhotos?: boolean;
+  /** Swimming ability, from Consent2Go. */
+  swimming?: string;
 }
 
 interface Attendance {
@@ -340,7 +342,7 @@ export function ActivityRoster() {
                 <li key={p.id} className="row">
                   <span className="row-main">
                     <span className="row-title">{p.name}</span>
-                    <span className="row-meta">{[p.section, p.groupName].filter(Boolean).join(' · ')}</span>
+                    <span className="row-meta">{[p.section, p.groupName, p.swimming ? `Swimming: ${p.swimming}` : null].filter(Boolean).join(' · ')}</span>
                     <span className="activity-badges">
                       {status(p)}
                       {p.noPhotos && <Badge tone="error">No photos</Badge>}
