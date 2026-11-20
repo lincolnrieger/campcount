@@ -826,3 +826,19 @@ button.pp-state.is-booked {
   color: var(--pp-ink-2);
   font-size: var(--text-md);
 }
+
+/* The camp's banner graphic, edge to edge at the top of the pass */
+.pp-banner {
+  display: block;
+  width: calc(100% + 2 * var(--space-5));
+  max-width: none;
+  height: auto;
+  max-height: 14rem;
+  margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-5)) 0;
+  object-fit: cover;
+}
+@media (min-width: 600px) {
+  .pp-banner {
+    border-radius: 24px 24px 0 0;
+  }
+}

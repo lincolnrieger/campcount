@@ -24,7 +24,7 @@ export interface SignupView {
   activitiesDone?: number;
   /** The Side Quest, on their own link when the camp plays it. */
   sideQuest?: SideQuestStanding | null;
-  event: { name: string; timezone: string; startsOn: string; endsOn: string };
+  event: { name: string; timezone: string; startsOn: string; endsOn: string; /** The camp's banner graphic, if it has one. */ banner?: { url: string; width: number; height: number } | null };
   open: boolean;
   sessions: SignupSession[];
   bookings: { activityId: string; name: string; location: string; startsAt: string | null; endsAt: string | null; canCancel: boolean }[];

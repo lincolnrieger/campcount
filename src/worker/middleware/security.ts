@@ -8,7 +8,8 @@ const MAX_BODY_BYTES = 2 * 1024 * 1024;
 export const securityHeaders: MiddlewareHandler<AppEnv> = async (c, next) => {
   await next();
   const h = c.res.headers;
-  h.set('Cache-Control', 'no-store');
+  // Only public images (a camp's logo or banner) opt in to caching; everything else is never stored.
+  if (!h.get('Cache-Control')?.startsWith('public')) h.set('Cache-Control', 'no-store');
   h.set('X-Content-Type-Options', 'nosniff');
   h.set('Referrer-Policy', 'no-referrer');
   h.set('X-Frame-Options', 'DENY');

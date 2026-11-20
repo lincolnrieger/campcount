@@ -164,7 +164,9 @@ function Page({ view, busy, actions }: { view: SignupView; busy: boolean; action
   const mine = useMemo(() => new Set(view.bookings.map((b) => key(b))), [view.bookings]);
   const meals = programme.filter((i) => i.kind === 'meal');
   const teamEvents = view.teamEvents ?? [];
-  const canBook = view.sessions.length > 0 || view.bookings.length > 0;
+  // Leaders don't book activities, so they don't get the Book tab.
+  const isAdult = view.person.sectionWord === 'Adult';
+  const canBook = !isAdult && (view.sessions.length > 0 || view.bookings.length > 0);
   const quest = view.sideQuest && view.sideQuest.collected > 0 ? view.sideQuest : null;
 
   const duties = view.duties ?? [];
@@ -233,12 +235,18 @@ function Pass({ view }: { view: SignupView }) {
   const colour = SECTION_COLOURS[word]?.bg ?? '#00843D';
   const first = view.person.firstName ?? view.person.name.split(' ')[0];
   const last = view.person.lastName ?? '';
+  const banner = view.event.banner;
   return (
     <header className="pp-pass" style={{ ['--pass' as string]: colour }}>
-      <p className="pp-pass-camp">
-        <strong>{view.event.name}</strong>
-        <span>{formatDateRange(view.event.startsOn, view.event.endsOn)}</span>
-      </p>
+      {banner ? (
+        // The camp's own graphic stands in for its name.
+        <img className="pp-banner" src={banner.url} width={banner.width} height={banner.height} alt={view.event.name} />
+      ) : (
+        <p className="pp-pass-camp">
+          <strong>{view.event.name}</strong>
+          <span>{formatDateRange(view.event.startsOn, view.event.endsOn)}</span>
+        </p>
+      )}
       <h1 className="pp-name">
         {first}
         {last && <span className="pp-surname">{last}</span>}
