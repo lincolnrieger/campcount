@@ -16,7 +16,7 @@ const MATRIX: Record<string, string[]> = {
     'meal.scan', 'meals.manage', 'photo.view_status', 'reports.export', 'reports.export_sensitive', 'reports.view',
     'roster.edit', 'roster.import', 'roster.view', 'site.scan', 'staff.manage', 'stations.manage',
   ],
-  scanner: ['activity.scan', 'activity.view_roster', 'event.view', 'photo.view_status', 'site.scan'],
+  scanner: ['activity.bookings', 'activity.scan', 'activity.view_roster', 'event.view', 'photo.view_status', 'site.scan'],
   meal_leader: ['dietary.view_alert', 'event.view', 'meal.scan'],
   activity_leader: ['activity.bookings', 'activity.scan', 'activity.view_roster', 'event.view', 'photo.view_status'],
 };

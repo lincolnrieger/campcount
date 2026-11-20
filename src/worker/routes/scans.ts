@@ -222,6 +222,11 @@ scanRoutes.post('/scans', async (c) => {
   await c.env.DB.batch(statements);
   forgetDashboard(eventId);
 
+  // Moving between activities: someone scanned into an activity is signed
+  // out of any other activity (that tracks sign-out) where they're still
+  // recorded as here, so "Here now" stays right without a second scan.
+  const movedFrom = await autoSignOut(c, eventId, resolved, actorUser, actorStation, now);
+
   // Authoritative outcomes come from replaying each affected context.
   const results: { id: string; outcome: string; message: string; warning: string | null; registrationId: string | null }[] = [];
   const replays = new Map<string, ReturnType<typeof replay>>();
@@ -232,16 +237,65 @@ scanRoutes.post('/scans', async (c) => {
       continue;
     }
     const evaluation = replays.get(`${r.item.contextType}:${r.item.contextId ?? ''}`)!.outcomes.get(r.item.id);
+    const moved = movedFrom.get(r.item.id);
+    const warning = [evaluation?.warning, moved ? `Signed out of ${moved} automatically.` : null].filter(Boolean).join(' ') || null;
     results.push({
       id: r.item.id,
       outcome: evaluation?.outcome ?? 'review',
       message: evaluation?.message ?? 'Recorded for review.',
-      warning: evaluation?.warning ?? null,
+      warning,
       registrationId: r.registrationId,
     });
   }
   return c.json({ results, serverTime: now });
 });
+
+/**
+ * For each scan into an activity, sign the person out of other activities
+ * (with sign-out tracking) where their latest scan before this one is still
+ * a sign-in. Each sign-out is a new scan, marked as automatic; nothing is
+ * changed or deleted. Returns scan id → the activity names they left.
+ */
+async function autoSignOut(
+  c: AppContext,
+  eventId: string,
+  resolved: ResolvedScan[],
+  actorUser: string | null,
+  actorStation: string | null,
+  now: string,
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const ins = resolved.filter((r) => r.registrationId && r.item.contextType === 'activity' && r.item.direction === 'in' && r.item.contextId);
+  if (ins.length === 0) return out;
+  const statements: D1PreparedStatement[] = [];
+  for (const r of ins) {
+    const { results } = await c.env.DB.prepare(
+      `SELECT a.id, a.name FROM activities a
+        WHERE a.event_id = ?1 AND a.track_sign_out = 1 AND a.id <> ?2
+          AND (SELECT s.direction FROM scans s
+                WHERE s.event_id = ?1 AND s.context_type = 'activity' AND s.context_id = a.id AND s.registration_id = ?3
+                  AND s.outcome = 'accepted' AND s.device_time <= ?4
+                  AND NOT EXISTS (SELECT 1 FROM scans v WHERE v.supersedes_id = s.id)
+                ORDER BY s.device_time DESC, s.id DESC LIMIT 1) = 'in'`,
+    )
+      .bind(eventId, r.item.contextId, r.registrationId, r.item.deviceTime)
+      .all<{ id: string; name: string }>();
+    if (results.length === 0) continue;
+    out.set(r.item.id, results.map((a) => a.name).join(', '));
+    for (const a of results) {
+      const reason = 'Signed out automatically: scanned in at another activity.';
+      statements.push(
+        c.env.DB.prepare(
+          `INSERT INTO scans (id, event_id, context_type, context_id, registration_id, direction, method, device_time, server_time,
+              device_id, actor_user_id, actor_station_id, outcome, outcome_reason, correction_reason)
+           VALUES (?, ?, 'activity', ?, ?, 'out', 'correction', ?, ?, 'server', ?, ?, 'accepted', ?, ?)`,
+        ).bind(crypto.randomUUID(), eventId, a.id, r.registrationId, r.item.deviceTime, now, actorUser, actorStation, reason, reason),
+      );
+    }
+  }
+  if (statements.length) await c.env.DB.batch(statements);
+  return out;
+}
 
 /** Correct a mistaken scan. The original stays on record; a correction supersedes it. */
 scanRoutes.post('/scans/:scanId/void', async (c) => {

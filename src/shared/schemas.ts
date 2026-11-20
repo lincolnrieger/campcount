@@ -41,6 +41,8 @@ export const eventFeaturesSchema = z.strictObject({
   dietary: z.boolean(),
   photo: z.boolean(),
   selfSignup: z.boolean(),
+  /** The secret Super Splash Side Quest (participants collect each other's lanyards). */
+  sideQuest: z.boolean(),
 });
 
 /** How a lanyard shows someone without photo consent (Settings › Lanyards). */

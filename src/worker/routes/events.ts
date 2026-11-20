@@ -27,6 +27,7 @@ export interface EventRow {
   feature_dietary: number;
   feature_photo: number;
   feature_self_signup: number;
+  feature_side_quest: number;
   created_at: string;
   updated_at: string;
   closed_at: string | null;
@@ -48,6 +49,7 @@ const FEATURE_COLUMNS: Record<keyof EventFeatures, keyof EventRow> = {
   dietary: 'feature_dietary',
   photo: 'feature_photo',
   selfSignup: 'feature_self_signup',
+  sideQuest: 'feature_side_quest',
 };
 
 export function eventDto(row: EventRow) {
@@ -131,9 +133,9 @@ eventRoutes.post('/', async (c) => {
   await c.env.DB.batch([
     c.env.DB.prepare(
       `INSERT INTO events (id, slug, name, description, location, starts_on, ends_on,
-         feature_activities, feature_meals, feature_site, feature_dietary, feature_photo, feature_self_signup,
+         feature_activities, feature_meals, feature_site, feature_dietary, feature_photo, feature_self_signup, feature_side_quest,
          created_by, created_at, updated_at, subdomain, brand_color)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       id,
       slugify(input.name, input.startsOn),
@@ -148,6 +150,7 @@ eventRoutes.post('/', async (c) => {
       f.dietary ? 1 : 0,
       f.photo === false ? 0 : 1,
       f.selfSignup ? 1 : 0,
+      f.sideQuest ? 1 : 0,
       user.userId,
       now,
       now,

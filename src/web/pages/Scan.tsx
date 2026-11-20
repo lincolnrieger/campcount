@@ -442,6 +442,11 @@ export function Scan() {
             onCheckIn={(p) => void checkIn(p)}
             onUndo={ctx.type === 'site' ? undefined : (p) => void removePerson(p)}
             onTypeCode={() => setSheet('code')}
+            onAddToCome={
+              ctx.type === 'activity' && ctx.id && !station && eventSummary?.permissions.includes('activity.bookings')
+                ? () => navigate(`/events/${eventId}/activities/${ctx.id}?add=1`)
+                : undefined
+            }
           />
         )}
       </div>
@@ -590,6 +595,7 @@ function PeopleList({
   onCheckIn,
   onUndo,
   onTypeCode,
+  onAddToCome,
 }: {
   snapshot: Snapshot;
   states: Map<string, PersonState>;
@@ -597,6 +603,8 @@ function PeopleList({
   onCheckIn: (p: SnapshotPerson) => void;
   onUndo?: (p: SnapshotPerson) => void;
   onTypeCode: () => void;
+  /** Add people to this activity's "to come" list (needs signal: it opens the activity's page). */
+  onAddToCome?: () => void;
 }) {
   const ctx = snapshot.context;
   const [show, setShow] = useState<'not' | 'done'>('not');
@@ -680,6 +688,12 @@ function PeopleList({
         <Icon name="keyboard" />
         Type the code from a card
       </Button>
+      {onAddToCome && (
+        <Button kind="ghost" onClick={onAddToCome}>
+          <Icon name="plus" />
+          Add someone to come
+        </Button>
+      )}
     </div>
   );
 }

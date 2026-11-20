@@ -10,4 +10,8 @@ export const FEATURE_COPY: Record<keyof EventFeatures, { label: string; hint: st
     label: 'Activity sign-up',
     hint: 'People book activity sessions themselves at a sign-up screen, from a session poster, or from their own lanyard QR.',
   },
+  sideQuest: {
+    label: 'Super Splash Side Quest',
+    hint: "A secret game: when someone opens a friend's lanyard QR on their own phone, they collect that friend. Their page shows how many they've collected and where they stand. Kids aren't told; they find it.",
+  },
 };
