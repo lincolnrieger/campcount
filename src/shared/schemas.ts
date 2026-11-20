@@ -317,6 +317,27 @@ export const teamEventInputSchema = z
   .refine(sizesMakeSense, sizeMessage);
 export const teamEventPatchSchema = z.strictObject(teamEventFields).partial().refine(sizesMakeSense, sizeMessage);
 
+/** A leader roster duty: what, where and when. */
+const dutyFields = {
+  title: trimmed(80).min(1, 'Enter what the duty is, like Gate'),
+  location: trimmed(120),
+  notes: trimmed(500),
+  startsAt: isoDateTime,
+  endsAt: isoDateTime.nullable(),
+};
+const dutyTimesMakeSense = (d: { startsAt?: string; endsAt?: string | null }) => !d.startsAt || !d.endsAt || Date.parse(d.endsAt) > Date.parse(d.startsAt);
+const dutyTimeMessage = { message: 'The end must be after the start', path: ['endsAt'] };
+export const dutyInputSchema = z
+  .strictObject({
+    ...dutyFields,
+    location: dutyFields.location.default(''),
+    notes: dutyFields.notes.default(''),
+    endsAt: dutyFields.endsAt.default(null),
+    registrationIds: z.array(z.uuid()).max(200).default([]),
+  })
+  .refine(dutyTimesMakeSense, dutyTimeMessage);
+export const dutyPatchSchema = z.strictObject(dutyFields).partial().refine(dutyTimesMakeSense, dutyTimeMessage);
+
 export const teamNameSchema = z.strictObject({ name: trimmed(40).min(1, 'Enter a team name') });
 
 export const stationInputSchema = z.strictObject({
