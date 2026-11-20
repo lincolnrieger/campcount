@@ -120,6 +120,7 @@ interface Person {
   event: SignupEvent;
   name: string;
   firstName: string;
+  lastName: string;
   kind: 'youth' | 'adult';
   section: string;
   groupName: string;
@@ -141,6 +142,7 @@ async function personFor(c: AppContext, { registrationId, credentialId }: Pass):
     credentialId,
     name: displayName(String(row.first_name), String(row.preferred_name), String(row.last_name)),
     firstName: String(row.preferred_name || row.first_name),
+    lastName: String(row.last_name ?? ''),
     kind: row.kind === 'adult' ? 'adult' : 'youth',
     section: String(row.section ?? ''),
     groupName: String(row.group_name),
@@ -224,7 +226,7 @@ async function personView(c: AppContext, p: Person, opts: { sideQuest?: boolean 
   ]);
   return {
     pass: await makePass(c, p),
-    person: { name: p.name, firstName: p.firstName, groupName: p.groupName, section: p.section, sectionWord: sectionWord(p.kind, p.section) },
+    person: { name: p.name, firstName: p.firstName, lastName: p.lastName, groupName: p.groupName, section: p.section, sectionWord: sectionWord(p.kind, p.section) },
     activitiesDone: done,
     // Only on someone's own link, and only once the camp has turned the game on.
     sideQuest: quest,

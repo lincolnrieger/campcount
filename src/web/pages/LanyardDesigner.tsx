@@ -426,6 +426,8 @@ function PreviewPicker({ eventId, canList, value, onChange }: { eventId: string;
             .map((x) => ({
               id: x.id,
               name: `${x.preferredName || x.firstName} ${x.lastName}`.trim(),
+              firstName: x.preferredName || x.firstName,
+              lastName: x.lastName,
               kind: x.kind,
               section: x.section,
               groupName: x.groupName,
