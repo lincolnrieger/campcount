@@ -69,6 +69,8 @@ export function parsePhotoConsent(value: string): 'yes' | 'no' | 'unknown' {
 export interface PreparedRow {
   /** 1-based line in the source file (header is line 1). */
   line: number;
+  /** Where the row is, for files with several tabs ("Joeys, row 5"). */
+  where?: string;
   row: Omit<ImportRow, 'dietaryFingerprint' | 'dietary'>;
   /** Source dietary/medical text. Stays in the browser; only shown in the review step. */
   dietaryText: string;

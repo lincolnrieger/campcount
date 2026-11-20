@@ -176,3 +176,44 @@
   width: 100%;
   font-size: var(--text-sm);
 }
+
+/* Import: where the file is from */
+.source-choice {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  border: 0;
+  max-width: var(--form-max);
+}
+.source-choice legend {
+  margin-bottom: var(--space-2);
+}
+.source-option {
+  position: relative;
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: var(--border-width) solid var(--divider);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  cursor: pointer;
+}
+.source-option input {
+  width: var(--icon);
+  height: var(--icon);
+  margin: 2px 0 0;
+  flex: none;
+}
+.source-option .choice-text {
+  font-weight: var(--weight-bold);
+}
+.source-option .meta {
+  display: block;
+  font-weight: var(--weight-regular);
+}
+.source-option:has(input:checked) {
+  border-color: var(--brand);
+  background: var(--brand-tint);
+  box-shadow: inset 0 0 0 1px var(--brand);
+}

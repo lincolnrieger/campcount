@@ -15,6 +15,8 @@ import { duplicateMemberNumbers, parseExtra, planImport, storeExtra } from '../s
 import { can } from '../services/principal';
 import { getEventRow } from './events';
 import { loadEventModel, whereabouts } from '../services/reports';
+import type { ImportRow } from '../../shared/schemas';
+import { isHealthExtra } from '../../shared/consent2go';
 import { addToRoster, guestNumber, rowStatements, toImportRow } from '../services/rosterWrites';
 
 export const rosterRoutes = new Hono<AppEnv>();
@@ -157,7 +159,8 @@ rosterRoutes.get('/registrations/:registrationId', async (c) => {
       position: r.position,
       roleLabel: r.role_label,
       team: r.team,
-      extra: parseExtra(r.extra_fields),
+      // Medication permissions and the like are health information: only for people who see dietary detail.
+      extra: Object.fromEntries(Object.entries(parseExtra(r.extra_fields)).filter(([k]) => withDietary || !isHealthExtra(k))),
       status: r.status,
       shortCode: r.short_code ? formatShortCode(r.short_code) : null,
       ...(withPhoto ? { photoConsent: r.photo_consent } : {}),
@@ -396,7 +399,41 @@ async function validatedImport(c: AppContext, eventId: string) {
     if (!can(c.get('principal')!, 'dietary.edit', { eventId })) throw forbidden();
   }
   const existing = await loadExisting(c.env.DB, eventId);
+  if (input.source === 'consent2go') {
+    input.withdrawMissing = false;
+    input.rows = input.rows.map((row) => mergeConsent2Go(row, existing));
+  }
   return { input, plan: planImport(input.rows, existing, input.withdrawMissing) };
+}
+
+/**
+ * A Consent2Go row for someone already on the camp (from MyScout): keep who
+ * they are as MyScout has it, and take only what Consent2Go adds (photo
+ * consent, dietary needs, extra details). Blanks in Consent2Go never wipe
+ * what's already there.
+ */
+function mergeConsent2Go(row: ImportRow, existing: ExistingRegistration[]): ImportRow {
+  const current = existing.find((e) => e.member_number.toUpperCase() === row.memberNumber.toUpperCase());
+  if (!current) return row;
+  const extra = row.extra ? Object.fromEntries(Object.entries(row.extra).filter(([, v]) => v !== '')) : undefined;
+  return {
+    ...row,
+    memberNumber: current.member_number,
+    firstName: current.first_name,
+    preferredName: current.preferred_name,
+    lastName: current.last_name,
+    kind: current.kind as ImportRow['kind'],
+    section: current.section as ImportRow['section'],
+    groupName: current.group_name,
+    position: current.position,
+    roleLabel: current.role_label,
+    team: current.team,
+    sourceStatus: current.source_status,
+    photoConsent: row.photoConsent === 'unknown' ? (current.photo_consent as ImportRow['photoConsent']) : row.photoConsent,
+    // No dietary text in Consent2Go: leave what's recorded alone (don't ask for a review).
+    dietaryFingerprint: row.dietaryFingerprint ?? current.dietary_source_hash,
+    ...(extra && Object.keys(extra).length ? { extra } : { extra: undefined }),
+  };
 }
 
 /**

@@ -204,6 +204,12 @@ export const importRequestSchema = z.strictObject({
   rows: z.array(importRowSchema).min(1).max(2000),
   withdrawMissing: z.boolean().default(false),
   sourceLabel: trimmed(120).default(''),
+  /**
+   * Where the file came from. MyScout is the registration list. Consent2Go
+   * adds consent, dietary needs and details to people already registered:
+   * it never changes their name, section or group, and never withdraws anyone.
+   */
+  source: z.enum(['myscout', 'consent2go']).default('myscout'),
 });
 
 // ---------------------------------------------------------------- activities, meals, stations, scans
