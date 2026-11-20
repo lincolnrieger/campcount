@@ -16,6 +16,7 @@ import { staffRoutes } from './routes/staff';
 import { publicSignupRoutes, signupRoutes } from './routes/signup';
 import { logoRoutes, siteRoutes } from './routes/site';
 import { teamRoutes } from './routes/teams';
+import { dutyRoutes } from './routes/duties';
 import { lanyardTemplateRoutes } from './routes/lanyardTemplates';
 import { lanyardAssetRoutes, lanyardDesignRoutes } from './routes/lanyardDesign';
 import { resolveSite } from './services/site';
@@ -86,6 +87,7 @@ app.route('/events/:eventId', scanRoutes);
 app.route('/events/:eventId', reportRoutes);
 app.route('/events/:eventId', signupRoutes);
 app.route('/events/:eventId', teamRoutes);
+app.route('/events/:eventId', dutyRoutes);
 app.route('/public/signup', publicSignupRoutes);
 app.route('/stations', pairingRoutes);
 

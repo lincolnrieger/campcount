@@ -26,6 +26,7 @@ import { Meals } from './pages/Meals';
 import { ProgramImport } from './pages/ProgramImport';
 import { Schedule } from './pages/Schedule';
 import { TeamEventPage, TeamEvents } from './pages/Teams';
+import { LeaderRoster } from './pages/LeaderRoster';
 import { Pair } from './pages/Pair';
 import { ScanHub } from './pages/ScanHub';
 import { Stations } from './pages/Stations';
@@ -195,6 +196,7 @@ function EventSiteApp({ site }: { site: Extract<SiteInfo, { kind: 'event' }> }) 
             <Route path="people/lanyards/print" element={<LanyardPrint />} />
             <Route path="people/roll-sheet" element={<RollSheet />} />
             <Route path="people/links" element={<ParticipantLinks />} />
+            <Route path="people/leader-roster" element={<LeaderRoster />} />
             <Route path="people/:registrationId" element={<Person />} />
             <Route path="people/:registrationId/edit" element={<PersonEdit />} />
             <Route path="activities" element={<Activities />} />
@@ -270,6 +272,7 @@ function PlatformApp() {
             <Route path="people/lanyards/print" element={<LanyardPrint />} />
             <Route path="people/roll-sheet" element={<RollSheet />} />
             <Route path="people/links" element={<ParticipantLinks />} />
+            <Route path="people/leader-roster" element={<LeaderRoster />} />
             <Route path="people/:registrationId" element={<Person />} />
             <Route path="people/:registrationId/edit" element={<PersonEdit />} />
             <Route path="activities" element={<Activities />} />

@@ -7,11 +7,8 @@ import type { CollectResult, ProgrammeItem, SideQuestStanding, SignupSession, Si
 import { TeamsPanel } from '../components/TeamsPanel';
 import { loadFont } from '../lanyards/fonts';
 import { useTitle } from '../shell';
-import { useSiteEvent } from '../site';
 import { Icon, formatDateRange } from '../ui';
 import type { IconName } from '../ui/Icon';
-import { BrandMark } from '../ui/AppShell';
-import { SiteLogo } from '../ui/SiteShell';
 import { SignupStatus, usePerson } from './Signup';
 
 /**
@@ -153,7 +150,7 @@ const ordinal = (n: number) => {
 // ---------------------------------------------------------------- the page
 
 type Actions = ReturnType<typeof usePerson>;
-type Tab = 'day' | 'book' | 'teams' | 'food' | 'quest';
+type Tab = 'roster' | 'day' | 'book' | 'teams' | 'food' | 'quest';
 
 /**
  * One tab at a time, picked from the bar at the bottom, so nothing is a
@@ -170,7 +167,10 @@ function Page({ view, busy, actions }: { view: SignupView; busy: boolean; action
   const canBook = view.sessions.length > 0 || view.bookings.length > 0;
   const quest = view.sideQuest && view.sideQuest.collected > 0 ? view.sideQuest : null;
 
+  const duties = view.duties ?? [];
   const tabs: { id: Tab; label: string; icon: IconName }[] = [
+    // Leaders on the roster see their duties first.
+    ...(duties.length ? [{ id: 'roster' as const, label: 'Roster', icon: 'clipboard' as const }] : []),
     { id: 'day', label: 'My day', icon: 'events' },
     ...(canBook ? [{ id: 'book' as const, label: 'Book', icon: 'ticket' as const }] : []),
     ...(teamEvents.length ? [{ id: 'teams' as const, label: 'Teams', icon: 'team' as const }] : []),
@@ -179,9 +179,9 @@ function Page({ view, busy, actions }: { view: SignupView; busy: boolean; action
   ];
   const [tab, setTabState] = useState<Tab>(() => {
     const saved = sessionStorage.getItem('cc-pp-tab') as Tab | null;
-    return saved ?? 'day';
+    return saved ?? (duties.length ? 'roster' : 'day');
   });
-  const current = tabs.some((t) => t.id === tab) ? tab : 'day';
+  const current = tabs.some((t) => t.id === tab) ? tab : (tabs[0]?.id ?? 'day');
   const setTab = (t: Tab) => {
     setTabState(t);
     sessionStorage.setItem('cc-pp-tab', t);
@@ -192,6 +192,7 @@ function Page({ view, busy, actions }: { view: SignupView; busy: boolean; action
     <>
       <Pass view={view} />
       <div className="pp-panel">
+        {current === 'roster' && <Roster duties={duties} now={now} tz={tz} />}
         {current === 'day' && <MyDay items={programme} mine={mine} now={now} tz={tz} />}
         {current === 'book' && <Book view={view} busy={busy} onBook={actions.book} onCancel={actions.cancel} />}
         {current === 'teams' && (
@@ -228,26 +229,72 @@ function Page({ view, busy, actions }: { view: SignupView; busy: boolean; action
 
 /** Who you are, at which camp. Coloured like your section's lanyard band. */
 function Pass({ view }: { view: SignupView }) {
-  const siteEvent = useSiteEvent();
   const word = view.person.sectionWord ?? 'Scout';
   const colour = SECTION_COLOURS[word]?.bg ?? '#00843D';
   const first = view.person.firstName ?? view.person.name.split(' ')[0];
   const last = view.person.lastName ?? '';
   return (
     <header className="pp-pass" style={{ ['--pass' as string]: colour }}>
-      <div className="pp-pass-top">
-        <span className="pp-pass-logo">{siteEvent ? <SiteLogo size={28} /> : <BrandMark size={28} />}</span>
-        <span className="pp-pass-camp">
-          <strong>{view.event.name}</strong>
-          <span>{formatDateRange(view.event.startsOn, view.event.endsOn)}</span>
-        </span>
-      </div>
+      <p className="pp-pass-camp">
+        <strong>{view.event.name}</strong>
+        <span>{formatDateRange(view.event.startsOn, view.event.endsOn)}</span>
+      </p>
       <h1 className="pp-name">
         {first}
         {last && <span className="pp-surname">{last}</span>}
       </h1>
       <span className="pp-section-pill">{word}</span>
     </header>
+  );
+}
+
+/**
+ * A leader's roster: where they need to be, when, and doing what. The next
+ * (or current) duty is big at the top; the rest follow by day.
+ */
+function Roster({ duties, now, tz }: { duties: NonNullable<SignupView['duties']>; now: number; tz: string }) {
+  const today = todayInZone(tz);
+  const upcoming = duties.filter((d) => endOf(d) > now);
+  const next = upcoming[0];
+  const days = [...new Set(duties.map((d) => dayInZone(d.startsAt, tz)))];
+  const where = (d: (typeof duties)[number]) => [d.location, d.with ? `With ${d.with}` : null].filter(Boolean).join(' · ');
+  return (
+    <section className="pp-section" aria-labelledby="roster-h">
+      <h2 id="roster-h">My roster</h2>
+      {next ? (
+        <div className="pp-duty-next">
+          <p className="pp-duty-label">{startOf(next) <= now ? 'On now' : 'Next'}</p>
+          <p className="pp-duty-when pp-num">
+            {dayInZone(next.startsAt, tz) === today ? 'Today' : dayLabel(dayInZone(next.startsAt, tz), 'long')}, {timeInZone(next.startsAt, tz)}
+            {next.endsAt ? ` to ${timeInZone(next.endsAt, tz)}` : ''}
+          </p>
+          <p className="pp-duty-title">{next.title}</p>
+          {next.location && <p className="pp-duty-where">{next.location}</p>}
+          {next.notes && <p className="pp-duty-notes">{next.notes}</p>}
+        </div>
+      ) : (
+        <p className="pp-muted">You’ve done all your duties. Thank you!</p>
+      )}
+      {days.map((d) => (
+        <div key={d} className="pp-food-day">
+          <h3 className="pp-subhead">{d === today ? 'Today' : dayLabel(d, 'long')}</h3>
+          <ol className="pp-timeline">
+            {duties
+              .filter((x) => dayInZone(x.startsAt, tz) === d)
+              .map((x, i) => (
+                <li key={i} className={['pp-tl', endOf(x) < now && 'is-past', x === next && 'is-mine'].filter(Boolean).join(' ')}>
+                  <span className="pp-tl-time pp-num">{timeInZone(x.startsAt, tz)}</span>
+                  <span className="pp-tl-main">
+                    <strong>{x.title}</strong>
+                    <span>{[x.endsAt ? `until ${timeInZone(x.endsAt, tz)}` : null, where(x)].filter(Boolean).join(' · ')}</span>
+                    {x.notes && x !== next && <span>{x.notes}</span>}
+                  </span>
+                </li>
+              ))}
+          </ol>
+        </div>
+      ))}
+    </section>
   );
 }
 

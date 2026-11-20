@@ -15,6 +15,7 @@ import { can } from '../services/principal';
 import { addMember, createTeam, participantTeams, removeMember, teamEventRow, teamRow } from '../services/teams';
 import { teamNameSchema } from '../../shared/schemas';
 import { sectionWord } from '../../shared/lanyardDesign';
+import { dutiesFor } from './duties';
 import { activitiesDone, collect, meIsValid, readMe, standing, writeMe } from '../services/sideQuest';
 
 /**
@@ -210,7 +211,7 @@ async function programme(db: D1Database, eventId: string) {
 
 async function personView(c: AppContext, p: Person, opts: { sideQuest?: boolean } = {}) {
   const sideQuestOn = opts.sideQuest === true && p.event.feature_side_quest === 1;
-  const [list, booked, programmeList, teams, done, quest] = await Promise.all([
+  const [list, booked, programmeList, teams, done, quest, duties] = await Promise.all([
     sessions(c.env.DB, p.event.id),
     c.env.DB.prepare(
       `SELECT b.activity_id, b.source, a.name, a.location, a.starts_at, a.ends_at
@@ -223,6 +224,7 @@ async function personView(c: AppContext, p: Person, opts: { sideQuest?: boolean 
     participantTeams(c.env.DB, p.event.id, p.registrationId),
     activitiesDone(c.env.DB, p.event.id, p.registrationId),
     sideQuestOn ? standing(c.env.DB, p.event.id, p.registrationId) : Promise.resolve(null),
+    dutiesFor(c.env.DB, p.event.id, p.registrationId),
   ]);
   return {
     pass: await makePass(c, p),
@@ -230,6 +232,8 @@ async function personView(c: AppContext, p: Person, opts: { sideQuest?: boolean 
     activitiesDone: done,
     // Only on someone's own link, and only once the camp has turned the game on.
     sideQuest: quest,
+    // Leader roster: where this person is rostered on, soonest first.
+    duties,
     event: { name: p.event.name, timezone: p.event.timezone, startsOn: p.event.starts_on, endsOn: p.event.ends_on },
     open: signupOpen(p.event),
     sessions: list,

@@ -17,6 +17,8 @@ export interface SignupSession {
 
 export interface SignupView {
   pass: string;
+  /** Leader roster duties this person is on, soonest first. */
+  duties?: { title: string; location: string; notes: string; startsAt: string; endsAt: string | null; with: string }[];
   person: { name: string; groupName: string; firstName?: string; lastName?: string; section?: string; sectionWord?: string };
   /** Different activities they've been checked in to. */
   activitiesDone?: number;

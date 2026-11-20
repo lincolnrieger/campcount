@@ -39,7 +39,7 @@ whole account straight away.
    - applies database migrations `0016_load_indexes.sql` (new indexes) and
      `0017_lanyard_designer.sql` (two new tables for lanyard designs and their
      images), `0018_scanner_bookings.sql` (scanners can add people to come)
-     and `0019_side_quest.sql` (the Side Quest switch and its table) and `0020_member_number_codes.sql` (lanyard codes become membership numbers). All
+     and `0019_side_quest.sql` (the Side Quest switch and its table) and `0020_member_number_codes.sql` (lanyard codes become membership numbers) and `0021_leader_roster.sql` (the leader roster). All
      only add things, so they're safe while the old version is running;
    - creates the two new rate limits (`AUTH_NETWORK_LIMITER`,
      `PUBLIC_NETWORK_LIMITER`) from `wrangler.jsonc`.
