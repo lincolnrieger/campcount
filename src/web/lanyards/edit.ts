@@ -153,32 +153,31 @@ const MAX_EDGE = 2000;
  * see-through parts stay PNG; others become JPEG.
  */
 export async function uploadImage(eventId: string, file: File): Promise<{ id: string; bitmap: ImageBitmap }> {
+  const { dataUrl, bitmap } = await prepareImage(file);
+  const res = await api<{ id: string }>(`/events/${eventId}/lanyard-assets`, { body: { dataUrl } });
+  return { id: res.id, bitmap };
+}
+
+/** Read an image for upload, shrinking it to 2000 px on the long edge (and under 1.4 MB) if needed. */
+export async function prepareImage(file: File): Promise<{ dataUrl: string; bitmap: ImageBitmap; width: number; height: number }> {
   if (!/^image\/(png|jpeg|webp)$/.test(file.type)) throw new Error('Choose a PNG, JPEG or WebP image.');
   const bitmap = await createImageBitmap(file).catch(() => null);
   if (!bitmap) throw new Error('That image couldn’t be opened. Try saving it as a PNG or JPEG.');
-  let dataUrl: string | null = null;
   const small = bitmap.width <= MAX_EDGE && bitmap.height <= MAX_EDGE;
-  if (small && file.size <= MAX_UPLOAD) dataUrl = await readDataUrl(file);
-  else {
-    const k = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(bitmap.width * k);
-    canvas.height = Math.round(bitmap.height * k);
-    const g = canvas.getContext('2d')!;
-    g.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    const transparent = file.type !== 'image/jpeg' && hasTransparency(g, canvas.width, canvas.height);
-    for (const quality of [0.9, 0.8, 0.7]) {
-      const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, transparent ? 'image/png' : 'image/jpeg', quality));
-      if (blob && blob.size <= MAX_UPLOAD) {
-        dataUrl = await readDataUrl(blob);
-        break;
-      }
-      if (transparent) break;
-    }
-    if (!dataUrl) throw new Error('That image is too big. Use one under 1.4 MB.');
+  if (small && file.size <= MAX_UPLOAD) return { dataUrl: await readDataUrl(file), bitmap, width: bitmap.width, height: bitmap.height };
+  const k = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * k);
+  canvas.height = Math.round(bitmap.height * k);
+  const g = canvas.getContext('2d')!;
+  g.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  const transparent = file.type !== 'image/jpeg' && hasTransparency(g, canvas.width, canvas.height);
+  for (const quality of [0.9, 0.8, 0.7]) {
+    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, transparent ? 'image/png' : 'image/jpeg', quality));
+    if (blob && blob.size <= MAX_UPLOAD) return { dataUrl: await readDataUrl(blob), bitmap, width: canvas.width, height: canvas.height };
+    if (transparent) break;
   }
-  const res = await api<{ id: string }>(`/events/${eventId}/lanyard-assets`, { body: { dataUrl } });
-  return { id: res.id, bitmap };
+  throw new Error('That image is too big. Use one under 1.4 MB.');
 }
 
 function hasTransparency(g: CanvasRenderingContext2D, w: number, h: number): boolean {

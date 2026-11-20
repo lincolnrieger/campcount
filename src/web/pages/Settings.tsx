@@ -37,6 +37,7 @@ export function SettingsIndex() {
 
   const rows = [
     can('event.configure') && { to: 'event', title: 'Event details', meta: 'Name, dates, location, notes and features' },
+    can('event.configure') && { to: 'banner', title: 'Participant page banner', meta: 'A graphic across the top of the page each lanyard opens' },
     can('event.configure') && { to: 'lanyards', title: 'Lanyards', meta: 'Design the front and back of the card, and how no-photo consent is marked' },
     can('staff.manage') && { to: 'staff', title: 'Staff', meta: staff.data ? `${plural(staff.data.staff.length, 'person', 'people')} · who works on this event` : 'Who works on this event and what they can do' },
     can('stations.manage') && {

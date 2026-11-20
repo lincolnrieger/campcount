@@ -27,6 +27,7 @@ import { ProgramImport } from './pages/ProgramImport';
 import { Schedule } from './pages/Schedule';
 import { TeamEventPage, TeamEvents } from './pages/Teams';
 import { LeaderRoster } from './pages/LeaderRoster';
+import { BannerSettings } from './pages/BannerSettings';
 import { Pair } from './pages/Pair';
 import { ScanHub } from './pages/ScanHub';
 import { Stations } from './pages/Stations';
@@ -213,6 +214,7 @@ function EventSiteApp({ site }: { site: Extract<SiteInfo, { kind: 'event' }> }) 
             <Route path="settings" element={<Outlet />}>
               <Route index element={<SettingsIndex />} />
               <Route path="event" element={<EventDetails />} />
+              <Route path="banner" element={<BannerSettings />} />
               <Route path="staff" element={<Staff />} />
               <Route path="staff/add" element={<AddStaff />} />
               <Route path="stations" element={<Stations />} />
@@ -289,6 +291,7 @@ function PlatformApp() {
             <Route path="settings" element={<Outlet />}>
               <Route index element={<SettingsIndex />} />
               <Route path="event" element={<EventDetails />} />
+              <Route path="banner" element={<BannerSettings />} />
               <Route path="staff" element={<Staff />} />
               <Route path="staff/add" element={<AddStaff />} />
               <Route path="stations" element={<Stations />} />
