@@ -6,6 +6,7 @@ import { ApiFailure, api } from '../api';
 import type { OutboxEntry } from '../offline/db';
 import { addToOutbox, contextEntries, getDeviceId, loadSnapshot, saveSnapshot } from '../offline/db';
 import { onSynced, requestSync } from '../offline/sync';
+import { usePolling } from '../usePolling';
 
 export interface SnapshotPerson {
   id: string;
@@ -82,15 +83,9 @@ export function useScanSession(eventId: string, type: ContextType, contextId: st
 
   useEffect(() => {
     void refresh();
-    const off = onSynced(() => void refresh());
-    const timer = setInterval(() => {
-      if (navigator.onLine) void refresh();
-    }, 60_000);
-    return () => {
-      off();
-      clearInterval(timer);
-    };
+    return onSynced(() => void refresh());
   }, [refresh]);
+  usePolling(refresh, 60_000);
 
   const lookup = useMemo(() => {
     if (!snapshot) return null;

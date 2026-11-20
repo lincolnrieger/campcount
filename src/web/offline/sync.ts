@@ -20,6 +20,15 @@ const syncedListeners = new Set<(results: Map<string, OutboxEntry['server']>) =>
 let running = false;
 let timer: ReturnType<typeof setInterval> | null = null;
 let soon: ReturnType<typeof setTimeout> | null = null;
+/** After a failed upload, wait before the timer tries again (doubling, up to 5 minutes, jittered). */
+let failures = 0;
+let retryAt = 0;
+
+function backOff() {
+  failures += 1;
+  const base = Math.min(5 * 60_000, 10_000 * 2 ** (failures - 1));
+  retryAt = Date.now() + base * (0.5 + Math.random() * 0.5);
+}
 
 function set(next: Partial<SyncStatus>) {
   status = { ...status, ...next };
@@ -27,8 +36,10 @@ function set(next: Partial<SyncStatus>) {
 }
 
 /** Push queued scans to the server. Safe to call at any time; never runs twice at once. */
-export async function syncNow(): Promise<void> {
+export async function syncNow(opts: { scheduled?: boolean } = {}): Promise<void> {
   if (running) return;
+  // The 10-second timer respects the back-off; a new scan or regained signal tries at once.
+  if (opts.scheduled && Date.now() < retryAt) return;
   running = true;
   try {
     for (;;) {
@@ -51,8 +62,11 @@ export async function syncNow(): Promise<void> {
         if (err instanceof ApiFailure && err.status === 0) set({ state: 'offline', message: null });
         else if (err instanceof ApiFailure && err.status === 401) set({ state: 'blocked', message: 'Sign in again to upload waiting scans.' });
         else set({ state: 'blocked', message: err instanceof ApiFailure ? err.message : 'Upload failed.' });
+        backOff();
         break;
       }
+      failures = 0;
+      retryAt = 0;
       const results = new Map(res.results.map((r) => [r.id, { outcome: r.outcome, message: r.message, warning: r.warning }]));
       await markSynced(results);
       syncedListeners.forEach((l) => l(results));
@@ -73,8 +87,13 @@ export function requestSync() {
 
 function start() {
   if (timer) return;
-  timer = setInterval(() => void syncNow(), 10_000);
-  window.addEventListener('online', () => void syncNow());
+  timer = setInterval(() => void syncNow({ scheduled: true }), 10_000);
+  // Signal back: spread the uploads over a few seconds, so every phone at the
+  // gate doesn't upload in the same instant when the mast comes back.
+  window.addEventListener('online', () => {
+    retryAt = 0;
+    setTimeout(() => void syncNow(), Math.random() * 3_000);
+  });
   window.addEventListener('offline', () => set({ state: 'offline' }));
   void syncNow();
 }

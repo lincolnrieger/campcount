@@ -28,6 +28,7 @@ import {
 } from '../ui';
 import type { MenuItem } from '../ui';
 import { useEvent } from './EventLayout';
+import { usePolling } from '../usePolling';
 
 interface RosterPerson {
   id: string;
@@ -87,10 +88,7 @@ export function ActivityRoster() {
   const tz = event.timezone;
   const list = `${base}/activities`;
 
-  useEffect(() => {
-    const t = setInterval(() => void reload(), 20_000);
-    return () => clearInterval(t);
-  }, [reload]);
+  usePolling(reload, 20_000);
 
   // Nobody booked: start on everyone involved, so the list isn't empty.
   const hasBookings = (data?.people ?? []).some((p) => p.booked);

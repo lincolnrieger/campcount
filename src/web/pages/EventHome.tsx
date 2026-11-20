@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Link } from 'react-router';
 import { ApiFailure, api } from '../api';
 import type { Registration, Where } from '../model';
@@ -29,6 +29,7 @@ import {
 } from '../ui';
 import type { Tone } from '../ui';
 import { useEvent } from './EventLayout';
+import { usePolling } from '../usePolling';
 
 interface Person extends Where {
   id: string;
@@ -226,13 +227,13 @@ function WhereEveryoneIs() {
   const [busy, setBusy] = useState<string | null>(null);
 
   // Keep it current while it's open on a screen at HQ.
-  useEffect(() => {
-    const t = setInterval(() => {
+  usePolling(
+    useCallback(() => {
       void reloadWhere();
       void reloadLive();
-    }, 30_000);
-    return () => clearInterval(t);
-  }, [reloadWhere, reloadLive]);
+    }, [reloadWhere, reloadLive]),
+    30_000,
+  );
 
   const canMark = event.status === 'open' && event.features.site && can('site.scan');
 

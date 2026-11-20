@@ -152,12 +152,24 @@ scanRoutes.post('/scans', async (c) => {
   const lateLimit = addMinutes(now, 10);
   const resolved: ResolvedScan[] = [];
   let codeIndex: Map<string, { id: string; registration_id: string }> | null = null;
+  // Look every scanned card up in a few queries, not one query per scan: a
+  // phone back in signal can upload 200 scans at once.
+  const byTokenHash = await lookupIn<{ id: string; registration_id: string; token_hash: string }>(
+    c.env.DB,
+    `SELECT id, registration_id, token_hash FROM credentials WHERE event_id = ? AND token_hash IN`,
+    eventId,
+    input.scans.map((s) => s.credentialHash).filter((h): h is string => !!h),
+  ).then((rows) => new Map(rows.map((r) => [r.token_hash, r])));
+  const manualIds = await lookupIn<{ id: string }>(
+    c.env.DB,
+    `SELECT id FROM registrations WHERE event_id = ? AND id IN`,
+    eventId,
+    input.scans.filter((s) => s.method === 'manual' && s.registrationId).map((s) => s.registrationId!),
+  ).then((rows) => new Set(rows.map((r) => r.id)));
   for (const item of input.scans) {
     let cred: { id: string; registration_id: string } | null = null;
     if (item.credentialHash) {
-      cred = await c.env.DB.prepare(`SELECT id, registration_id FROM credentials WHERE token_hash = ? AND event_id = ?`)
-        .bind(item.credentialHash, eventId)
-        .first();
+      cred = byTokenHash.get(item.credentialHash) ?? null;
     } else if (item.codeHash) {
       // Typed codes are matched by hashing this event's codes (once per request).
       if (!codeIndex) {
@@ -170,8 +182,7 @@ scanRoutes.post('/scans', async (c) => {
     }
     let registrationId = cred?.registration_id ?? null;
     if (item.method === 'manual' && item.registrationId) {
-      const reg = await c.env.DB.prepare(`SELECT id FROM registrations WHERE id = ? AND event_id = ?`).bind(item.registrationId, eventId).first();
-      registrationId = reg ? item.registrationId : null;
+      registrationId = manualIds.has(item.registrationId) ? item.registrationId : null;
     }
     resolved.push({
       item,
@@ -342,6 +353,21 @@ async function recent(c: AppContext) {
 }
 scanRoutes.get('/scan/site/recent', recent);
 scanRoutes.get('/scan/:type/:id/recent', recent);
+
+/** Run `sql (?, ?, …)` for distinct values in chunks (D1 allows at most 100 bound values per query). */
+async function lookupIn<T>(db: D1Database, sql: string, eventId: string, values: string[]): Promise<T[]> {
+  const distinct = [...new Set(values)];
+  const out: T[] = [];
+  for (let i = 0; i < distinct.length; i += 90) {
+    const chunk = distinct.slice(i, i + 90);
+    const { results } = await db
+      .prepare(`${sql} (${chunk.map(() => '?').join(', ')})`)
+      .bind(eventId, ...chunk)
+      .all<T>();
+    out.push(...results);
+  }
+  return out;
+}
 
 // ---------------------------------------------------------------- station pairing (no account needed)
 

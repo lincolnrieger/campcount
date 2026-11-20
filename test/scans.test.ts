@@ -326,3 +326,27 @@ describe('meal team view', () => {
     expect(snap.people[0].fullName).toMatch(/^First\d+ Person$/);
   });
 });
+
+describe('a phone back in signal', () => {
+  it('uploads 200 waiting scans in one go, and the same upload sent again stores nothing new', async () => {
+    const c = await camp();
+    const site = { contextType: 'site', contextId: null };
+    const scans = [];
+    for (let i = 0; i < 200; i++) {
+      const card = c.cards[i % c.cards.length]!;
+      scans.push(await scanItem(site, card.token, { direction: i % 2 === 0 ? 'in' : 'out' }));
+    }
+    // One unknown card and one manual entry from another event's person are refused, not stored against anyone.
+    scans[198] = await scanItem(site, 'not-a-real-token-at-all');
+    scans[199] = { ...(await scanItem(site, c.cards[0]!.token)), method: 'manual', credentialHash: undefined, registrationId: crypto.randomUUID() };
+    const first = await json(await upload(c.eventId, c.director.cookie, scans));
+    expect(first.results).toHaveLength(200);
+    const again = await upload(c.eventId, c.director.cookie, scans);
+    expect(again.status).toBe(200);
+    const row = await testEnv.DB.prepare(`SELECT count(*) AS n, count(registration_id) AS known FROM scans WHERE event_id = ?`)
+      .bind(c.eventId)
+      .first<{ n: number; known: number }>();
+    expect(row?.n).toBe(200);
+    expect(row?.known).toBe(198);
+  });
+});
