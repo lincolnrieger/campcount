@@ -5,6 +5,7 @@ import { App } from './App';
 import { SessionProvider } from './session';
 import { SiteProvider } from './site';
 import { ConfirmProvider, ToastProvider } from './ui';
+import '@fontsource-variable/nunito-sans/wght.css';
 import './styles/tokens.css';
 import './styles/base.css';
 import './styles/components.css';
@@ -14,6 +15,7 @@ import './styles/screens-people.css';
 import './styles/screens-activities.css';
 import './styles/screens-settings.css';
 import './styles/screens-admin.css';
+import './styles/screens-lanyards.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

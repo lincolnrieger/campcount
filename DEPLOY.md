@@ -36,8 +36,10 @@ whole account straight away.
 1. On GitHub, open a pull request from the `claude/quirky-hamilton-0pmzno`
    branch to `main` and merge it.
 2. Cloudflare Workers Builds deploys it automatically. That run:
-   - applies database migration `0016_load_indexes.sql` (new indexes only,
-     safe while the old version is running);
+   - applies database migrations `0016_load_indexes.sql` (new indexes) and
+     `0017_lanyard_designer.sql` (two new tables for lanyard designs and their
+     images). Both only add things, so they're safe while the old version is
+     running;
    - creates the two new rate limits (`AUTH_NETWORK_LIMITER`,
      `PUBLIC_NETWORK_LIMITER`) from `wrangler.jsonc`.
 3. In Cloudflare, open **Workers & Pages › campcount › Deployments** and

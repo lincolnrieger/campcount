@@ -417,7 +417,7 @@ export function Import() {
               <Button kind="primary" onClick={() => navigate(`${base}/people`)}>
                 View people
               </Button>
-              <ButtonLink to={`${base}/people/lanyards`}>Print lanyards</ButtonLink>
+              <ButtonLink to={`${base}/people/lanyards/print`}>Print lanyards</ButtonLink>
             </div>
           </Section>
         )}

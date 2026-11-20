@@ -18,6 +18,16 @@ body {
   color: var(--ink);
   background: var(--canvas);
   -webkit-font-smoothing: antialiased;
+  font-optical-sizing: auto;
+  color-scheme: light;
+  accent-color: var(--brand);
+}
+::selection {
+  background: var(--brand-tint);
+  color: var(--ink);
+}
+p {
+  text-wrap: pretty;
 }
 h1,
 h2,
@@ -32,13 +42,17 @@ figure {
 }
 h1 {
   font-size: var(--text-xl);
-  font-weight: var(--weight-bold);
+  font-weight: var(--weight-heavy);
   line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  text-wrap: balance;
 }
 h2 {
   font-size: var(--text-lg);
-  font-weight: var(--weight-bold);
+  font-weight: var(--weight-heavy);
   line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  text-wrap: balance;
 }
 h3 {
   font-size: var(--text-base);

@@ -16,10 +16,12 @@ meal scanning that keeps working with patchy signal, and close-out reports.
 - Events with per-event features and a draft → open → completed → archived
   lifecycle
 - MyScout import (.xlsx/CSV) filtered in the browser, with dietary review
-- QR lanyards (print four per A4, double-sided) with typed backup codes. Each
-  event can download a blank template, design its own artwork and upload it in
-  Settings › Lanyards; until then the built-in design is used. A marker for no
-  photo consent is chosen there too
+- QR lanyards with typed backup codes, designed in the app (People › Design
+  lanyards): front and back, text in six fonts, per-person details, colours,
+  shapes, images and backgrounds, on a standard CR80 card (portrait or
+  landscape) or a large 90 × 120 mm lanyard. Print as A4 sheets to cut out or
+  as a card-sized PDF for card printers; both sides, fronts only or backs only.
+  How no-photo consent is marked is chosen there too
 - Team events (Soccer, Basketball…): people make and join teams from their
   lanyard link or the sign-up kiosk, within team size limits
 - Scanning for activities, meals and on-site, working offline, on personal

@@ -23,7 +23,7 @@ Sections, shown only when the person's role can use them:
 | --- | --- |
 | Home | Open camp: counts that filter (On site, Not arrived, Left camp), Find a person, everyone listed with Not arrived first, and Arrived/Left by hand. Draft camp: the Get ready checklist, ending with Open event. |
 | Scan | Big buttons: On now, then Gate, then the day's meals and activities. One tap opens the full-screen scanner. People who only scan go straight into the scanner when there's only one thing on. |
-| People | Search, one filter, and a table (computers) or list (phones). The ⋯ menu has Import from MyScout, Print lanyards, Participant links (everyone's own page link, to copy or download as CSV for emailing), Print roll sheet and Select people to delete. A person has Right now, Dietary needs, Activities, History (with Undo this scan) and Details, plus Edit details. |
+| People | Search, one filter, and a table (computers) or list (phones). The ⋯ menu has Import from MyScout, Design lanyards (the card designer, with a Print tab), Print lanyards, Participant links (everyone's own page link, to copy or download as CSV for emailing), Print roll sheet and Select people to delete. A person has Right now, Dietary needs, Activities, History (with Undo this scan) and Details, plus Edit details. |
 | Activities | Day tabs, then rows. Each activity has who's booked and who's here, Check in, and Add someone. |
 | Meals | Day tabs. Add a day of meals adds breakfast, lunch and dinner in one go. Each meal can have a menu and ingredients, shown under it for leaders to check. |
 | Reports | Check-up, Downloads, Close event. |

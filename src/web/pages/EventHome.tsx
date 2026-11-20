@@ -149,7 +149,7 @@ function GetReady() {
     can('roster.edit') && { label: 'Add people', hint: 'Import from MyScout, or add people one at a time', to: 'people', done: people.length > 0 },
     event.features.activities && can('activities.manage') && { label: 'Add activities', hint: 'With their days and times', to: 'activities', done: (activities.data?.activities.length ?? 0) > 0 },
     event.features.meals && can('meals.manage') && { label: 'Add meals', hint: 'Each meal you want to count', to: 'meals', done: (meals.data?.meals.length ?? 0) > 0 },
-    can('credentials.manage') && { label: 'Print lanyards', hint: 'One card per person, with their QR code', to: 'people/lanyards', done: people.length > 0 && people.every((r) => r.shortCode) },
+    can('credentials.manage') && { label: 'Print lanyards', hint: 'One card per person, with their QR code', to: 'people/lanyards/print', done: people.length > 0 && people.every((r) => r.shortCode) },
   ].filter((s): s is { label: string; hint: string; to: string; done: boolean } => Boolean(s));
   const loading = roster.loading || staff.loading || activities.loading || meals.loading;
 

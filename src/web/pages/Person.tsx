@@ -6,7 +6,7 @@ import { SECTIONS } from '../../shared/sections';
 import { dayInZone, dayLabel, timeInZone, timeRange } from '../../shared/time';
 import { ApiFailure, api } from '../api';
 import { DietaryEditor, describeEntry } from '../components/DietaryEditor';
-import type { Card } from '../lanyards/pdf';
+import type { CardPerson } from '../../shared/lanyardDesign';
 import type { Where } from '../model';
 import { scanVerb } from '../model';
 import { recordByHand } from '../scan/manual';
@@ -134,16 +134,21 @@ export function Person() {
 
   async function downloadCard() {
     try {
-      const res = await api<{ cards: Card[] }>(`/events/${event.id}/credentials/print`, { body: { registrationIds: [r.id] } });
+      const res = await api<{ cards: CardPerson[] }>(`/events/${event.id}/credentials/print`, { body: { registrationIds: [r.id] } });
       const card = res.cards[0];
       if (!card) return;
-      const { buildLanyardPdf, downloadPdf, loadLogoPng } = await import('../lanyards/pdf');
-      const { loadArtwork } = await import('../lanyards/artwork');
-      const { templates } = await api<{ templates: { size: string; side: string; url: string }[] }>(`/events/${event.id}/lanyard-templates`).catch(() => ({ templates: [] }));
-      const url = (side: string) => templates.find((t) => t.size === 'lanyard' && t.side === side)?.url ?? null;
-      const [front, back, logoPng] = await Promise.all([loadArtwork(url('front')), loadArtwork(url('back')), loadLogoPng(event.logoUrl)]);
-      const bytes = await buildLanyardPdf([card], 'lanyard', event.name, { marker: event.lanyard, doubleSided: true, logoPng, artwork: { front, back }, printBand: event.lanyard.printBand });
-      downloadPdf(bytes, `${fullName.replace(/\W+/g, '-')}-lanyard.pdf`);
+      // The camp's own design, both sides, one card per page.
+      const [{ fetchDesign }, { buildPrintPdf }, { ImageCache }] = await Promise.all([import('../lanyards/useDesign'), import('../lanyards/printPdf'), import('../lanyards/render')]);
+      const { design } = await fetchDesign(event.id);
+      const bytes = await buildPrintPdf(design, [card], new ImageCache(event.id), { campName: event.name, marker: event.lanyard, layout: 'cards', sides: 'both', cutLines: false });
+      const url = URL.createObjectURL(new Blob([bytes.slice()], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${fullName.replace(/\W+/g, '-')}-lanyard.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (err) {
       fail(err);
     }
