@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { credentialUrl, formatShortCode } from '../../shared/credentials';
+import { credentialUrl, formatShortCode, memberCardCode } from '../../shared/credentials';
 import { displayName } from '../../shared/names';
 import { isEditable } from '../../shared/lifecycle';
 import { dietaryUpdateSchema, importRequestSchema, personEntrySchema, registrationPatchSchema } from '../../shared/schemas';
@@ -223,6 +223,11 @@ rosterRoutes.patch('/registrations/:registrationId', async (c) => {
         reg.person_id,
       ),
     );
+  }
+  // The lanyard's typed code is the membership number: keep it in step (the QR doesn't change).
+  const newCode = input.memberNumber !== undefined ? memberCardCode(input.memberNumber) : null;
+  if (newCode) {
+    statements.push(c.env.DB.prepare(`UPDATE credentials SET short_code = ? WHERE registration_id = ? AND status = 'active'`).bind(newCode, id));
   }
   if (rKeys.length) {
     statements.push(

@@ -473,7 +473,7 @@ export function Scan() {
         />
       )}
 
-      <Sheet open={sheet === 'code'} title="Type the code from a card" onClose={() => setSheet('none')}>
+      <Sheet open={sheet === 'code'} title="Type a membership number" onClose={() => setSheet('none')}>
         <CodeEntry
           onCode={(code) => {
             setSheet('none');
@@ -686,7 +686,7 @@ function PeopleList({
       )}
       <Button kind="ghost" onClick={onTypeCode}>
         <Icon name="keyboard" />
-        Type the code from a card
+        Type a membership number
       </Button>
       {onAddToCome && (
         <Button kind="ghost" onClick={onAddToCome}>
@@ -709,7 +709,7 @@ function CodeEntry({ onCode }: { onCode: (code: string) => void }) {
     <form className="form" onSubmit={submit}>
       <div className="field">
         <label htmlFor="typed-code" className="field-label">
-          Code printed under the QR
+          Membership number (printed on the card)
         </label>
         <input
           id="typed-code"
@@ -717,15 +717,15 @@ function CodeEntry({ onCode }: { onCode: (code: string) => void }) {
           autoCapitalize="characters"
           autoComplete="off"
           spellCheck={false}
-          maxLength={9}
+          maxLength={24}
           value={code}
           // eslint-disable-next-line jsx-a11y/no-autofocus
           autoFocus
           onChange={(e) => setCode(e.target.value.toUpperCase())}
-          placeholder="K7QM-3XRP"
+          inputMode="text"
         />
       </div>
-      <Button type="submit" kind="primary" block disabled={code.replace(/-/g, '').length !== 8}>
+      <Button type="submit" kind="primary" block disabled={code.replace(/[\s-]/g, '').length < 3}>
         Record
       </Button>
     </form>

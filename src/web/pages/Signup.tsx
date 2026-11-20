@@ -239,19 +239,19 @@ export function SignupKiosk() {
                 void identify({ shortCode: typed });
               }}
             >
-              <Field id="kiosk-code" label="Or type the code under the QR on your card">
+              <Field id="kiosk-code" label="Or type your membership number (it’s on your card)">
                 <input
                   className="input input-code"
                   autoCapitalize="characters"
                   autoComplete="off"
                   spellCheck={false}
-                  maxLength={9}
-                  placeholder="K7QM-3XRP"
+                  maxLength={24}
+                  inputMode="text"
                   value={typed}
                   onChange={(e) => setTyped(e.target.value.toUpperCase())}
                 />
               </Field>
-              <Button type="submit" kind="primary" disabled={typed.replace(/-/g, '').length !== 8}>
+              <Button type="submit" kind="primary" disabled={typed.replace(/[\s-]/g, '').length < 3}>
                 Look up code
               </Button>
             </form>

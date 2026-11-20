@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { normaliseShortCode, isShortCode, parseCredentialPayload } from '../../shared/credentials';
+import { isTypedCode, normaliseShortCode, parseCredentialPayload } from '../../shared/credentials';
 import type { ContextRules, ContextType, Direction, Evaluation, PersonState } from '../../shared/scanRules';
 import { EMPTY_STATE, evaluateScan } from '../../shared/scanRules';
 import { ApiFailure, api } from '../api';
@@ -144,7 +144,7 @@ export function useScanSession(eventId: string, type: ContextType, contextId: st
           item = { ...base, method: 'qr', credentialHash: tokenHash };
         } else if (input.kind === 'code') {
           const code = normaliseShortCode(input.code);
-          if (!isShortCode(code)) return { key: id, tone: 'stop', title: 'Check the code', message: 'Codes have 8 letters and numbers, like K7QM-3XRP.', person: null, warning: null };
+          if (!isTypedCode(code)) return { key: id, tone: 'stop', title: 'Check the number', message: 'Type the membership number printed on their card.', person: null, warning: null };
           const codeHash = await sha256Hex(`code:${eventId}:${code}`);
           credential = lookup.byCode.get(codeHash);
           item = { ...base, method: 'code', codeHash };

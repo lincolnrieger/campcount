@@ -272,7 +272,7 @@ const identifySchema = z.union([
   // A lanyard link opened on a phone (or the kiosk camera, with the screen's code).
   // claim: "this is my card", making this phone belong to this person.
   z.strictObject({ token: z.string().regex(/^[A-Za-z0-9_-]{22}$/), code: z.string().max(64).optional(), claim: z.boolean().optional() }),
-  z.strictObject({ shortCode: z.string().trim().max(12), code: z.string().max(64) }),
+  z.strictObject({ shortCode: z.string().trim().max(24), code: z.string().max(64) }),
 ]);
 
 /**

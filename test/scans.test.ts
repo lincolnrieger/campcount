@@ -91,7 +91,7 @@ describe('scan snapshot', () => {
     const text = await res.text();
     for (const card of c.cards) {
       expect(text).not.toContain(card.token);
-      expect(text).not.toContain(card.shortCode.replace('-', ''));
+      // The typed code is the membership number, which scanners already see; only the QR token is secret.
     }
     const snap = JSON.parse(text);
     expect(snap.people[0]).not.toHaveProperty('dietaryAlert');
