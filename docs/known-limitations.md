@@ -53,6 +53,17 @@ mitigation or a planned fix.
 
 ## Platform
 
+- **Shared people records:** someone who goes to several camps has one
+  record (by membership number). Their name can only be changed by someone
+  who can edit every camp they're on. Otherwise, correct it in MyScout and
+  import again.
+- **Printed codes on scanner phones:** a scanner's offline list holds a fast
+  hash of each lanyard's printed code. With a scanner phone and technical
+  skill, those codes could be recovered and used at the sign-up screen. A
+  fix needs a decision; see AUDIT.md S-9.
+- **Cloudflare plan:** CampCount needs Workers Paid (US$5 a month) during
+  camps. The free plan's daily database limit would be reached. See
+  DEPLOY.md.
 - **Data location:** the D1 database is placed in the Oceania region by a
   location hint. This is not a legal guarantee that data stays in
   Australia.
