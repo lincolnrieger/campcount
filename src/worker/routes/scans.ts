@@ -11,7 +11,9 @@ import { parseBody, requirePermission } from '../context';
 import { ApiError, conflict, forbidden, notFound } from '../lib/errors';
 import { addMinutes, nowIso } from '../lib/time';
 import { sha256Hex } from '../lib/crypto';
+import { limitAuthNetwork } from '../lib/rateLimit';
 import { auditStatement } from '../services/audit';
+import { forgetDashboard } from '../services/reports';
 import type { ScanContext } from '../services/contexts';
 import { canScan, loadContext, loadTimeline } from '../services/contexts';
 import type { Principal } from '../services/principal';
@@ -151,12 +153,24 @@ scanRoutes.post('/scans', async (c) => {
   const lateLimit = addMinutes(now, 10);
   const resolved: ResolvedScan[] = [];
   let codeIndex: Map<string, { id: string; registration_id: string }> | null = null;
+  // Look every scanned card up in a few queries, not one query per scan: a
+  // phone back in signal can upload 200 scans at once.
+  const byTokenHash = await lookupIn<{ id: string; registration_id: string; token_hash: string }>(
+    c.env.DB,
+    `SELECT id, registration_id, token_hash FROM credentials WHERE event_id = ? AND token_hash IN`,
+    eventId,
+    input.scans.map((s) => s.credentialHash).filter((h): h is string => !!h),
+  ).then((rows) => new Map(rows.map((r) => [r.token_hash, r])));
+  const manualIds = await lookupIn<{ id: string }>(
+    c.env.DB,
+    `SELECT id FROM registrations WHERE event_id = ? AND id IN`,
+    eventId,
+    input.scans.filter((s) => s.method === 'manual' && s.registrationId).map((s) => s.registrationId!),
+  ).then((rows) => new Set(rows.map((r) => r.id)));
   for (const item of input.scans) {
     let cred: { id: string; registration_id: string } | null = null;
     if (item.credentialHash) {
-      cred = await c.env.DB.prepare(`SELECT id, registration_id FROM credentials WHERE token_hash = ? AND event_id = ?`)
-        .bind(item.credentialHash, eventId)
-        .first();
+      cred = byTokenHash.get(item.credentialHash) ?? null;
     } else if (item.codeHash) {
       // Typed codes are matched by hashing this event's codes (once per request).
       if (!codeIndex) {
@@ -169,8 +183,7 @@ scanRoutes.post('/scans', async (c) => {
     }
     let registrationId = cred?.registration_id ?? null;
     if (item.method === 'manual' && item.registrationId) {
-      const reg = await c.env.DB.prepare(`SELECT id FROM registrations WHERE id = ? AND event_id = ?`).bind(item.registrationId, eventId).first();
-      registrationId = reg ? item.registrationId : null;
+      registrationId = manualIds.has(item.registrationId) ? item.registrationId : null;
     }
     resolved.push({
       item,
@@ -207,6 +220,7 @@ scanRoutes.post('/scans', async (c) => {
     ),
   );
   await c.env.DB.batch(statements);
+  forgetDashboard(eventId);
 
   // Authoritative outcomes come from replaying each affected context.
   const results: { id: string; outcome: string; message: string; warning: string | null; registrationId: string | null }[] = [];
@@ -261,6 +275,7 @@ scanRoutes.post('/scans/:scanId/void', async (c) => {
       targetId: original.id,
     }),
   ]);
+  forgetDashboard(eventId);
   return c.json({ id });
 });
 
@@ -308,6 +323,7 @@ scanRoutes.post('/scan/:type/:id/people/:registrationId/remove', async (c) => {
       detail: { scans: results.length, registrationId: registrationId.data, via: 'scanner' },
     }),
   ]);
+  forgetDashboard(eventId);
   return c.json({ undone: results.length });
 });
 
@@ -342,17 +358,28 @@ async function recent(c: AppContext) {
 scanRoutes.get('/scan/site/recent', recent);
 scanRoutes.get('/scan/:type/:id/recent', recent);
 
+/** Run `sql (?, ?, …)` for distinct values in chunks (D1 allows at most 100 bound values per query). */
+async function lookupIn<T>(db: D1Database, sql: string, eventId: string, values: string[]): Promise<T[]> {
+  const distinct = [...new Set(values)];
+  const out: T[] = [];
+  for (let i = 0; i < distinct.length; i += 90) {
+    const chunk = distinct.slice(i, i + 90);
+    const { results } = await db
+      .prepare(`${sql} (${chunk.map(() => '?').join(', ')})`)
+      .bind(eventId, ...chunk)
+      .all<T>();
+    out.push(...results);
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------- station pairing (no account needed)
 
 export const pairingRoutes = new Hono<AppEnv>();
 
 pairingRoutes.post('/pair', async (c) => {
   const { code } = await parseBody(c, z.strictObject({ code: z.string().trim().min(8).max(12) }));
-  const ip = c.req.header('CF-Connecting-IP');
-  if (ip && c.env.AUTH_LIMITER) {
-    const { success } = await c.env.AUTH_LIMITER.limit({ key: `pair:${ip}` });
-    if (!success) throw new ApiError(429, 'rate_limited', 'Too many attempts. Wait a minute and try again.');
-  }
+  await limitAuthNetwork(c, 'pair');
   const now = nowIso();
   const station = await c.env.DB.prepare(
     `SELECT s.id, s.expires_at, s.event_id FROM stations s JOIN events e ON e.id = s.event_id

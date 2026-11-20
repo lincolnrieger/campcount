@@ -238,7 +238,7 @@ export function AdminLog() {
                       <span className="row-main">
                         {e.kind === 'scan' ? (
                           <span>
-                            <strong>{e.registrationId && e.eventId ? <Link to={`/events/${e.eventId}/people/${e.registrationId}`}>{e.person}</Link> : e.person}</strong>{' '}
+                            <strong>{e.registrationId && e.eventId ? <Link className="log-person" to={`/events/${e.eventId}/people/${e.registrationId}`}>{e.person}</Link> : e.person}</strong>{' '}
                             {scanVerb(e.contextType, e.direction).toLowerCase()}{' '}
                             {e.contextType === 'meal' ? 'at' : e.contextType === 'site' ? 'at the' : e.direction === 'in' ? 'to' : 'of'} {e.contextType === 'site' ? 'gate' : e.place}
                           </span>

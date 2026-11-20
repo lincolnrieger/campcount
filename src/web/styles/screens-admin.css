@@ -280,3 +280,10 @@
   max-width: 18rem;
   font-size: calc(var(--text-sm) * 1.25);
 }
+
+/* Activity log: a person's name is a link; give it a full-size touch target. */
+.log-person {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control);
+}

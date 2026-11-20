@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { parseDelimited } from '../../shared/csv';
+import { csvCell, parseDelimited } from '../../shared/csv';
 import type { ColumnMapping, PreparedRow, TargetField } from '../../shared/myscout';
 import { TARGET_FIELDS, autoMap, extraLabel, flagDuplicates, missingRequired, normaliseDietaryText, prepareRows, saysNothing } from '../../shared/myscout';
 import { MAX_EXTRA_FIELDS } from '../../shared/schemas';
@@ -42,7 +42,7 @@ async function hmacHex(key: string, text: string): Promise<string> {
 }
 
 function downloadCsv(filename: string, rows: string[][]) {
-  const text = rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  const text = rows.map((r) => r.map(csvCell).join(',')).join('\r\n');
   const url = URL.createObjectURL(new Blob(['\uFEFF' + text], { type: 'text/csv' }));
   const a = document.createElement('a');
   a.href = url;

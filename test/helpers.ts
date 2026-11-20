@@ -69,10 +69,12 @@ export interface CallOptions {
   origin?: string | null;
   /** Send the request to another address, e.g. an event's own site 'camp.campcount.test'. */
   host?: string;
+  /** Extra request headers, e.g. CF-Connecting-IP to act like many phones on one camp Wi-Fi. */
+  headers?: Record<string, string>;
 }
 
 export async function api(path: string, opts: CallOptions = {}): Promise<Response> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...opts.headers };
   const method = opts.method ?? (opts.body === undefined ? 'GET' : 'POST');
   if (opts.cookie) headers.Cookie = opts.cookie;
   const base = opts.host ? `https://${opts.host}` : ORIGIN;

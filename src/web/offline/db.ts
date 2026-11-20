@@ -118,3 +118,13 @@ export async function clearDevice(force = false): Promise<boolean> {
   );
   return true;
 }
+
+/**
+ * Wipe the cached rosters (names, groups, dietary alerts) but keep waiting
+ * scans, so they can upload after the next sign-in. Used when the server says
+ * this device is no longer signed in (expired, revoked or a station stopped).
+ */
+export async function clearRosters(): Promise<void> {
+  const db = await open();
+  await request(db.transaction('snapshots', 'readwrite').objectStore('snapshots').clear());
+}

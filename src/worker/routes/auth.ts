@@ -17,6 +17,7 @@ import { addMinutes, nowIso } from '../lib/time';
 import { audit, auditStatement } from '../services/audit';
 import { dummyVerify, hashPassword, passwordProblem, verifyPassword } from '../lib/passwords';
 import { EmailSendError, sendEmail } from '../services/email';
+import { limitAuthNetwork, limitPerKey } from '../lib/rateLimit';
 import { SESSION_COOKIE, createSession, revokeSession } from '../services/sessions';
 import { consumePasswordLink, findPasswordLink } from '../services/passwordLinks';
 
@@ -26,17 +27,6 @@ const INVALID = () => new ApiError(400, 'invalid_code', 'That code is invalid or
 
 export const authRoutes = new Hono<AppEnv>();
 
-async function rateLimit(c: AppContext, key: string): Promise<void> {
-  if (!c.env.AUTH_LIMITER) return;
-  const { success } = await c.env.AUTH_LIMITER.limit({ key });
-  if (!success) throw new ApiError(429, 'rate_limited', 'Too many attempts. Wait a minute and try again.');
-}
-
-/** Cloudflare always sets CF-Connecting-IP in deployed environments; local runs skip per-IP limits. */
-async function limitByIp(c: AppContext, bucket: string): Promise<void> {
-  const ip = c.req.header('CF-Connecting-IP');
-  if (ip) await rateLimit(c, `${bucket}:${ip}`);
-}
 
 /**
  * Request a sign-in code. The response is identical whether or not the email
@@ -44,8 +34,8 @@ async function limitByIp(c: AppContext, bucket: string): Promise<void> {
  */
 authRoutes.post('/request', async (c) => {
   const { email } = await parseBody(c, signInRequestSchema);
-  await limitByIp(c, 'request');
-  await rateLimit(c, `email:${await sha256Hex(email)}`);
+  await limitAuthNetwork(c, 'request');
+  await limitPerKey(c, `email:${await sha256Hex(email)}`);
 
   const user = await c.env.DB.prepare(`SELECT id FROM users WHERE email = ? AND status = 'active'`)
     .bind(email)
@@ -66,8 +56,8 @@ authRoutes.post('/signup', async (c) => {
   const { email, displayName, password } = await parseBody(c, signUpSchema);
   const problem = passwordProblem(password, email);
   if (problem) throw new ApiError(400, 'weak_password', problem, [{ path: 'password', message: problem }]);
-  await limitByIp(c, 'signup');
-  await rateLimit(c, `email:${await sha256Hex(email)}`);
+  await limitAuthNetwork(c, 'signup');
+  await limitPerKey(c, `email:${await sha256Hex(email)}`);
 
   const existing = await c.env.DB.prepare(`SELECT id, status FROM users WHERE email = ?`)
     .bind(email)
@@ -129,15 +119,15 @@ async function emailCode(c: AppContext, userId: string, email: string, kind: 'si
     });
   } catch (err) {
     const reason = err instanceof EmailSendError ? err.code : 'UNKNOWN';
-    // Operator-facing detail goes to the logs (no address or sign-in code is logged).
-    console.error(`Sign-in email could not be sent: ${reason}: ${err instanceof Error ? err.message : String(err)}`);
+    // The provider's message can quote the recipient, so only the error code is logged.
+    console.error(`Sign-in email could not be sent: ${reason}`);
     throw new ApiError(503, 'email_unavailable', `The sign-in email could not be sent (${reason}). Please tell your CampCount administrator.`);
   }
 }
 
 authRoutes.post('/verify', async (c) => {
   const input = await parseBody(c, signInVerifySchema);
-  await limitByIp(c, 'verify');
+  await limitAuthNetwork(c, 'verify');
   const now = nowIso();
 
   let challenge: { id: string; user_id: string } | null;
@@ -208,8 +198,8 @@ const WRONG_PASSWORD = () => new ApiError(400, 'invalid_credentials', 'Email or 
  */
 authRoutes.post('/password/sign-in', async (c) => {
   const { email, password } = await parseBody(c, passwordSignInSchema);
-  await limitByIp(c, 'password');
-  await rateLimit(c, `password:${await sha256Hex(email)}`);
+  await limitAuthNetwork(c, 'password');
+  await limitPerKey(c, `password:${await sha256Hex(email)}`);
 
   const user = await c.env.DB.prepare(`SELECT id, password_hash, email_verified_at FROM users WHERE email = ? AND status = 'active'`)
     .bind(email)
@@ -235,7 +225,7 @@ authRoutes.post('/password/sign-in', async (c) => {
 /** Who a password link is for, so the page can greet them. Does not use the link up. */
 authRoutes.post('/link/check', async (c) => {
   const { token } = await parseBody(c, passwordLinkCheckSchema);
-  await limitByIp(c, 'link');
+  await limitAuthNetwork(c, 'link');
   const link = await findPasswordLink(c.env, token);
   return c.json({ email: link.email, displayName: link.displayName, purpose: link.purpose });
 });
@@ -243,7 +233,7 @@ authRoutes.post('/link/check', async (c) => {
 /** Set a password from a setup or reset link, then sign in. Signs out every other device. */
 authRoutes.post('/link/use', async (c) => {
   const { token, password } = await parseBody(c, passwordLinkUseSchema);
-  await limitByIp(c, 'link');
+  await limitAuthNetwork(c, 'link');
   const link = await findPasswordLink(c.env, token);
   const problem = passwordProblem(password, link.email);
   if (problem) throw new ApiError(400, 'weak_password', problem, [{ path: 'password', message: problem }]);
@@ -271,7 +261,7 @@ const FRESH_SESSION_MINUTES = 15;
 authRoutes.post('/password', async (c) => {
   const user = requireUser(c);
   const { password, currentPassword } = await parseBody(c, setPasswordSchema);
-  await rateLimit(c, `set-password:${user.userId}`);
+  await limitPerKey(c, `set-password:${user.userId}`);
 
   const row = await c.env.DB.prepare(`SELECT password_hash FROM users WHERE id = ?`)
     .bind(user.userId)

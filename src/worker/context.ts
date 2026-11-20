@@ -9,7 +9,7 @@ import { can } from './services/principal';
 
 export interface AppEnv {
   Bindings: Env;
-  Variables: { principal: Principal | null; site?: Site };
+  Variables: { principal: Principal | null; site?: Site; requestId: string };
 }
 
 export type AppContext = Context<AppEnv>;

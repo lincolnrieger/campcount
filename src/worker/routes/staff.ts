@@ -84,16 +84,25 @@ staffRoutes.get('/people', async (c) => {
   requirePermission(c, 'staff.manage', { eventId });
   const event = await getEventRow(c.env.DB, eventId);
   if (!event) throw notFound();
+  const principal = c.get('principal')!;
   const { results } = await c.env.DB.prepare(
-    `SELECT u.id, u.display_name, u.email FROM users u
+    `SELECT u.id, u.display_name, u.email,
+            (SELECT group_concat(DISTINCT a.event_id) FROM assignments a WHERE a.user_id = u.id AND a.event_id IS NOT NULL) AS event_ids
+       FROM users u
       WHERE u.status = 'active' AND u.is_demo = ?
         AND (u.email_verified_at IS NOT NULL OR u.password_hash IS NOT NULL)
         AND NOT EXISTS (SELECT 1 FROM assignments a WHERE a.user_id = u.id AND a.event_id = ? AND a.revoked_at IS NULL)
       ORDER BY u.display_name COLLATE NOCASE LIMIT 1000`,
   )
     .bind(event.is_demo ? 1 : 0, eventId)
-    .all<{ id: string; display_name: string; email: string }>();
-  return c.json({ people: results.map((u) => ({ id: u.id, displayName: u.display_name, email: u.email })) });
+    .all<{ id: string; display_name: string; email: string; event_ids: string | null }>();
+  // Only people this manager has worked with: staff of camps they also run.
+  // Platform admins see every account. Anyone else can still be added by email.
+  const seesEveryone = can(principal, 'platform.users.manage');
+  const people = results.filter(
+    (u) => seesEveryone || (u.event_ids ?? '').split(',').some((id) => id && can(principal, 'staff.manage', { eventId: id })),
+  );
+  return c.json({ people: people.map((u) => ({ id: u.id, displayName: u.display_name, email: u.email })) });
 });
 
 staffRoutes.post('/', async (c) => {

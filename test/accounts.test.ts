@@ -184,9 +184,19 @@ describe('password links', () => {
     const existing = await createUser({ name: 'Eli Existing' });
     await api('/auth/password', { cookie: existing.cookie, body: { password: PW } });
 
+    // Eli worked with Mandy at an earlier camp; Sam has never worked with her.
+    const earlier = await createEvent(admin.id);
+    await grant(manager.id, 'event_manager', earlier);
+    await grant(existing.id, 'scanner', earlier);
+    const stranger = await createUser({ name: 'Sam Stranger' });
+    await api('/auth/password', { cookie: stranger.cookie, body: { password: PW } });
+
     const people = (await json(await api(`/events/${eventId}/staff/people`, { cookie: manager.cookie }))).people;
     expect(people.map((p: { id: string }) => p.id)).toContain(existing.id);
     expect(people.map((p: { id: string }) => p.id)).not.toContain(manager.id); // already on the event
+    expect(people.map((p: { id: string }) => p.id)).not.toContain(stranger.id); // other camps' staff stay private
+    const all = (await json(await api(`/events/${eventId}/staff/people`, { cookie: admin.cookie }))).people;
+    expect(all.map((p: { id: string }) => p.id)).toContain(stranger.id); // platform admins see every account
 
     const byId = await json(await api(`/events/${eventId}/staff`, { cookie: manager.cookie, body: { userId: existing.id, roleKey: 'scanner' } }));
     expect(byId).toMatchObject({ created: false });

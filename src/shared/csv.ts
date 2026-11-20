@@ -73,3 +73,10 @@ export function parseDelimited(input: string, delimiter?: string): ParsedTable {
   // Pad short rows so every row has a cell per header.
   return { headers, rows: rows.map((r) => headers.map((_, i) => (r[i] ?? '').trim())), delimiter: d };
 }
+
+/** One CSV cell: quoted, with spreadsheet formulas neutralised (a name like "=HYPERLINK(...)" stays text). */
+export function csvCell(value: unknown): string {
+  let text = value === null || value === undefined ? '' : String(value);
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
+}

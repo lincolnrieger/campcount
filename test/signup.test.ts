@@ -225,3 +225,16 @@ describe('participant links', () => {
     expect((await api(`/events/${c.eventId}/credentials/links`, { cookie: scanner.cookie, body: {} })).status).toBe(403);
   });
 });
+
+describe('a lost lanyard', () => {
+  it('stops its sign-up pass working as soon as the lanyard is replaced', async () => {
+    const c = await camp();
+    const me = await json(await api('/public/signup/identify', { body: { token: c.card('100').token } }));
+    expect((await api('/public/signup/book', { body: { pass: me.pass, activityId: c.kayak9 } })).status).toBe(200);
+    await api(`/events/${c.eventId}/credentials/issue`, {
+      cookie: c.manager.cookie,
+      body: { mode: 'replace', registrationIds: [c.card('100').registrationId] },
+    });
+    expect((await api('/public/signup/cancel', { body: { pass: me.pass, activityId: c.kayak9 } })).status).toBe(401);
+  });
+});

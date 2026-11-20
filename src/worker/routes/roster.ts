@@ -203,6 +203,16 @@ rosterRoutes.patch('/registrations/:registrationId', async (c) => {
   const pKeys = set(personCols);
   const rKeys = set(regCols);
   if (pKeys.length + rKeys.length === 0 && input.extra === undefined) return c.json({ ok: true });
+  if (pKeys.length) {
+    const sharedWith = await c.env.DB.prepare(`SELECT DISTINCT event_id FROM registrations WHERE person_id = ? AND event_id <> ?`)
+      .bind(reg.person_id, eventId)
+      .all<{ event_id: string }>();
+    if (sharedWith.results.some((r) => !can(c.get('principal')!, 'roster.edit', { eventId: r.event_id }))) {
+      throw conflict(
+        'This person is also on another camp, so their name and membership number can only be changed by someone who runs both camps. Correct it in MyScout and import again.',
+      );
+    }
+  }
   const now = nowIso();
   const statements: D1PreparedStatement[] = [];
   if (pKeys.length) {
@@ -324,7 +334,7 @@ rosterRoutes.post('/registrations', async (c) => {
     e.id,
     toImportRow({ ...input, memberNumber, dietary: e.feature_dietary ? input.dietary : [] }),
     user.userId,
-    false,
+    (await namesLockedElsewhere(c, e.id, [memberNumber])).has(memberNumber),
   );
   await auditStatement(c.env.DB, {
     actor: { type: 'user', id: user.userId },
@@ -384,6 +394,30 @@ async function validatedImport(c: AppContext, eventId: string) {
   return { input, plan: planImport(input.rows, existing, input.withdrawMissing) };
 }
 
+/**
+ * People records are shared between camps (one per membership number). A
+ * camp's team may only change a shared person's names if they can also edit
+ * every other camp that person is on; otherwise one camp could rename a child
+ * on another camp's roster and lanyards. Returns the membership numbers whose
+ * names this caller must leave alone.
+ */
+async function namesLockedElsewhere(c: AppContext, eventId: string, memberNumbers: string[]): Promise<Set<string>> {
+  const principal = c.get('principal')!;
+  const distinct = [...new Set(memberNumbers)];
+  const locked = new Set<string>();
+  for (let i = 0; i < distinct.length; i += 90) {
+    const chunk = distinct.slice(i, i + 90);
+    const { results } = await c.env.DB.prepare(
+      `SELECT DISTINCT p.member_number, r.event_id FROM people p JOIN registrations r ON r.person_id = p.id
+        WHERE r.event_id <> ? AND p.member_number IN (${chunk.map(() => '?').join(', ')})`,
+    )
+      .bind(eventId, ...chunk)
+      .all<{ member_number: string; event_id: string }>();
+    for (const r of results) if (!can(principal, 'roster.edit', { eventId: r.event_id })) locked.add(r.member_number);
+  }
+  return locked;
+}
+
 rosterRoutes.post('/import/preview', async (c) => {
   const eventId = c.req.param('eventId')!;
   requirePermission(c, 'roster.import', { eventId });
@@ -405,9 +439,14 @@ rosterRoutes.post('/import/commit', async (c) => {
   const now = nowIso();
 
   const statements: D1PreparedStatement[] = [];
+  const locked = await namesLockedElsewhere(c, eventId, input.rows.map((r) => r.memberNumber));
   input.rows.forEach((row, i) => {
     if (plan.rows[i]!.action === 'unchanged') return;
-    statements.push(...rowStatements(c.env.DB, eventId, row, plan.rows[i]!.dietaryPending, now, user.userId));
+    statements.push(
+      ...rowStatements(c.env.DB, eventId, row, plan.rows[i]!.dietaryPending, now, user.userId, {
+        keepExistingNames: locked.has(row.memberNumber),
+      }),
+    );
   });
   for (const w of plan.withdraw) {
     statements.push(

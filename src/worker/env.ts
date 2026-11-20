@@ -1,7 +1,12 @@
 export interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
+  /** Per account, email or person: 10 a minute. */
   AUTH_LIMITER?: RateLimit;
+  /** Per network address for sign-in and pairing: a high ceiling, because a whole camp can share one address. */
+  AUTH_NETWORK_LIMITER?: RateLimit;
+  /** Per network address for participant sign-up: a higher ceiling still. */
+  PUBLIC_NETWORK_LIMITER?: RateLimit;
   /** Optional Cloudflare Email Service binding; required in staging/production. */
   EMAIL?: SendEmail;
   ENVIRONMENT: 'development' | 'test' | 'production';

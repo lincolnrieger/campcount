@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Link } from 'react-router';
 import { ApiFailure, api } from '../api';
 import type { Registration, Where } from '../model';
@@ -29,6 +29,7 @@ import {
 } from '../ui';
 import type { Tone } from '../ui';
 import { useEvent } from './EventLayout';
+import { usePolling } from '../usePolling';
 
 interface Person extends Where {
   id: string;
@@ -216,7 +217,9 @@ function WhereEveryoneIs() {
   const { event, can } = useEvent();
   const toast = useToast();
   const wide = useWide();
-  const where = useApi<WhereData>(`/events/${event.id}/whereabouts`);
+  // After marking someone by hand, ask for a fresh copy (the server reuses dashboards for a few seconds).
+  const [fresh, setFresh] = useState(0);
+  const where = useApi<WhereData>(`/events/${event.id}/whereabouts${fresh ? `?fresh=${fresh}` : ''}`);
   const live = useApi<LiveData>(`/events/${event.id}/live`);
   const reloadWhere = where.reload;
   const reloadLive = live.reload;
@@ -226,13 +229,13 @@ function WhereEveryoneIs() {
   const [busy, setBusy] = useState<string | null>(null);
 
   // Keep it current while it's open on a screen at HQ.
-  useEffect(() => {
-    const t = setInterval(() => {
+  usePolling(
+    useCallback(() => {
       void reloadWhere();
       void reloadLive();
-    }, 30_000);
-    return () => clearInterval(t);
-  }, [reloadWhere, reloadLive]);
+    }, [reloadWhere, reloadLive]),
+    30_000,
+  );
 
   const canMark = event.status === 'open' && event.features.site && can('site.scan');
 
@@ -242,7 +245,7 @@ function WhereEveryoneIs() {
       const r = await recordByHand(event.id, { contextType: 'site', contextId: null, direction, registrationId: p.id });
       if (r.outcome === 'accepted') toast(`${p.fullName} marked ${direction === 'in' ? 'arrived' : 'left'}`);
       else toast(`${p.fullName}: ${r.message}`, { tone: 'error' });
-      await reloadWhere();
+      setFresh((n) => n + 1);
     } catch (err) {
       toast(err instanceof ApiFailure ? err.message : 'No connection. Use the scanner, which works offline.', { tone: 'error' });
     } finally {

@@ -13,6 +13,7 @@ import { useSiteEvent } from '../site';
 import { BrandMark } from '../ui/AppShell';
 import { SiteLogo } from '../ui/SiteShell';
 import { Badge, Button, Field, Icon, Loading, Notice, Segmented, SkeletonRows, formatDateRange } from '../ui';
+import { usePolling } from '../usePolling';
 
 /** Back to the start screen after this long without a tap, so the next person starts fresh. */
 const IDLE_MS = 90_000;
@@ -125,9 +126,8 @@ export function SignupKiosk() {
 
   useEffect(() => {
     loadBoard();
-    const t = setInterval(loadBoard, 30_000);
-    return () => clearInterval(t);
   }, [loadBoard]);
+  usePolling(loadBoard, 30_000);
 
   const reset = useCallback(() => {
     setView(null);
