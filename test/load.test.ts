@@ -91,3 +91,24 @@ describe('a whole camp at once', () => {
     expect(row?.n).toBe(1);
   });
 });
+
+describe('the live dashboard', () => {
+  it('shows a new arrival straight away, even though dashboards are reused for a few seconds', async () => {
+    const c = await camp(2, 5);
+    await testEnv.DB.prepare(`UPDATE events SET feature_site = 1 WHERE id = ?`).bind(c.eventId).run();
+    await api(`/events/${c.eventId}/transition`, { cookie: c.manager.cookie, body: { to: 'open' } });
+    const where = async () => (await json(await api(`/events/${c.eventId}/whereabouts`, { cookie: c.manager.cookie }))).people as { id: string; site: string | null }[];
+    const before = await where();
+    const someone = before[0]!;
+    expect(someone.site).not.toBe('on');
+    const up = await api(`/events/${c.eventId}/scans`, {
+      cookie: c.manager.cookie,
+      body: {
+        deviceId: 'test-device',
+        scans: [{ id: crypto.randomUUID(), contextType: 'site', contextId: null, direction: 'in', deviceTime: new Date().toISOString(), method: 'manual', registrationId: someone.id }],
+      },
+    });
+    expect(up.status).toBe(200);
+    expect((await where()).find((p) => p.id === someone.id)!.site).toBe('on');
+  });
+});

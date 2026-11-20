@@ -13,6 +13,7 @@ import { addMinutes, nowIso } from '../lib/time';
 import { sha256Hex } from '../lib/crypto';
 import { limitAuthNetwork } from '../lib/rateLimit';
 import { auditStatement } from '../services/audit';
+import { forgetDashboard } from '../services/reports';
 import type { ScanContext } from '../services/contexts';
 import { canScan, loadContext, loadTimeline } from '../services/contexts';
 import type { Principal } from '../services/principal';
@@ -219,6 +220,7 @@ scanRoutes.post('/scans', async (c) => {
     ),
   );
   await c.env.DB.batch(statements);
+  forgetDashboard(eventId);
 
   // Authoritative outcomes come from replaying each affected context.
   const results: { id: string; outcome: string; message: string; warning: string | null; registrationId: string | null }[] = [];
@@ -273,6 +275,7 @@ scanRoutes.post('/scans/:scanId/void', async (c) => {
       targetId: original.id,
     }),
   ]);
+  forgetDashboard(eventId);
   return c.json({ id });
 });
 
@@ -320,6 +323,7 @@ scanRoutes.post('/scan/:type/:id/people/:registrationId/remove', async (c) => {
       detail: { scans: results.length, registrationId: registrationId.data, via: 'scanner' },
     }),
   ]);
+  forgetDashboard(eventId);
   return c.json({ undone: results.length });
 });
 

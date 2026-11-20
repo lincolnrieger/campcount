@@ -217,7 +217,9 @@ function WhereEveryoneIs() {
   const { event, can } = useEvent();
   const toast = useToast();
   const wide = useWide();
-  const where = useApi<WhereData>(`/events/${event.id}/whereabouts`);
+  // After marking someone by hand, ask for a fresh copy (the server reuses dashboards for a few seconds).
+  const [fresh, setFresh] = useState(0);
+  const where = useApi<WhereData>(`/events/${event.id}/whereabouts${fresh ? `?fresh=${fresh}` : ''}`);
   const live = useApi<LiveData>(`/events/${event.id}/live`);
   const reloadWhere = where.reload;
   const reloadLive = live.reload;
@@ -243,7 +245,7 @@ function WhereEveryoneIs() {
       const r = await recordByHand(event.id, { contextType: 'site', contextId: null, direction, registrationId: p.id });
       if (r.outcome === 'accepted') toast(`${p.fullName} marked ${direction === 'in' ? 'arrived' : 'left'}`);
       else toast(`${p.fullName}: ${r.message}`, { tone: 'error' });
-      await reloadWhere();
+      setFresh((n) => n + 1);
     } catch (err) {
       toast(err instanceof ApiFailure ? err.message : 'No connection. Use the scanner, which works offline.', { tone: 'error' });
     } finally {

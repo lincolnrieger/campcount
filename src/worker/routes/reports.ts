@@ -6,7 +6,7 @@ import { parseBody, requirePermission, requireUser } from '../context';
 import { badRequest, conflict, notFound } from '../lib/errors';
 import { nowIso } from '../lib/time';
 import { auditStatement } from '../services/audit';
-import { devices, loadEventModel, localTime, openItems, summarise, toCsv, whereabouts } from '../services/reports';
+import { devices, loadEventModel, loadEventModelForDashboard, localTime, openItems, summarise, toCsv, whereabouts } from '../services/reports';
 import { can } from '../services/principal';
 import type { EventRow } from './events';
 import { getEventRow } from './events';
@@ -23,7 +23,7 @@ reportRoutes.get('/live', async (c) => {
   const eventId = c.req.param('eventId')!;
   requirePermission(c, 'reports.view', { eventId });
   const ev = await event(c, eventId);
-  const model = await loadEventModel(c.env.DB, eventId, ev.feature_site === 1);
+  const model = await loadEventModelForDashboard(c.env.DB, eventId, ev.feature_site === 1, c.req.query('fresh') !== undefined);
   // People still signed in is normal during camp; only flag what needs a person to look.
   const items = openItems(model).filter((i) => i.kind !== 'still_present');
   return c.json({
@@ -40,7 +40,7 @@ reportRoutes.get('/whereabouts', async (c) => {
   const eventId = c.req.param('eventId')!;
   requirePermission(c, 'reports.view', { eventId });
   const ev = await event(c, eventId);
-  const model = await loadEventModel(c.env.DB, eventId, ev.feature_site === 1);
+  const model = await loadEventModelForDashboard(c.env.DB, eventId, ev.feature_site === 1, c.req.query('fresh') !== undefined);
   const where = whereabouts(model);
   const people = [...model.people.values()]
     .filter((p) => p.status === 'active')

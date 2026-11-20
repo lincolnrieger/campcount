@@ -53,6 +53,35 @@ export interface EventModel {
   replays: Map<string, { outcomes: Map<string, Evaluation>; states: Map<string, { present: boolean; visits: number; lastAcceptedAt: string | null }>; presentNow: number }>;
 }
 
+/**
+ * The same model, reused for a few seconds by the live dashboards. Every
+ * open event home asks for /live and /whereabouts together every 30 seconds,
+ * and each load reads every scan in the camp; with several directors and
+ * screens at HQ this keeps that to about one read per camp per few seconds.
+ * Only for dashboards: reports, close-out and edits always load fresh.
+ * The cache lives in this Worker instance's memory only, and callers check
+ * permission before using it.
+ */
+const DASHBOARD_TTL_MS = 5_000;
+const dashboardCache = new Map<string, { at: number; model: Promise<EventModel> }>();
+
+/** Drop a camp's cached dashboard model (after a scan is recorded through this instance). */
+export function forgetDashboard(eventId: string): void {
+  for (const key of dashboardCache.keys()) if (key.startsWith(`${eventId}:`)) dashboardCache.delete(key);
+}
+
+export function loadEventModelForDashboard(db: D1Database, eventId: string, includeSite: boolean, fresh = false): Promise<EventModel> {
+  const key = `${eventId}:${includeSite ? 1 : 0}`;
+  const now = Date.now();
+  const hit = dashboardCache.get(key);
+  if (!fresh && hit && now - hit.at < DASHBOARD_TTL_MS) return hit.model;
+  const model = loadEventModel(db, eventId, includeSite);
+  model.catch(() => dashboardCache.delete(key));
+  if (dashboardCache.size > 20) dashboardCache.clear();
+  dashboardCache.set(key, { at: now, model });
+  return model;
+}
+
 export async function loadEventModel(db: D1Database, eventId: string, includeSite: boolean): Promise<EventModel> {
   const [activities, meals, people, scans] = await Promise.all([
     db.prepare(`SELECT * FROM activities WHERE event_id = ? ORDER BY starts_at IS NULL, starts_at, name COLLATE NOCASE`).bind(eventId).all<Record<string, any>>(),
