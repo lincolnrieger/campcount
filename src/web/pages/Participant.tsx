@@ -28,6 +28,7 @@ export function Participant() {
   const [error, setError] = useState<string | null>(null);
   const person = usePerson(setError);
   const { setView } = person;
+  const ready = useFirstPaintReady(person.view);
 
   // Display faces for the pass and the big numbers.
   useEffect(() => {
@@ -81,13 +82,14 @@ export function Participant() {
         </div>
       </Shell>
     );
-  if (state === 'loading' || !person.view)
+  if (state === 'loading' || !person.view || !ready)
+    // A plain page while loading: no placeholder in the wrong colour, and the
+    // pass appears once, in the person's own colour with the banner in place.
     return (
       <Shell>
-        <div className="pp-pass pp-pass-loading" aria-busy="true" aria-label="Loading your camp page">
-          <span className="pp-skel pp-skel-name" />
-          <span className="pp-skel pp-skel-line" />
-        </div>
+        <p className="visually-hidden" role="status" aria-busy="true">
+          Loading your camp page
+        </p>
       </Shell>
     );
   return (
@@ -97,6 +99,38 @@ export function Participant() {
       <SignupStatus error={error} done={null} />
     </Shell>
   );
+}
+
+/**
+ * Hold the page back until the camp's banner and the display fonts are in
+ * (at most 2.5 seconds), so it appears once, complete, instead of shifting
+ * as the image and fonts arrive. Only the first time: later refreshes show
+ * straight away.
+ */
+function useFirstPaintReady(view: SignupView | null): boolean {
+  const [ready, setReady] = useState(false);
+  const banner = view?.event.banner?.url ?? null;
+  const hasView = view !== null;
+  useEffect(() => {
+    if (!hasView || ready) return;
+    let live = true;
+    const image = banner
+      ? new Promise<void>((resolve) => {
+          const img = new Image();
+          img.onload = () => void img.decode().then(resolve, resolve);
+          img.onerror = () => resolve();
+          img.src = banner;
+        })
+      : Promise.resolve();
+    const fonts = document.fonts?.ready ?? Promise.resolve();
+    void Promise.race([Promise.all([image, fonts]), new Promise((r) => setTimeout(r, 2500))]).then(() => {
+      if (live) setReady(true);
+    });
+    return () => {
+      live = false;
+    };
+  }, [hasView, banner, ready]);
+  return ready;
 }
 
 /**
