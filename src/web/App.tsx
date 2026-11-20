@@ -47,8 +47,8 @@ import { PageHeader, EmptyState } from './ui';
 // The camera, PDF and spreadsheet code is heavy: load it only on the pages that need it.
 const Scan = lazy(() => import('./pages/Scan').then((m) => ({ default: m.Scan })));
 const ParticipantLinks = lazy(() => import('./pages/ParticipantLinks').then((m) => ({ default: m.ParticipantLinks })));
-const Lanyards = lazy(() => import('./pages/Lanyards').then((m) => ({ default: m.Lanyards })));
-const LanyardSettings = lazy(() => import('./pages/LanyardSettings').then((m) => ({ default: m.LanyardSettings })));
+const LanyardDesigner = lazy(() => import('./pages/LanyardDesigner').then((m) => ({ default: m.LanyardDesigner })));
+const LanyardPrint = lazy(() => import('./pages/LanyardPrint').then((m) => ({ default: m.LanyardPrint })));
 const Import = lazy(() => import('./pages/Import').then((m) => ({ default: m.Import })));
 const SignupKiosk = lazy(() => import('./pages/Signup').then((m) => ({ default: m.SignupKiosk })));
 const MyActivities = lazy(() => import('./pages/Signup').then((m) => ({ default: m.MyActivities })));
@@ -90,6 +90,12 @@ function ScanRoute() {
 }
 
 /** Old event addresses (bookmarks, history) land on the page's new home. */
+/** Settings › Lanyards moved into the designer. */
+function ToDesigner() {
+  const { base } = useEvent();
+  return <Navigate to={`${base}/people/lanyards`} replace />;
+}
+
 function Moved({ to }: { to: string }) {
   const { eventId, '*': rest } = useParams();
   return <Navigate to={`/events/${eventId}/${to}${rest ? `/${rest}` : ''}`} replace />;
@@ -185,7 +191,8 @@ function EventSiteApp({ site }: { site: Extract<SiteInfo, { kind: 'event' }> }) 
             <Route path="people" element={<Roster />} />
             <Route path="people/add" element={<AddPerson />} />
             <Route path="people/import" element={<Import />} />
-            <Route path="people/lanyards" element={<Lanyards />} />
+            <Route path="people/lanyards" element={<LanyardDesigner />} />
+            <Route path="people/lanyards/print" element={<LanyardPrint />} />
             <Route path="people/roll-sheet" element={<RollSheet />} />
             <Route path="people/links" element={<ParticipantLinks />} />
             <Route path="people/:registrationId" element={<Person />} />
@@ -207,7 +214,7 @@ function EventSiteApp({ site }: { site: Extract<SiteInfo, { kind: 'event' }> }) 
               <Route path="staff" element={<Staff />} />
               <Route path="staff/add" element={<AddStaff />} />
               <Route path="stations" element={<Stations />} />
-              <Route path="lanyards" element={<LanyardSettings />} />
+              <Route path="lanyards" element={<ToDesigner />} />
             </Route>
             <Route path="more" element={<More />} />
             <Route path="account" element={<Account />} />
@@ -259,7 +266,8 @@ function PlatformApp() {
             <Route path="people" element={<Roster />} />
             <Route path="people/add" element={<AddPerson />} />
             <Route path="people/import" element={<Import />} />
-            <Route path="people/lanyards" element={<Lanyards />} />
+            <Route path="people/lanyards" element={<LanyardDesigner />} />
+            <Route path="people/lanyards/print" element={<LanyardPrint />} />
             <Route path="people/roll-sheet" element={<RollSheet />} />
             <Route path="people/links" element={<ParticipantLinks />} />
             <Route path="people/:registrationId" element={<Person />} />
@@ -281,7 +289,7 @@ function PlatformApp() {
               <Route path="staff" element={<Staff />} />
               <Route path="staff/add" element={<AddStaff />} />
               <Route path="stations" element={<Stations />} />
-              <Route path="lanyards" element={<LanyardSettings />} />
+              <Route path="lanyards" element={<ToDesigner />} />
               <Route path="copy" element={<CopyEvent />} />
             </Route>
             {/* Old addresses */}

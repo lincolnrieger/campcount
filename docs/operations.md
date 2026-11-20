@@ -23,13 +23,16 @@ to recover the system. Keep a printed copy at camp HQ.
    next time slot, which you can adjust. Each session is scanned separately,
    and the Scan tab marks whatever is on now. Scanners can scan the gate and every
    activity; Meal team can scan every meal.
-5. **Print lanyards** (People, ⋯, Print lanyards):
-   - Choose lanyard size (90 × 120 mm, 4 per A4) or wallet size
-     (86 × 54 mm, 10 per A4).
-   - Filter by group, or untick cards you don't need.
-   - Download the PDF. It opens on phones and computers.
+5. **Design and print lanyards** (People, ⋯, Design lanyards, then the Print tab):
+   - Design the front and back on a computer: card size (CR80 or large),
+     text, the person's details, colours, images and the camp logo. Changes
+     save as you go. Fix anything under "Ready to print?" first.
+   - On the Print tab, choose **Sheets to cut out** (A4, any printer) or
+     **One card per page** (card printers and print shops), and Both sides,
+     Front only or Back only. Filter by group, or untick cards you don't need.
+   - For double-sided sheets, print double-sided and flip on the long edge.
    - Print at 100% (actual size). Keep spare and unused cards secure: a card is
-   enough to be scanned as that person.
+     enough to be scanned as that person.
 6. **Print paper roll sheets** (People, ⋯, Print roll sheet) for each
    meal and the gate. They are the fallback if phones fail. Store them
    securely.

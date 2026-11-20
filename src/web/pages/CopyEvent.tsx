@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router';
+import type { DesignElement, LanyardDesign } from '../../shared/lanyardDesign';
+import { designAssetIds } from '../../shared/lanyardDesign';
 import { ApiFailure, api } from '../api';
 import type { Activity, Meal } from '../model';
 import { useSession } from '../session';
@@ -96,6 +98,13 @@ export function CopyEvent() {
           await api(`/events/${copy.id}/meals`, { body: { name: mealName, location: m.location, startsAt, endsAt: shift(m.endsAt, offset, tz) } });
         }
       }
+      // The lanyard design comes along too, with its images, so next year's cards look the same.
+      setProgress('Copying the lanyard design…');
+      await copyLanyardDesign(event.id, copy.id);
+      await api(`/events/${copy.id}`, {
+        method: 'PATCH',
+        body: { lanyard: { photoMarker: event.lanyard.photoMarker, photoMarkerColour: event.lanyard.photoMarkerColour, photoMarkerLabel: event.lanyard.photoMarkerLabel } },
+      });
       toast(`Created ${copy.name}. Give it an address, add staff and people, then open it.`);
       navigate(`/camps/${copy.id}`);
     } catch (err) {
@@ -168,4 +177,30 @@ export function CopyEvent() {
       </form>
     </>
   );
+}
+
+/** Copy one camp's lanyard design to another, re-uploading its images so the new camp owns them. */
+async function copyLanyardDesign(fromId: string, toId: string) {
+  const { design } = await api<{ design: LanyardDesign | null }>(`/events/${fromId}/lanyard-design`);
+  if (!design) return;
+  const ids = designAssetIds(design);
+  const map = new Map<string, string>();
+  for (const id of ids) {
+    const res = await fetch(`/api/events/${fromId}/lanyard-assets/${id}`, { credentials: 'same-origin' });
+    if (!res.ok) continue;
+    const blob = await res.blob();
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result));
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(blob);
+    });
+    const up = await api<{ id: string }>(`/events/${toId}/lanyard-assets`, { body: { dataUrl } });
+    map.set(id, up.id);
+  }
+  const remap = (side: LanyardDesign['front']) => ({
+    ...side,
+    elements: side.elements.flatMap((e): DesignElement[] => (e.type !== 'image' ? [e] : map.has(e.assetId) ? [{ ...e, assetId: map.get(e.assetId)! }] : [])),
+  });
+  await api(`/events/${toId}/lanyard-design`, { method: 'PUT', body: { design: { ...design, front: remap(design.front), back: remap(design.back) } } });
 }

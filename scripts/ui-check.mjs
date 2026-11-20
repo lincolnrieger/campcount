@@ -61,6 +61,7 @@ for (const size of SIZES) {
     addperson: `/events/${ev}/people/add`,
     import: `/events/${ev}/people/import`,
     lanyards: `/events/${ev}/people/lanyards`,
+    lanyardprint: `/events/${ev}/people/lanyards/print`,
     rollsheet: `/events/${ev}/people/roll-sheet`,
     activities: `/events/${ev}/activities`,
     activity: activity && `/events/${ev}/activities/${activity}`,
