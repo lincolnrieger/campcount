@@ -17,7 +17,7 @@ export interface SignupSession {
 
 export interface SignupView {
   pass: string;
-  person: { name: string; groupName: string; firstName?: string; section?: string; sectionWord?: string };
+  person: { name: string; groupName: string; firstName?: string; lastName?: string; section?: string; sectionWord?: string };
   /** Different activities they've been checked in to. */
   activitiesDone?: number;
   /** The Side Quest, on their own link when the camp plays it. */

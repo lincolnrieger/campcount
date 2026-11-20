@@ -609,7 +609,10 @@ async function activeCards(c: AppContext, eventId: string, registrationIds?: str
   return Promise.all(
     rows.map(async (r) => ({
       registrationId: r.id!,
-      name: displayName(r.first_name!, r.preferred_name!, r.last_name!),
+      // Preferred name and full surname, as printed on the lanyard.
+      name: `${r.preferred_name || r.first_name} ${r.last_name}`.trim(),
+      firstName: r.preferred_name || r.first_name!,
+      lastName: r.last_name!,
       kind: r.kind!,
       section: r.section!,
       groupName: r.group_name!,

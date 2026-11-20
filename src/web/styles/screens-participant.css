@@ -31,7 +31,45 @@
 .pp-main {
   max-width: 34rem;
   margin: 0 auto;
-  padding-bottom: 7rem;
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+}
+/* Keep the page from jumping as a tab's content changes length. */
+.pp-panel {
+  min-height: 60vh;
+}
+
+/* ---------- Tab bar ---------- */
+.pp-tabbar {
+  position: fixed;
+  inset: auto 0 0;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  padding: var(--space-1) var(--space-2) calc(var(--space-1) + env(safe-area-inset-bottom));
+  background: var(--pp-surface);
+  box-shadow: 0 -1px 0 var(--pp-line);
+}
+.pp-tabbar button {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  flex: 1 1 0;
+  max-width: 7rem;
+  min-height: 3.5rem;
+  padding: var(--space-1) 0;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: var(--pp-ink-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+.pp-tabbar button[aria-current='page'] {
+  color: var(--pp-lagoon);
+  font-weight: var(--weight-heavy);
+}
+.pp-tabbar button[aria-current='page'] svg {
+  stroke-width: 2.4;
 }
 .pp-num {
   font-variant-numeric: tabular-nums;
@@ -49,7 +87,7 @@
 .pp-pass {
   --pass: #00843D;
   position: relative;
-  padding: var(--space-5) var(--space-5) 3.25rem;
+  padding: var(--space-4) var(--space-5) var(--space-5);
   background: var(--pass);
   color: #FFFFFF;
   overflow: hidden;
@@ -70,8 +108,8 @@
 .pp-pass-logo {
   display: grid;
   place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 2.5rem;
+  height: 2.5rem;
   flex: none;
   border-radius: 12px;
   background: #FFFFFF;
@@ -90,57 +128,28 @@
   font-weight: var(--weight-medium);
 }
 .pp-name {
-  margin: var(--space-5) 0 var(--space-2);
+  margin: var(--space-4) 0 var(--space-3);
   font-family: var(--pp-display);
-  font-size: clamp(3.75rem, 20vw, 6rem);
+  font-size: clamp(3rem, 15vw, 4.5rem);
   font-weight: 400;
   line-height: 0.88;
   letter-spacing: 0.01em;
   text-transform: uppercase;
   overflow-wrap: anywhere;
 }
-.pp-pass-who {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2) var(--space-3);
-  font-weight: var(--weight-bold);
+.pp-surname {
+  display: block;
+  font-size: 0.5em;
+  line-height: 1.1;
+  letter-spacing: 0.04em;
 }
 .pp-section-pill {
+  display: inline-block;
   padding: 0.125rem 0.75rem;
   border-radius: var(--radius-pill);
   background: #FFFFFF;
   color: var(--pp-ink);
   font-weight: var(--weight-heavy);
-}
-.pp-stats {
-  display: flex;
-  gap: var(--space-6);
-  margin: var(--space-5) 0 0;
-}
-.pp-stats div {
-  display: grid;
-}
-.pp-stats dt {
-  order: 2;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-}
-.pp-stats dd {
-  order: 1;
-  margin: 0;
-  font-family: var(--pp-display);
-  font-size: 2.5rem;
-  line-height: 1;
-}
-.pp-wave {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  width: 100%;
-  height: 1.5rem;
-  fill: var(--pp-bg);
 }
 .pp-pass-loading {
   display: grid;
@@ -164,96 +173,6 @@
 }
 
 /* ---------- Now / Next ---------- */
-.pp-nownext {
-  position: relative;
-  margin: -0.5rem var(--space-4) 0;
-  background: var(--pp-surface);
-  border-radius: var(--pp-r);
-  box-shadow: 0 2px 8px rgb(14 27 44 / 0.08);
-}
-.pp-nownext ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.pp-nn {
-  display: grid;
-  grid-template-columns: 3.5rem 1fr auto;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-4);
-}
-.pp-nn + .pp-nn {
-  border-top: 1px solid var(--pp-line);
-}
-.pp-nn-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: var(--weight-heavy);
-  color: var(--pp-lagoon);
-}
-.pp-nn-main {
-  display: grid;
-  min-width: 0;
-}
-.pp-nn-main strong {
-  font-size: 1.1875rem;
-  font-weight: var(--weight-heavy);
-  line-height: 1.25;
-}
-.pp-nn-main span {
-  color: var(--pp-ink-2);
-  font-size: var(--text-md);
-}
-.pp-live {
-  width: 0.625rem;
-  height: 0.625rem;
-  border-radius: 50%;
-  background: var(--pp-alert);
-  animation: pp-pulse 1.6s ease-in-out infinite;
-}
-@keyframes pp-pulse {
-  50% {
-    opacity: 0.35;
-  }
-}
-
-/* ---------- Section links ---------- */
-.pp-nav {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  display: flex;
-  gap: var(--space-2);
-  margin-top: var(--space-4);
-  padding: var(--space-2) var(--space-4);
-  overflow-x: auto;
-  scrollbar-width: none;
-  background: var(--pp-bg);
-}
-.pp-nav::-webkit-scrollbar {
-  display: none;
-}
-.pp-nav a {
-  display: inline-flex;
-  align-items: center;
-  flex: none;
-  min-height: var(--control);
-  padding: 0 var(--space-4);
-  border-radius: var(--radius-pill);
-  background: var(--pp-surface);
-  color: var(--pp-ink);
-  font-weight: var(--weight-heavy);
-  text-decoration: none;
-  box-shadow: inset 0 0 0 1px var(--pp-line);
-}
-.pp-nav a[aria-current='true'] {
-  background: var(--pp-lagoon);
-  color: #FFFFFF;
-  box-shadow: none;
-}
-
 /* ---------- Sections ---------- */
 .pp-section {
   display: grid;
@@ -374,74 +293,90 @@
   background: var(--pp-surface);
 }
 
-/* Booking cards */
-.pp-cards {
-  display: grid;
-  gap: var(--space-3);
+/* Booking rows: fixed size, the button changes in place */
+.pp-rows {
   margin: 0;
   padding: 0;
   list-style: none;
-}
-.pp-card {
-  display: grid;
-  gap: var(--space-1);
-  padding: var(--space-4);
   background: var(--pp-surface);
   border-radius: var(--pp-r);
-  box-shadow: inset 0 0 0 1px var(--pp-line);
-}
-.pp-card.is-booked {
-  box-shadow: inset 0 0 0 2px var(--pp-green);
-}
-.pp-card-when {
-  color: var(--pp-lagoon);
-  font-size: var(--text-md);
-  font-weight: var(--weight-heavy);
-}
-.pp-card-title {
-  font-size: 1.25rem;
-  font-weight: var(--weight-heavy);
-  line-height: 1.2;
-}
-.pp-card-where {
-  color: var(--pp-ink-2);
-}
-.pp-card-places {
-  font-size: var(--text-md);
-  font-weight: var(--weight-bold);
-}
-.pp-card.is-full .pp-card-places {
-  color: var(--pp-alert);
-}
-.pp-card-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin-top: var(--space-2);
-}
-.pp-meter {
-  display: block;
-  height: 0.5rem;
-  margin-top: var(--space-2);
-  border-radius: var(--radius-pill);
-  background: var(--pp-pool);
   overflow: hidden;
 }
-.pp-meter span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--pp-lagoon);
+.pp-row {
+  display: grid;
+  grid-template-columns: 4.75rem 1fr 7rem;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 4.5rem;
+  padding: var(--space-3) var(--space-4);
 }
-.pp-clash {
-  margin-top: var(--space-1);
-  padding: var(--space-2) var(--space-3);
-  border-radius: 10px;
-  background: var(--pp-amber-bg);
-  color: var(--pp-amber);
+.pp-row + .pp-row {
+  border-top: 1px solid var(--pp-line);
+}
+.pp-row.is-booked {
+  background: var(--pp-green-bg);
+}
+.pp-row-time {
   font-size: var(--text-md);
+  font-weight: var(--weight-heavy);
+  white-space: nowrap;
+}
+.pp-row-main {
+  display: grid;
+  min-width: 0;
+}
+.pp-row-main strong {
+  font-weight: var(--weight-heavy);
+  line-height: 1.25;
+}
+.pp-row-main span {
+  color: var(--pp-ink-2);
+  font-size: var(--text-md);
+}
+.pp-state {
+  display: grid;
+  grid-auto-flow: column;
+  place-content: center;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  height: 3rem;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: var(--weight-heavy);
+  text-align: center;
+  white-space: nowrap;
+}
+.pp-state.is-book {
+  background: var(--pp-lagoon);
+  color: #FFFFFF;
+}
+.pp-state.is-book:disabled {
+  background: #E3E9ED;
+  color: #5A6770;
+}
+.pp-state.is-booked {
+  background: var(--pp-green);
+  color: #FFFFFF;
+}
+button.pp-state.is-booked {
+  grid-auto-flow: row;
+  grid-template-columns: auto auto;
+  row-gap: 0;
+  align-content: center;
+}
+.pp-state-sub {
+  grid-column: 1 / -1;
+  font-size: 0.6875rem;
   font-weight: var(--weight-bold);
+  line-height: 1.1;
+}
+.pp-state.is-full,
+.pp-state.is-off {
+  background: var(--pp-bg);
+  color: var(--pp-ink-2);
 }
 .pp-btn {
   display: inline-flex;
@@ -529,23 +464,9 @@
 .pp-food-main strong {
   font-weight: var(--weight-heavy);
 }
-.pp-food details summary {
-  min-height: var(--control);
-  display: flex;
-  align-items: center;
-  color: var(--pp-lagoon);
-  font-weight: var(--weight-heavy);
-  cursor: pointer;
-}
-.pp-food details p {
+.pp-food-main small {
   color: var(--pp-ink-2);
-  font-size: var(--text-md);
-}
-.pp-footer {
-  padding: var(--space-6) var(--space-4) 0;
-  color: var(--pp-ink-2);
-  font-size: var(--text-md);
-  text-align: center;
+  font-size: var(--text-sm);
 }
 .pp-empty {
   display: grid;
@@ -854,4 +775,20 @@
   .pp-drops {
     display: none;
   }
+}
+
+/* Progress bar for a big quest */
+.pp-meter {
+  display: block;
+  height: 0.5rem;
+  margin-top: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--pp-pool);
+  overflow: hidden;
+}
+.pp-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--pp-lagoon);
 }

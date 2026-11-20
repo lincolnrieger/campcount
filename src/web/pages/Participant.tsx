@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { SECTION_COLOURS } from '../../shared/lanyardDesign';
-import { dayInZone, dayLabel, timeInZone, timeRange, todayInZone } from '../../shared/time';
+import { dayInZone, dayLabel, timeInZone, todayInZone } from '../../shared/time';
 import { api } from '../api';
 import type { CollectResult, ProgrammeItem, SideQuestStanding, SignupSession, SignupView } from '../components/SignupPanel';
 import { TeamsPanel } from '../components/TeamsPanel';
@@ -9,6 +9,7 @@ import { loadFont } from '../lanyards/fonts';
 import { useTitle } from '../shell';
 import { useSiteEvent } from '../site';
 import { Icon, formatDateRange } from '../ui';
+import type { IconName } from '../ui/Icon';
 import { BrandMark } from '../ui/AppShell';
 import { SiteLogo } from '../ui/SiteShell';
 import { SignupStatus, usePerson } from './Signup';
@@ -16,8 +17,8 @@ import { SignupStatus, usePerson } from './Signup';
 /**
  * A camper's own page: the QR on their lanyard, opened on a phone. It's the
  * one screen most people at camp ever see, so it has its own, brighter look
- * ("Super Splash"): a pass at the top, what's on now, then their day,
- * booking, teams and food on one scrolling page.
+ * ("Super Splash"): a small pass at the top, then one tab at a time
+ * (My day, Book, Teams, Food, and the Side Quest once found).
  *
  * If the camp plays the Side Quest and this phone already belongs to someone
  * else, opening a card collects that person instead (see CollectScreen).
@@ -95,7 +96,8 @@ export function Participant() {
   return (
     <Shell>
       <Page view={person.view} busy={person.busy} actions={person} />
-      <SignupStatus error={error} done={person.done} />
+      {/* Only problems are shown; a booking shows itself on its own button. */}
+      <SignupStatus error={error} done={null} />
     </Shell>
   );
 }
@@ -142,15 +144,6 @@ function useNow(everyMs = 30_000) {
   return now;
 }
 
-function inWords(ms: number): string {
-  const min = Math.round(ms / 60_000);
-  if (min < 1) return 'now';
-  if (min < 60) return `in ${min} min`;
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return m ? `in ${h} h ${m} min` : `in ${h} h`;
-}
-
 const ordinal = (n: number) => {
   const s = ['th', 'st', 'nd', 'rd'];
   const v = n % 100;
@@ -160,7 +153,13 @@ const ordinal = (n: number) => {
 // ---------------------------------------------------------------- the page
 
 type Actions = ReturnType<typeof usePerson>;
+type Tab = 'day' | 'book' | 'teams' | 'food' | 'quest';
 
+/**
+ * One tab at a time, picked from the bar at the bottom, so nothing is a
+ * long scroll. Buttons change in place (Book → Booked) rather than popping
+ * anything up, so the screen never jumps.
+ */
 function Page({ view, busy, actions }: { view: SignupView; busy: boolean; actions: Actions }) {
   const tz = view.event.timezone;
   const now = useNow();
@@ -168,202 +167,113 @@ function Page({ view, busy, actions }: { view: SignupView; busy: boolean; action
   const mine = useMemo(() => new Set(view.bookings.map((b) => key(b))), [view.bookings]);
   const meals = programme.filter((i) => i.kind === 'meal');
   const teamEvents = view.teamEvents ?? [];
-  const canBook = view.open && view.sessions.length > 0;
+  const canBook = view.sessions.length > 0 || view.bookings.length > 0;
   const quest = view.sideQuest && view.sideQuest.collected > 0 ? view.sideQuest : null;
 
-  const sections = [
-    { id: 'my-day', label: 'My day' },
-    ...(canBook || view.bookings.length ? [{ id: 'book', label: 'Book' }] : []),
-    ...(teamEvents.length ? [{ id: 'teams', label: 'Teams' }] : []),
-    ...(meals.length ? [{ id: 'food', label: 'Food' }] : []),
+  const tabs: { id: Tab; label: string; icon: IconName }[] = [
+    { id: 'day', label: 'My day', icon: 'events' },
+    ...(canBook ? [{ id: 'book' as const, label: 'Book', icon: 'ticket' as const }] : []),
+    ...(teamEvents.length ? [{ id: 'teams' as const, label: 'Teams', icon: 'team' as const }] : []),
+    ...(meals.length ? [{ id: 'food' as const, label: 'Food', icon: 'meal' as const }] : []),
+    ...(quest ? [{ id: 'quest' as const, label: 'Quest', icon: 'star' as const }] : []),
   ];
+  const [tab, setTabState] = useState<Tab>(() => {
+    const saved = sessionStorage.getItem('cc-pp-tab') as Tab | null;
+    return saved ?? 'day';
+  });
+  const current = tabs.some((t) => t.id === tab) ? tab : 'day';
+  const setTab = (t: Tab) => {
+    setTabState(t);
+    sessionStorage.setItem('cc-pp-tab', t);
+    window.scrollTo({ top: 0 });
+  };
 
   return (
     <>
-      <Pass view={view} quest={quest} />
-      <NowNext items={programme} mine={mine} now={now} tz={tz} />
-      {quest && <QuestCard quest={quest} />}
-      <SectionNav sections={sections} />
-      <MyDay items={programme} mine={mine} now={now} tz={tz} hasBookings={view.bookings.length > 0} />
-      {(canBook || view.bookings.length > 0) && <Book view={view} busy={busy} onBook={actions.book} onCancel={actions.cancel} />}
-      {teamEvents.length > 0 && (
-        <section className="pp-section" id="teams" aria-labelledby="teams-h">
-          <h2 id="teams-h">Teams</h2>
-          <div className="pp-teams">
-            <TeamsPanel
-              teamEvents={teamEvents}
-              tz={tz}
-              busy={busy}
-              onCreate={(id, name) => actions.createTeam(id, name)}
-              onJoin={(id, name) => actions.joinTeam(id, name)}
-              onLeave={(id) => actions.leaveTeam(id)}
-            />
-          </div>
-        </section>
+      <Pass view={view} />
+      <div className="pp-panel">
+        {current === 'day' && <MyDay items={programme} mine={mine} now={now} tz={tz} />}
+        {current === 'book' && <Book view={view} busy={busy} onBook={actions.book} onCancel={actions.cancel} />}
+        {current === 'teams' && (
+          <section className="pp-section" aria-labelledby="teams-h">
+            <h2 id="teams-h">Teams</h2>
+            <div className="pp-teams">
+              <TeamsPanel
+                teamEvents={teamEvents}
+                tz={tz}
+                busy={busy}
+                onCreate={(id, name) => actions.createTeam(id, name)}
+                onJoin={(id, name) => actions.joinTeam(id, name)}
+                onLeave={(id) => actions.leaveTeam(id)}
+              />
+            </div>
+          </section>
+        )}
+        {current === 'food' && <Food meals={meals} tz={tz} />}
+        {current === 'quest' && quest && <QuestCard quest={quest} />}
+      </div>
+      {tabs.length > 1 && (
+        <nav className="pp-tabbar" aria-label="My camp">
+          {tabs.map((t) => (
+            <button key={t.id} type="button" aria-current={current === t.id ? 'page' : undefined} onClick={() => setTab(t.id)}>
+              <Icon name={t.icon} size={22} />
+              <span>{t.label}</span>
+            </button>
+          ))}
+        </nav>
       )}
-      {meals.length > 0 && <Food meals={meals} tz={tz} />}
-      <footer className="pp-footer">
-        <p>Lost your lanyard? Tell a leader straight away. Anyone holding it can be scanned as you.</p>
-      </footer>
     </>
   );
 }
 
-/** The pass: who you are, at which camp. Coloured like your section's lanyard band. */
-function Pass({ view, quest }: { view: SignupView; quest: SideQuestStanding | null }) {
+/** Who you are, at which camp. Coloured like your section's lanyard band. */
+function Pass({ view }: { view: SignupView }) {
   const siteEvent = useSiteEvent();
   const word = view.person.sectionWord ?? 'Scout';
   const colour = SECTION_COLOURS[word]?.bg ?? '#00843D';
   const first = view.person.firstName ?? view.person.name.split(' ')[0];
-  const done = view.activitiesDone ?? 0;
+  const last = view.person.lastName ?? '';
   return (
     <header className="pp-pass" style={{ ['--pass' as string]: colour }}>
       <div className="pp-pass-top">
-        <span className="pp-pass-logo">{siteEvent ? <SiteLogo size={32} /> : <BrandMark size={32} />}</span>
+        <span className="pp-pass-logo">{siteEvent ? <SiteLogo size={28} /> : <BrandMark size={28} />}</span>
         <span className="pp-pass-camp">
           <strong>{view.event.name}</strong>
           <span>{formatDateRange(view.event.startsOn, view.event.endsOn)}</span>
         </span>
       </div>
-      <h1 className="pp-name">{first}</h1>
-      <p className="pp-pass-who">
-        <span className="pp-section-pill">{view.person.section && view.person.section !== 'Other' ? view.person.section : word}</span>
-        {view.person.groupName && <span>{view.person.groupName}</span>}
-      </p>
-      <dl className="pp-stats">
-        <div>
-          <dt>Activities done</dt>
-          <dd className="pp-num">{done}</dd>
-        </div>
-        <div>
-          <dt>Booked</dt>
-          <dd className="pp-num">{view.bookings.length}</dd>
-        </div>
-        {quest && (
-          <div>
-            <dt>Friends collected</dt>
-            <dd className="pp-num">{quest.collected}</dd>
-          </div>
-        )}
-      </dl>
-      <svg className="pp-wave" viewBox="0 0 400 24" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-        <path d="M0 14 C 40 4, 80 4, 120 12 S 200 22, 240 12 S 320 2, 360 10 S 400 16, 400 16 V24 H0 Z" />
-      </svg>
+      <h1 className="pp-name">
+        {first}
+        {last && <span className="pp-surname">{last}</span>}
+      </h1>
+      <span className="pp-section-pill">{word}</span>
     </header>
   );
 }
 
-/** What's on now and next, so a glance answers "where should I be?". */
-function NowNext({ items, mine, now, tz }: { items: ProgrammeItem[]; mine: Set<string>; now: number; tz: string }) {
-  const timed = items.filter((i) => i.startsAt).sort((a, b) => startOf(a) - startOf(b));
-  // Your own bookings win over everything else on at the same time.
-  const rank = (i: ProgrammeItem) => (mine.has(key(i)) ? 0 : i.kind === 'meal' ? 1 : 2);
-  const current = timed.filter((i) => now >= startOf(i) - 5 * 60_000 && now < endOf(i)).sort((a, b) => rank(a) - rank(b))[0];
-  const upcoming = timed.filter((i) => startOf(i) > now && i !== current).sort((a, b) => startOf(a) - startOf(b) || rank(a) - rank(b))[0];
-  if (!current && !upcoming) return null;
-  const row = (label: string, it: ProgrammeItem, when: string) => (
-    <li className={mine.has(key(it)) ? 'pp-nn is-mine' : 'pp-nn'}>
-      <span className="pp-nn-label">
-        {label === 'Now' && <span className="pp-live" aria-hidden="true" />}
-        {label}
-      </span>
-      <span className="pp-nn-main">
-        <strong>{it.name}</strong>
-        <span>{[when, it.location].filter(Boolean).join(' · ')}</span>
-      </span>
-      {mine.has(key(it)) && (
-        <span className="pp-tag pp-tag-booked">
-          <Icon name="check" size={16} /> Booked
-        </span>
-      )}
-    </li>
-  );
-  const today = todayInZone(tz);
-  const nextWhen = (it: ProgrammeItem) => {
-    const d = dayInZone(it.startsAt!, tz);
-    const t = timeInZone(it.startsAt!, tz);
-    return d === today ? `${t}, ${inWords(startOf(it) - now)}` : `${dayLabel(d)}, ${t}`;
-  };
-  return (
-    <section className="pp-nownext" aria-label="Now and next">
-      <ul>
-        {current && row('Now', current, current.endsAt ? `until ${timeInZone(current.endsAt, tz)}` : '')}
-        {upcoming && row('Next', upcoming, nextWhen(upcoming))}
-      </ul>
-    </section>
-  );
-}
-
-/** Jump links to each part of the page; the one you're looking at is marked. */
-function SectionNav({ sections }: { sections: { id: string; label: string }[] }) {
-  const [active, setActive] = useState(sections[0]?.id);
-  useEffect(() => {
-    const els = sections.map((s) => document.getElementById(s.id)).filter((e): e is HTMLElement => !!e);
-    const io = new IntersectionObserver(
-      (entries) => {
-        const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
-        if (visible) setActive(visible.target.id);
-      },
-      { rootMargin: '-80px 0px -60% 0px' },
-    );
-    els.forEach((e) => io.observe(e));
-    return () => io.disconnect();
-  }, [sections]);
-  if (sections.length < 2) return null;
-  return (
-    <nav className="pp-nav" aria-label="On this page">
-      {sections.map((s) => (
-        <a key={s.id} href={`#${s.id}`} aria-current={active === s.id ? 'true' : undefined} onClick={(e) => {
-          e.preventDefault();
-          document.getElementById(s.id)?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
-          setActive(s.id);
-        }}>
-          {s.label}
-        </a>
-      ))}
-    </nav>
-  );
-}
-
-/** The day's programme. Day chips across the top; "Just mine" shows only what you've booked (and meals). */
-function MyDay({ items, mine, now, tz, hasBookings }: { items: ProgrammeItem[]; mine: Set<string>; now: number; tz: string; hasBookings: boolean }) {
+/** The day's programme, one day at a time. Your bookings say "Booked". */
+function MyDay({ items, mine, now, tz }: { items: ProgrammeItem[]; mine: Set<string>; now: number; tz: string }) {
   const timed = items.filter((i) => i.startsAt).sort((a, b) => startOf(a) - startOf(b));
   const days = [...new Set(timed.map((i) => dayInZone(i.startsAt!, tz)))];
   const today = todayInZone(tz);
   const [day, setDay] = useState(() => (days.includes(today) ? today : (days.find((d) => d > today) ?? days[0] ?? today)));
-  const [justMine, setJustMine] = useState(false);
-  const list = timed.filter((i) => dayInZone(i.startsAt!, tz) === day).filter((i) => !justMine || mine.has(key(i)) || i.kind === 'meal');
+  const list = timed.filter((i) => dayInZone(i.startsAt!, tz) === day);
   return (
-    <section className="pp-section" id="my-day" aria-labelledby="my-day-h">
-      <div className="pp-section-head">
-        <h2 id="my-day-h">My day</h2>
-        {hasBookings && (
-          <div className="pp-toggle" role="group" aria-label="Show">
-            <button type="button" aria-pressed={!justMine} onClick={() => setJustMine(false)}>
-              Everything
-            </button>
-            <button type="button" aria-pressed={justMine} onClick={() => setJustMine(true)}>
-              Just mine
-            </button>
-          </div>
-        )}
-      </div>
+    <section className="pp-section" aria-labelledby="my-day-h">
+      <h2 id="my-day-h">My day</h2>
       {days.length > 1 && <DayChips days={days} value={day} today={today} onChange={setDay} />}
       {timed.length === 0 ? (
-        <p className="pp-muted">The programme hasn’t been added yet. Check back closer to camp.</p>
-      ) : list.length === 0 ? (
-        <p className="pp-muted">Nothing booked on this day yet.</p>
+        <p className="pp-muted">The programme hasn’t been added yet.</p>
       ) : (
         <ol className="pp-timeline">
           {list.map((it, i) => {
-            const past = endOf(it) < now;
             const isMine = mine.has(key(it));
             return (
-              <li key={i} className={['pp-tl', past && 'is-past', isMine && 'is-mine', it.kind === 'meal' && 'is-meal'].filter(Boolean).join(' ')}>
+              <li key={i} className={['pp-tl', endOf(it) < now && 'is-past', isMine && 'is-mine'].filter(Boolean).join(' ')}>
                 <span className="pp-tl-time pp-num">{timeInZone(it.startsAt!, tz)}</span>
                 <span className="pp-tl-main">
                   <strong>{it.name}</strong>
-                  <span>{[it.endsAt ? `until ${timeInZone(it.endsAt, tz)}` : null, it.location, it.kind === 'meal' ? 'Meal' : null].filter(Boolean).join(' · ')}</span>
+                  {it.location && <span>{it.location}</span>}
                 </span>
                 {isMine && (
                   <span className="pp-tag pp-tag-booked">
@@ -379,136 +289,138 @@ function MyDay({ items, mine, now, tz, hasBookings }: { items: ProgrammeItem[]; 
   );
 }
 
-function DayChips({ days, value, today, onChange }: { days: string[]; value: string; today: string; onChange: (d: string) => void }) {
+function DayChips({ days, value, today, onChange, labels }: { days: string[]; value: string; today: string; onChange: (d: string) => void; labels?: Record<string, string> }) {
   return (
     <div className="pp-days" role="group" aria-label="Day">
       {days.map((d) => (
         <button key={d} type="button" aria-pressed={d === value} onClick={() => onChange(d)}>
-          {d === today ? 'Today' : dayLabel(d)}
+          {labels?.[d] ?? (d === today ? 'Today' : dayLabel(d))}
         </button>
       ))}
     </div>
   );
 }
 
-/** Your bookings, then what you can still book. */
+/**
+ * Every activity for the day in a fixed order. Each one is either Booked or
+ * has a Book button; booking or cancelling changes that row and nothing else.
+ */
 function Book({ view, busy, onBook, onCancel }: { view: SignupView; busy: boolean; onBook: (s: SignupSession) => void; onCancel: (id: string) => void }) {
   const tz = view.event.timezone;
-  const booked = new Set(view.bookings.map((b) => b.activityId));
-  const days = [...new Set(view.sessions.map((s) => (s.startsAt ? dayInZone(s.startsAt, tz) : 'any')))].sort((a, b) => (a === 'any' ? 1 : b === 'any' ? -1 : a.localeCompare(b)));
+  const [pressed, setPressed] = useState<string | null>(null);
+  const bookings = new Map(view.bookings.map((b) => [b.activityId, b]));
+  // Bookings a leader made for something not on the sign-up list still show, as Booked.
+  const rows: (SignupSession & { extra?: boolean })[] = [
+    ...view.sessions,
+    ...view.bookings
+      .filter((b) => !view.sessions.some((s) => s.id === b.activityId))
+      .map((b) => ({ id: b.activityId, name: b.name, startsAt: b.startsAt, endsAt: b.endsAt, location: b.location, capacity: null, booked: 0, full: false, extra: true }) as SignupSession & { extra: boolean }),
+  ];
+  const dayOf = (s: { startsAt: string | null }) => (s.startsAt ? dayInZone(s.startsAt, tz) : 'any');
+  const days = [...new Set(rows.map(dayOf))].sort((a, b) => (a === 'any' ? 1 : b === 'any' ? -1 : a.localeCompare(b)));
   const today = todayInZone(tz);
   const [day, setDay] = useState(() => (days.includes(today) ? today : (days.find((d) => d !== 'any' && d > today) ?? days[0] ?? 'any')));
-  const mine = [...view.bookings].sort((a, b) => (a.startsAt ?? '9').localeCompare(b.startsAt ?? '9'));
   const clashWith = (s: SignupSession) => {
     if (!s.startsAt) return null;
     const a0 = startOf(s);
     const a1 = endOf(s);
     return view.bookings.find((b) => b.activityId !== s.id && b.startsAt && startOf(b) < a1 && endOf(b) > a0) ?? null;
   };
-  const list = view.sessions.filter((s) => !booked.has(s.id) && (s.startsAt ? dayInZone(s.startsAt, tz) : 'any') === day);
+  const list = rows.filter((s) => dayOf(s) === day).sort((a, b) => (a.startsAt ?? '9').localeCompare(b.startsAt ?? '9') || a.name.localeCompare(b.name));
   return (
-    <section className="pp-section" id="book" aria-labelledby="book-h">
+    <section className="pp-section" aria-labelledby="book-h">
       <h2 id="book-h">Book activities</h2>
-      {mine.length > 0 && (
-        <ul className="pp-cards">
-          {mine.map((b) => (
-            <li key={b.activityId} className="pp-card is-booked">
-              <span className="pp-card-when pp-num">{b.startsAt ? `${dayLabel(dayInZone(b.startsAt, tz))}, ${timeRange(b.startsAt, b.endsAt, tz)}` : 'Any time'}</span>
-              <strong className="pp-card-title">{b.name}</strong>
-              {b.location && <span className="pp-card-where">{b.location}</span>}
-              <span className="pp-card-foot">
-                <span className="pp-tag pp-tag-booked">
-                  <Icon name="check" size={16} /> Booked
-                </span>
-                {b.canCancel && (
-                  <button type="button" className="pp-link" disabled={busy} onClick={() => onCancel(b.activityId)}>
-                    Cancel<span className="visually-hidden"> {b.name}</span>
-                  </button>
-                )}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {!view.open ? (
-        <p className="pp-muted">Booking is closed right now.</p>
+      {!view.open && <p className="pp-muted">Booking is closed right now.</p>}
+      {days.length > 1 && <DayChips days={days} value={day} today={today} onChange={setDay} labels={{ any: 'Any time' }} />}
+      {list.length === 0 ? (
+        <p className="pp-muted">Nothing to book on this day.</p>
       ) : (
-        <>
-          <h3 className="pp-subhead">{mine.length ? 'Book something else' : 'Pick what you want to do'}</h3>
-          {days.length > 1 && <DayChips days={days.filter((d) => d !== 'any')} value={day} today={today} onChange={setDay} />}
-          {days.includes('any') && days.length > 1 && (
-            <button type="button" className="pp-link pp-anytime" aria-pressed={day === 'any'} onClick={() => setDay('any')}>
-              Activities you can do any time
-            </button>
-          )}
-          {list.length === 0 ? (
-            <p className="pp-muted">Nothing else to book on this day.</p>
-          ) : (
-            <ul className="pp-cards">
-              {list.map((s) => {
-                const clash = clashWith(s);
-                const left = s.capacity === null ? null : Math.max(0, s.capacity - s.booked);
-                return (
-                  <li key={s.id} className={['pp-card', s.full && 'is-full', clash && 'is-clash'].filter(Boolean).join(' ')}>
-                    <span className="pp-card-when pp-num">{s.startsAt ? timeRange(s.startsAt, s.endsAt, tz) : 'Any time'}</span>
-                    <strong className="pp-card-title">{s.name}</strong>
-                    {s.location && <span className="pp-card-where">{s.location}</span>}
-                    {s.capacity !== null && (
-                      <span className="pp-meter" aria-hidden="true">
-                        <span style={{ width: `${Math.min(100, (s.booked / s.capacity) * 100)}%` }} />
-                      </span>
-                    )}
-                    <span className="pp-card-places">{left === null ? 'Plenty of room' : left === 0 ? 'Full' : `${left} ${left === 1 ? 'place' : 'places'} left`}</span>
-                    {clash && <span className="pp-clash">Clashes with {clash.name}. Cancel that first if you’d rather do this.</span>}
-                    {!s.full && (
-                      <button type="button" className="pp-btn" disabled={busy || !!clash} onClick={() => onBook(s)}>
-                        Book {s.name}
+        <ul className="pp-rows">
+          {list.map((s) => {
+            const b = bookings.get(s.id);
+            const clash = !b && clashWith(s);
+            const working = busy && pressed === s.id;
+            return (
+              <li key={s.id} className={b ? 'pp-row is-booked' : 'pp-row'}>
+                <span className="pp-row-time pp-num">{s.startsAt ? timeInZone(s.startsAt, tz) : 'Any'}</span>
+                <span className="pp-row-main">
+                  <strong>{s.name}</strong>
+                  <span>{clash ? `Clashes with ${clash.name}` : [s.startsAt && s.endsAt ? `until ${timeInZone(s.endsAt, tz)}` : null, s.location].filter(Boolean).join(' · ')}</span>
+                </span>
+                <span className="pp-row-action">
+                  {b ? (
+                    b.canCancel && view.open ? (
+                      <button
+                        type="button"
+                        className="pp-state is-booked"
+                        disabled={busy}
+                        onClick={() => {
+                          setPressed(s.id);
+                          onCancel(s.id);
+                        }}
+                      >
+                        <Icon name="check" size={16} />
+                        {working ? 'Cancelling' : 'Booked'}
+                        <span className="pp-state-sub">{working ? '' : 'Tap to cancel'}</span>
+                        <span className="visually-hidden"> {s.name}. Tap to cancel.</span>
                       </button>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </>
+                    ) : (
+                      <span className="pp-state is-booked">
+                        <Icon name="check" size={16} /> Booked
+                      </span>
+                    )
+                  ) : s.full ? (
+                    <span className="pp-state is-full">Full</span>
+                  ) : !view.open ? (
+                    <span className="pp-state is-off">Not booked</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="pp-state is-book"
+                      disabled={busy || !!clash}
+                      onClick={() => {
+                        setPressed(s.id);
+                        onBook(s);
+                      }}
+                    >
+                      {working ? 'Booking' : 'Book'}
+                      <span className="visually-hidden"> {s.name}</span>
+                    </button>
+                  )}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </section>
   );
 }
 
-/** Today's meals first, with what's in them behind a tap. */
+/** Meals one day at a time, with what's in them shown straight away. */
 function Food({ meals, tz }: { meals: ProgrammeItem[]; tz: string }) {
   const today = todayInZone(tz);
   const timed = meals.filter((m) => m.startsAt).sort((a, b) => startOf(a) - startOf(b));
-  const days = [...new Set(timed.map((m) => dayInZone(m.startsAt!, tz)))].sort((a, b) => (a === today ? -1 : b === today ? 1 : a < today && b >= today ? 1 : b < today && a >= today ? -1 : a.localeCompare(b)));
+  const days = [...new Set(timed.map((m) => dayInZone(m.startsAt!, tz)))];
+  const [day, setDay] = useState(() => (days.includes(today) ? today : (days.find((d) => d > today) ?? days[0] ?? today)));
   return (
-    <section className="pp-section" id="food" aria-labelledby="food-h">
+    <section className="pp-section" aria-labelledby="food-h">
       <h2 id="food-h">Food</h2>
-      <p className="pp-muted">If something clashes with your dietary needs, tell a leader.</p>
-      {days.map((d) => (
-        <div key={d} className="pp-food-day">
-          <h3 className="pp-subhead">{d === today ? 'Today' : dayLabel(d, 'long')}</h3>
-          <ul className="pp-food">
-            {timed
-              .filter((m) => dayInZone(m.startsAt!, tz) === d)
-              .map((m, i) => (
-                <li key={i}>
-                  <span className="pp-tl-time pp-num">{timeInZone(m.startsAt!, tz)}</span>
-                  <span className="pp-food-main">
-                    <strong>{m.name}</strong>
-                    <span>{m.menu || 'Menu to come'}</span>
-                    {m.ingredients && (
-                      <details>
-                        <summary>What’s in it</summary>
-                        <p>{m.ingredients}</p>
-                      </details>
-                    )}
-                  </span>
-                </li>
-              ))}
-          </ul>
-        </div>
-      ))}
+      {days.length > 1 && <DayChips days={days} value={day} today={today} onChange={setDay} />}
+      <ul className="pp-food">
+        {timed
+          .filter((m) => dayInZone(m.startsAt!, tz) === day)
+          .map((m, i) => (
+            <li key={i}>
+              <span className="pp-tl-time pp-num">{timeInZone(m.startsAt!, tz)}</span>
+              <span className="pp-food-main">
+                <strong>{m.name}</strong>
+                <span>{m.menu || 'Menu to come'}</span>
+                {m.ingredients && <small>{m.ingredients}</small>}
+              </span>
+            </li>
+          ))}
+      </ul>
     </section>
   );
 }
@@ -518,7 +430,7 @@ function Food({ meals, tz }: { meals: ProgrammeItem[]; tz: string }) {
 /** Their quest progress, once they've found the game. */
 function QuestCard({ quest }: { quest: SideQuestStanding }) {
   return (
-    <section className="pp-quest" id="quest" aria-labelledby="quest-h">
+    <section className="pp-quest" aria-labelledby="quest-h">
       <div className="pp-quest-head">
         <h2 id="quest-h">Super Splash Side Quest</h2>
         {quest.rank !== null && <span className="pp-rank">{ordinal(quest.rank)} of {quest.players}</span>}
@@ -593,7 +505,7 @@ function CollectScreen({ result, onDone, onMine }: { result: CollectResult; onDo
   const reduced = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const [shown, setShown] = useState(result.fresh && !reduced ? Math.max(0, s.collected - 1) : s.collected);
   const done = useRef<HTMLButtonElement>(null);
-  const questKey = result.friend.sectionWord === 'Leader' ? 'leaders' : (SECTION_QUEST[result.friend.section] ?? '');
+  const questKey = result.friend.sectionWord === 'Adult' ? 'leaders' : (SECTION_QUEST[result.friend.section] ?? '');
   const quest = s.quests.find((q) => q.key === questKey);
   const milestone = result.fresh && (s.collected === 1 || s.collected % 10 === 0 || (quest?.done && quest.collected === quest.total));
 

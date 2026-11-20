@@ -69,7 +69,7 @@ describe('Super Splash Side Quest', () => {
 
     const first = await ava.open(c.token('Ben'));
     expect(first.body.collect.fresh).toBe(true);
-    expect(first.body.collect.friend).toMatchObject({ firstName: 'Ben', sectionWord: 'Rover' });
+    expect(first.body.collect.friend).toMatchObject({ firstName: 'Ben', sectionWord: 'Adult' });
     expect(first.body.collect.standing).toMatchObject({ collected: 1, total: 4, rank: 1, players: 1 });
     // The friend's own page (bookings, pass) is never shown on someone else's phone.
     expect(first.body.pass).toBeUndefined();

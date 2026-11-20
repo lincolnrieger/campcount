@@ -44,14 +44,13 @@ export function fontWeight(font: FontId, wanted: FontWeight): FontWeight {
   return ws.reduce((best, w) => (Math.abs(w - wanted) < Math.abs(best - wanted) ? w : best), ws[0]!) as FontWeight;
 }
 
-/** Fields that fill in per person. Typed into text as {name}, {group}… */
+/** Fields that fill in per person. Typed into text as {name}, {section}… */
 export const FIELDS = {
   name: { label: 'Name', sample: 'Sam Taylor' },
   first: { label: 'First name', sample: 'Sam' },
   last: { label: 'Last name', sample: 'Taylor' },
-  group: { label: 'Scout group', sample: '1st Example Scout Group' },
   section: { label: 'Section', sample: 'Scout' },
-  code: { label: 'Lanyard code', sample: 'K7QM-3XRP' },
+  code: { label: 'Lanyard code', sample: '1234567' },
   camp: { label: 'Camp name', sample: 'Summer Camp' },
 } as const;
 export type FieldId = keyof typeof FIELDS;
@@ -85,7 +84,7 @@ const base = {
 export const textElement = z.strictObject({
   ...base,
   type: z.literal('text'),
-  /** Words to print; {name}, {group}… fill in for each person. */
+  /** Words to print; {name}, {section}… fill in for each person. */
   text: z.string().max(400),
   font: z.enum(FONT_IDS as [FontId, ...FontId[]]),
   /** Point size (1 pt = 0.3528 mm). Shrinks to fit the box if the words are too long. */
@@ -166,21 +165,23 @@ export function designAssetIds(d: LanyardDesign): string[] {
 export const SECTION_COLOURS: Record<string, { bg: string; fg: string }> = {
   Scout: { bg: '#00843D', fg: '#FFFFFF' },
   Venturer: { bg: '#7A1F3D', fg: '#FFFFFF' },
-  Rover: { bg: '#C8102E', fg: '#FFFFFF' },
-  Leader: { bg: '#1F4D3F', fg: '#FFFFFF' },
+  // Navy, RGB 38 38 97.
+  Adult: { bg: '#262661', fg: '#FFFFFF' },
 };
 
-/** The one word for someone's section on a card: Scout, Venturer, Rover or Leader. */
-export function sectionWord(kind: 'youth' | 'adult', section: string): keyof typeof SECTION_COLOURS {
-  if (kind === 'adult') return 'Leader';
+/** The one word for someone's section on a card: Scout, Venturer or Adult (leaders and Rovers). */
+export function sectionWord(kind: 'youth' | 'adult', section: string): 'Scout' | 'Venturer' | 'Adult' {
   const s = section.toLowerCase();
-  if (s.startsWith('rover')) return 'Rover';
+  if (kind === 'adult' || s.startsWith('rover') || s.startsWith('leader')) return 'Adult';
   if (s.startsWith('venturer')) return 'Venturer';
   return 'Scout';
 }
 
 export interface CardPerson {
+  /** Preferred (or first) name and surname. */
   name: string;
+  firstName?: string;
+  lastName?: string;
   kind: 'youth' | 'adult';
   section: string;
   groupName: string;
@@ -192,16 +193,17 @@ export interface CardPerson {
 /** Fill {fields} in text for one person. Unknown {words} are left as typed. */
 export function fillFields(text: string, person: CardPerson, campName: string): string {
   const parts = person.name.trim().split(/\s+/);
-  const values: Record<FieldId, string> = {
+  const values: Record<FieldId | 'group', string> = {
     name: person.name,
-    first: parts[0] ?? '',
-    last: parts.length > 1 ? parts.slice(1).join(' ') : '',
-    group: person.groupName,
+    first: person.firstName ?? parts[0] ?? '',
+    last: person.lastName ?? (parts.length > 1 ? parts.slice(1).join(' ') : ''),
+    // Cards no longer show the group: {group} on an older design prints nothing.
+    group: '',
     section: sectionWord(person.kind, person.section),
     code: person.shortCode,
     camp: campName,
   };
-  return text.replace(/\{([a-z]+)\}/g, (whole, key: string) => (key in values ? values[key as FieldId] : whole));
+  return text.replace(/\{([a-z]+)\}/g, (whole, key: string) => (key in values ? values[key as FieldId | 'group'] : whole));
 }
 
 export function resolveColour(c: Colour, person: CardPerson | null): string {
@@ -219,7 +221,7 @@ export function newId(prefix = 'el'): string {
 }
 
 /**
- * The design every camp starts from: the section band, name, group, QR code
+ * The design every camp starts from: the section band, full name, QR code
  * and typed code on the front; "if found" on the back. Laid out for the
  * chosen size and orientation.
  */
@@ -235,9 +237,9 @@ export function starterDesign(format: CardFormat = 'cr80', orientation: Orientat
   front.push({ id: id('marker'), name: 'No-photo mark', type: 'marker', x: w - m - bandH * 0.7, y: bandH * 0.15, w: bandH * 0.7, h: bandH * 0.7 });
   if (portrait) {
     const nameY = bandH + (format === 'large' ? 6 : 3.5);
-    const nameH = format === 'large' ? 12 : 7;
-    front.push({ id: id('name'), name: 'Name', type: 'text', text: '{name}', x: m, y: nameY, w: w - 2 * m, h: nameH, font: 'nunito-sans', size: format === 'large' ? 26 : 15, weight: 800, colour: '#16201B', align: 'center', wrap: false });
-    front.push({ id: id('group'), name: 'Scout group', type: 'text', text: '{group}', x: m, y: nameY + nameH, w: w - 2 * m, h: format === 'large' ? 6 : 4.5, font: 'nunito-sans', size: format === 'large' ? 11 : 7.5, weight: 400, colour: '#45514C', align: 'center', wrap: false });
+    // Two lines' room, so a long preferred name and surname wrap rather than shrink.
+    const nameH = format === 'large' ? 20 : 12;
+    front.push({ id: id('name'), name: 'Name', type: 'text', text: '{name}', x: m, y: nameY, w: w - 2 * m, h: nameH, font: 'nunito-sans', size: format === 'large' ? 26 : 15, weight: 800, colour: '#16201B', align: 'center', wrap: true });
     const qrSide = Math.min(w - 2 * m - 6, h * 0.45);
     const codeH = format === 'large' ? 7 : 5;
     const qrY = h - m - codeH - qrSide - 1;
@@ -248,8 +250,7 @@ export function starterDesign(format: CardFormat = 'cr80', orientation: Orientat
     const qrX = w - m - qrSide;
     const top = bandH + m;
     const textW = qrX - 2 * m;
-    front.push({ id: id('name'), name: 'Name', type: 'text', text: '{name}', x: m, y: top, w: textW, h: 9, font: 'nunito-sans', size: 15, weight: 800, colour: '#16201B', align: 'left', wrap: true });
-    front.push({ id: id('group'), name: 'Scout group', type: 'text', text: '{group}', x: m, y: top + 10, w: textW, h: 8, font: 'nunito-sans', size: 7.5, weight: 400, colour: '#45514C', align: 'left', wrap: true });
+    front.push({ id: id('name'), name: 'Name', type: 'text', text: '{name}', x: m, y: top, w: textW, h: 18, font: 'nunito-sans', size: 15, weight: 800, colour: '#16201B', align: 'left', wrap: true });
     front.push({ id: id('code'), name: 'Lanyard code', type: 'text', text: '{code}', x: m, y: h - m - 5, w: textW, h: 5, font: 'nunito-sans', size: 9, weight: 700, colour: '#16201B', align: 'left', wrap: false });
     front.push({ id: id('qr'), name: 'QR code', type: 'qr', x: qrX, y: top, w: qrSide, h: qrSide });
   }
