@@ -15,13 +15,16 @@ function useConsoleOnly(): boolean {
   return !!site.rootDomain && (host === site.rootDomain || host.endsWith(`.${site.rootDomain}`));
 }
 
-/** The CampCount mark: a tent in a rounded square, as on the favicon. */
+/**
+ * The CampCount mark: a rounded square with a green tick breaking out of its
+ * corner (the logo without its words, which can't be read this small).
+ * Same drawing as public/favicon.svg.
+ */
 export function BrandMark({ size = 28 }: { size?: number }) {
   return (
-    <svg className="brand-mark" width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-      <rect width="32" height="32" rx="6" fill="#1F5C46" />
-      <path d="M6 25 16 7l10 18z" fill="none" stroke="#F5C542" strokeWidth="2.6" strokeLinejoin="round" />
-      <path d="M13 25l3-6 3 6" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinejoin="round" />
+    <svg className="brand-mark" width={size} height={size} viewBox="178 180 900 900" aria-hidden="true" focusable="false">
+      <path d="M868 270H346a130 130 0 0 0-130 130v512a130 130 0 0 0 130 130h554a130 130 0 0 0 130-130V420q0-40-18-70" fill="none" stroke="#000" strokeWidth="72" />
+      <path d="M702 374l93 102 213-245" fill="none" stroke="#169239" strokeWidth="104" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

@@ -2,7 +2,7 @@
 // It caches only the app shell and static assets. API responses (rosters,
 // scans) are never cached here; offline scan data lives in IndexedDB and is
 // wiped on sign-out.
-const CACHE = 'campcount-shell-v1';
+const CACHE = 'campcount-shell-v2';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.add('/')).then(() => self.skipWaiting()));

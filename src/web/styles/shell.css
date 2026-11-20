@@ -321,6 +321,12 @@
     padding: var(--space-6);
   }
 }
+.public-logo {
+  display: block;
+  width: 7rem;
+  height: 7rem;
+  margin: calc(var(--space-2) * -1) 0 0 calc(var(--space-2) * -1);
+}
 .public-brand {
   display: flex;
   align-items: center;
