@@ -119,8 +119,8 @@ async function emailCode(c: AppContext, userId: string, email: string, kind: 'si
     });
   } catch (err) {
     const reason = err instanceof EmailSendError ? err.code : 'UNKNOWN';
-    // Operator-facing detail goes to the logs (no address or sign-in code is logged).
-    console.error(`Sign-in email could not be sent: ${reason}: ${err instanceof Error ? err.message : String(err)}`);
+    // The provider's message can quote the recipient, so only the error code is logged.
+    console.error(`Sign-in email could not be sent: ${reason}`);
     throw new ApiError(503, 'email_unavailable', `The sign-in email could not be sent (${reason}). Please tell your CampCount administrator.`);
   }
 }

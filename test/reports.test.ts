@@ -195,6 +195,7 @@ describe('retention', () => {
     const closed = await testEnv.DB.prepare(`SELECT closed_at FROM events WHERE id = ?`).bind(c.eventId).first<{ closed_at: string }>();
     const at = (days: number) => new Date(Date.parse(closed!.closed_at) + days * 86400_000).toISOString();
 
+    await testEnv.DB.prepare(`UPDATE registrations SET extra_fields = '{"Medical":"Asthma"}' WHERE event_id = ?`).bind(c.eventId).run();
     await runMaintenance(testEnv, at(89));
     expect((await testEnv.DB.prepare(`SELECT count(*) AS n FROM dietary_entries WHERE event_id = ?`).bind(c.eventId).first<{ n: number }>())!.n).toBe(1);
 
@@ -204,6 +205,8 @@ describe('retention', () => {
     expect(creds.results).toEqual([{ status: 'revoked', token_ciphertext: '' }]);
     const consent = await testEnv.DB.prepare(`SELECT DISTINCT photo_consent FROM registrations WHERE event_id = ?`).bind(c.eventId).all();
     expect(consent.results).toEqual([{ photo_consent: 'unknown' }]);
+    const extra = await testEnv.DB.prepare(`SELECT DISTINCT extra_fields FROM registrations WHERE event_id = ?`).bind(c.eventId).all();
+    expect(extra.results).toEqual([{ extra_fields: '{}' }]);
 
     await runMaintenance(testEnv, at(731));
     const event = await testEnv.DB.prepare(`SELECT records_purged_at, archive_summary FROM events WHERE id = ?`).bind(c.eventId).first<{ records_purged_at: string; archive_summary: string }>();

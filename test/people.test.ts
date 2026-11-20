@@ -101,7 +101,14 @@ describe('a person on the event', () => {
 
   it('lets event managers edit details and dietary needs, and refuses a duplicate membership number', async () => {
     const c = await camp();
-    const id = c.card('100').registrationId;
+    // Someone only on this camp (people on other camps too can't be renamed from here; see crossCamp.test.ts).
+    const own = String(500000 + Math.floor(Math.random() * 499999));
+    await api(`/events/${c.eventId}/import/commit`, { cookie: c.manager.cookie, body: { rows: [person(own)], withdrawMissing: false } });
+    const id = (await testEnv.DB.prepare(
+      `SELECT r.id FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.event_id = ? AND p.member_number = ?`,
+    )
+      .bind(c.eventId, own)
+      .first<{ id: string }>())!.id;
     const path = `/events/${c.eventId}/registrations/${id}`;
     expect((await api(path, { cookie: c.manager.cookie, method: 'PATCH', body: { preferredName: 'Sam', groupName: 'New Troop', photoConsent: 'no' } })).status).toBe(200);
     expect((await api(path, { cookie: c.manager.cookie, method: 'PATCH', body: { memberNumber: '200' } })).status).toBe(409);

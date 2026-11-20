@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ApiFailure, api } from '../api';
 import type { OutboxEntry } from './db';
-import { countUnsynced, getDeviceId, markSynced, pruneSynced, unsynced } from './db';
+import { clearRosters, countUnsynced, getDeviceId, markSynced, pruneSynced, unsynced } from './db';
 
 export interface SyncStatus {
   pending: number;
@@ -60,7 +60,11 @@ export async function syncNow(opts: { scheduled?: boolean } = {}): Promise<void>
         });
       } catch (err) {
         if (err instanceof ApiFailure && err.status === 0) set({ state: 'offline', message: null });
-        else if (err instanceof ApiFailure && err.status === 401) set({ state: 'blocked', message: 'Sign in again to upload waiting scans.' });
+        else if (err instanceof ApiFailure && err.status === 401) {
+          // Signed out on the server: wipe the offline lists, keep the waiting scans for after sign-in.
+          await clearRosters().catch(() => undefined);
+          set({ state: 'blocked', message: 'Sign in again to upload waiting scans.' });
+        }
         else set({ state: 'blocked', message: err instanceof ApiFailure ? err.message : 'Upload failed.' });
         backOff();
         break;

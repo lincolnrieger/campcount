@@ -76,18 +76,28 @@ async function sessions(db: D1Database, eventId: string): Promise<SignupSession[
 const signupOpen = (e: SignupEvent) => e.feature_self_signup === 1 && (e.status === 'open' || e.status === 'draft');
 
 
-/** A short-lived pass for one person, so each booking doesn't need the lanyard again. */
-async function makePass(c: AppContext, registrationId: string): Promise<string> {
-  const expires = Date.now() + PASS_MINUTES * 60_000;
-  return `${registrationId}.${expires}.${await hmacHex(c.env.AUTH_SECRET, `signup:${registrationId}:${expires}`)}`;
+/**
+ * A short-lived pass for one person, so each booking doesn't need the lanyard
+ * again. It names the lanyard it came from, so cancelling a lost lanyard ends
+ * its pass straight away.
+ */
+interface Pass {
+  registrationId: string;
+  credentialId: string;
 }
 
-async function readPass(c: AppContext, pass: string): Promise<string> {
-  const [registrationId, expires, mac] = pass.split('.');
+async function makePass(c: AppContext, p: Pass): Promise<string> {
+  const expires = Date.now() + PASS_MINUTES * 60_000;
+  const body = `${p.registrationId}.${p.credentialId}.${expires}`;
+  return `${body}.${await hmacHex(c.env.AUTH_SECRET, `signup:${body}`)}`;
+}
+
+async function readPass(c: AppContext, pass: string): Promise<Pass> {
+  const [registrationId, credentialId, expires, mac] = pass.split('.');
   const bad = () => new ApiError(401, 'signed_out', 'Scan your lanyard again to carry on.');
-  if (!registrationId || !expires || !mac || Number(expires) < Date.now()) throw bad();
-  if (!timingSafeEqualHex(mac, await hmacHex(c.env.AUTH_SECRET, `signup:${registrationId}:${expires}`))) throw bad();
-  return registrationId;
+  if (!registrationId || !credentialId || !expires || !mac || Number(expires) < Date.now()) throw bad();
+  if (!timingSafeEqualHex(mac, await hmacHex(c.env.AUTH_SECRET, `signup:${registrationId}.${credentialId}.${expires}`))) throw bad();
+  return { registrationId, credentialId };
 }
 
 /**
@@ -95,31 +105,34 @@ async function readPass(c: AppContext, pass: string): Promise<string> {
  * per person rather than per network means a whole camp on one Wi-Fi can
  * sign up at once.
  */
-async function limitedPass(c: AppContext, pass: string): Promise<string> {
-  const registrationId = await readPass(c, pass);
-  await limitPerKey(c, `signup:${registrationId}`, 'Too many changes at once. Wait a minute and try again.');
-  return registrationId;
+async function limitedPass(c: AppContext, pass: string): Promise<Pass> {
+  const p = await readPass(c, pass);
+  await limitPerKey(c, `signup:${p.registrationId}`, 'Too many changes at once. Wait a minute and try again.');
+  return p;
 }
 
 interface Person {
   registrationId: string;
+  credentialId: string;
   event: SignupEvent;
   name: string;
   groupName: string;
 }
 
-async function personFor(c: AppContext, registrationId: string): Promise<Person> {
+async function personFor(c: AppContext, { registrationId, credentialId }: Pass): Promise<Person> {
   const row = await c.env.DB.prepare(
     `SELECT r.id, r.group_name, p.first_name, p.preferred_name, p.last_name,
             e.id AS event_id, e.name AS event_name, e.status, e.timezone, e.starts_on, e.ends_on, e.feature_self_signup, e.signup_code
        FROM registrations r JOIN people p ON p.id = r.person_id JOIN events e ON e.id = r.event_id
+       JOIN credentials cr ON cr.registration_id = r.id AND cr.id = ? AND cr.status = 'active'
       WHERE r.id = ? AND r.status = 'active'`,
   )
-    .bind(registrationId)
+    .bind(credentialId, registrationId)
     .first<Record<string, string | number | null>>();
   if (!row) throw new ApiError(401, 'signed_out', 'Scan your lanyard again to carry on.');
   return {
     registrationId,
+    credentialId,
     name: displayName(String(row.first_name), String(row.preferred_name), String(row.last_name)),
     groupName: String(row.group_name),
     event: {
@@ -197,7 +210,7 @@ async function personView(c: AppContext, p: Person) {
     participantTeams(c.env.DB, p.event.id, p.registrationId),
   ]);
   return {
-    pass: await makePass(c, p.registrationId),
+    pass: await makePass(c, p),
     person: { name: p.name, groupName: p.groupName },
     event: { name: p.event.name, timezone: p.event.timezone, startsOn: p.event.starts_on, endsOn: p.event.ends_on },
     open: signupOpen(p.event),
@@ -249,19 +262,19 @@ publicSignupRoutes.post('/identify', async (c) => {
   const input = await parseBody(c, identifySchema);
   await limitPublicNetwork(c, 'signup-identify');
   const notRecognised = () => new ApiError(404, 'not_recognised', "That card wasn't recognised. Check the code, or ask a leader.");
-  let row: { registration_id: string; event_id: string } | null;
+  let row: { id: string; registration_id: string; event_id: string } | null;
   if ('token' in input) {
-    row = await c.env.DB.prepare(`SELECT registration_id, event_id FROM credentials WHERE token_hash = ? AND status = 'active'`)
+    row = await c.env.DB.prepare(`SELECT id, registration_id, event_id FROM credentials WHERE token_hash = ? AND status = 'active'`)
       .bind(await hashToken(input.token))
       .first();
   } else {
     const e = await eventByCode(c, input.code);
-    row = await c.env.DB.prepare(`SELECT registration_id, event_id FROM credentials WHERE event_id = ? AND short_code = ? AND status = 'active'`)
+    row = await c.env.DB.prepare(`SELECT id, registration_id, event_id FROM credentials WHERE event_id = ? AND short_code = ? AND status = 'active'`)
       .bind(e.id, normaliseShortCode(input.shortCode))
       .first();
   }
   if (!row) throw notRecognised();
-  const person = await personFor(c, row.registration_id).catch(() => {
+  const person = await personFor(c, { registrationId: row.registration_id, credentialId: row.id }).catch(() => {
     throw notRecognised();
   });
   // A lanyard from another event can't be used at this event's screen.

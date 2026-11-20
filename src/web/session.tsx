@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ApiFailure, api } from './api';
-import { clearDevice, countUnsynced } from './offline/db';
+import { clearDevice, clearRosters, countUnsynced } from './offline/db';
 import type { Me } from './types';
 
 interface SessionState {
@@ -21,8 +21,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     try {
       setMe(await api<Me>('/me'));
     } catch (err) {
-      if (err instanceof ApiFailure && err.status === 401) setMe(null);
-      else throw err;
+      if (err instanceof ApiFailure && err.status === 401) {
+        // Signed out on the server (expired or revoked): don't leave the offline list behind.
+        await clearRosters().catch(() => undefined);
+        setMe(null);
+      } else throw err;
     } finally {
       setLoading(false);
     }
@@ -39,7 +42,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     ) {
       return;
     }
-    await clearDevice(true).catch(() => undefined);
+    const wiped = await clearDevice(true).then(
+      () => true,
+      () => false,
+    );
+    if (!wiped) window.alert("This phone's offline list couldn't be wiped. Close this browser tab, then clear this site's data in the browser settings.");
     await api('/auth/sign-out', { method: 'POST' }).catch(() => undefined);
     setMe(null);
   }, []);

@@ -1,3 +1,4 @@
+import { csvCell } from '../../shared/csv';
 import type { ContextRules, Evaluation, TimelineScan } from '../../shared/scanRules';
 import { replay } from '../../shared/scanRules';
 import { displayName } from '../../shared/names';
@@ -261,12 +262,7 @@ export function devices(model: EventModel) {
 
 // ---------------------------------------------------------------- CSV
 
-/** Neutralise spreadsheet formula injection and quote every cell. */
-export function csvCell(value: unknown): string {
-  let text = value === null || value === undefined ? '' : String(value);
-  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
-  return `"${text.replace(/"/g, '""')}"`;
-}
+export { csvCell };
 
 export function toCsv(preamble: string[], header: string[], rows: unknown[][]): string {
   const lines = [...preamble.map((p) => csvCell(p)), '', header.map(csvCell).join(','), ...rows.map((r) => r.map(csvCell).join(','))];

@@ -3,6 +3,7 @@ import { ApiFailure, api } from '../api';
 import { Button, EmptyState, Icon, LoadError, Loading, Notice, PageHeader, SearchField, SkeletonRows, useToast } from '../ui';
 import { matchesSearch } from '../../shared/search';
 import { useEvent } from './EventLayout';
+import { csvCell } from '../../shared/csv';
 
 interface ParticipantLink {
   registrationId: string;
@@ -15,7 +16,7 @@ interface ParticipantLink {
 }
 
 function downloadCsv(filename: string, rows: string[][]) {
-  const text = rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  const text = rows.map((r) => r.map(csvCell).join(',')).join('\r\n');
   const url = URL.createObjectURL(new Blob(['﻿' + text], { type: 'text/csv' }));
   const a = document.createElement('a');
   a.href = url;
