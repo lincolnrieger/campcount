@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { isHealthExtra } from '../../shared/consent2go';
 import type { IntakePerson, IntakeSource, IntakeState } from '../../shared/intake';
-import { CHECKLIST, SOURCE_NAME, intakeCheckSchema, intakeSeenSchema } from '../../shared/intake';
+import { CHECKLIST, SOURCE_NAME, intakeCheckSchema, intakeSeenSchema, intakeSyncSchema, isReviewColumn } from '../../shared/intake';
 import { isEditable } from '../../shared/lifecycle';
 import type { AppContext, AppEnv } from '../context';
 import { parseBody, requirePermission, requireUser } from '../context';
@@ -41,9 +41,9 @@ function parseFields(json: string | null): Record<string, string> | null {
   }
 }
 
-/** Column names whose fingerprint differs (added, removed or changed). */
-function diff(before: Record<string, string>, after: Record<string, string>): string[] {
-  const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+/** Section, group and dietary columns whose fingerprint differs (added, removed or changed). */
+function diff(source: IntakeSource, before: Record<string, string>, after: Record<string, string>): string[] {
+  const keys = new Set([...Object.keys(before), ...Object.keys(after)].filter((k) => isReviewColumn(source, k)));
   return [...keys].filter((k) => before[k] !== after[k]).sort();
 }
 
@@ -101,7 +101,7 @@ async function board(c: AppContext, eventId: string): Promise<{ people: IntakePe
         if (!now) continue;
         const then = parseFields(source === 'myscout' ? chk.myscout_fields : chk.consent2go_fields);
         if (then === null) changed.push(`Now in ${SOURCE_NAME[source]}`);
-        else for (const col of diff(then, parseFields(now.fields) ?? {})) changed.push(`${SOURCE_NAME[source]}: ${col}`);
+        else for (const col of diff(source, then, parseFields(now.fields) ?? {})) changed.push(`${SOURCE_NAME[source]}: ${col}`);
       }
     }
     let state: IntakeState;
@@ -184,6 +184,46 @@ intakeRoutes.post('/seen', async (c) => {
     ),
   );
   await auditStatement(c.env.DB, { actor: { type: 'user', id: user.userId }, action: 'intake.upload', eventId, targetType: 'event', targetId: eventId, detail: { source, people: people.length } }).run();
+  return c.json({ ok: true });
+});
+
+/**
+ * Keep people already on the roster up to date from each upload: names
+ * (MyScout), photo consent and the swimming and medication answers
+ * (Consent2Go). Section, group and dietary needs are left alone: those are
+ * checked by hand.
+ */
+intakeRoutes.post('/sync', async (c) => {
+  const eventId = c.req.param('eventId')!;
+  requirePermission(c, 'roster.import', { eventId });
+  const user = requireUser(c);
+  await editableEvent(c, eventId);
+  const { people } = await parseBody(c, intakeSyncSchema);
+  const now = nowIso();
+  const locked = await namesLockedElsewhere(c, eventId, people.filter((p) => p.names).map((p) => p.memberNumber));
+  const reg = `(SELECT r.id FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.event_id = ? AND upper(p.member_number) = ?)`;
+  const statements: D1PreparedStatement[] = [];
+  for (const p of people) {
+    const k = key(p.memberNumber);
+    if (p.names && !locked.has(p.memberNumber))
+      statements.push(
+        c.env.DB.prepare(
+          `UPDATE people SET first_name = ?, preferred_name = ?, last_name = ?, updated_at = ?
+            WHERE id = (SELECT r.person_id FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.event_id = ? AND upper(p.member_number) = ?)
+              AND (first_name <> ? OR preferred_name <> ? OR last_name <> ?)`,
+        ).bind(p.names.firstName, p.names.preferredName, p.names.lastName, now, eventId, k, p.names.firstName, p.names.preferredName, p.names.lastName),
+      );
+    if (p.photoConsent)
+      statements.push(
+        c.env.DB.prepare(`UPDATE registrations SET photo_consent = ?, updated_at = ? WHERE id = ${reg} AND photo_consent <> ?`).bind(p.photoConsent, now, eventId, k, p.photoConsent),
+      );
+    if (p.extra && Object.keys(p.extra).length) {
+      const patch = JSON.stringify(Object.fromEntries(Object.entries(p.extra).map(([n, v]) => [n, v === '' ? null : v])));
+      statements.push(c.env.DB.prepare(`UPDATE registrations SET extra_fields = json_patch(extra_fields, ?), updated_at = ? WHERE id = ${reg}`).bind(patch, now, eventId, k));
+    }
+  }
+  statements.push(auditStatement(c.env.DB, { actor: { type: 'user', id: user.userId }, action: 'intake.sync', eventId, targetType: 'event', targetId: eventId, detail: { people: people.length } }));
+  await runInBatches(c.env.DB, statements);
   return c.json({ ok: true });
 });
 

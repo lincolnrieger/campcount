@@ -1,6 +1,7 @@
 import { prepareConsent2Go } from '../../shared/consent2go';
 import { parseDelimited } from '../../shared/csv';
 import type { IntakeSource } from '../../shared/intake';
+import { isReviewColumn } from '../../shared/intake';
 import type { PreparedRow } from '../../shared/myscout';
 import { autoMap, flagDuplicates, missingRequired, prepareRows } from '../../shared/myscout';
 import { readFirstSheet, readSheets } from './xlsx';
@@ -100,12 +101,14 @@ async function hmac(key: CryptoKey, text: string): Promise<string> {
 export const hmacKey = (secret: string) => crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
 
 /**
- * A fingerprint of each filled-in column for one person, so a later upload
- * can tell what changed without the values ever leaving this computer.
+ * A fingerprint of each filled-in section, group and dietary column for one
+ * person, so a later upload can tell what changed without the values ever
+ * leaving this computer.
  */
-export async function fingerprints(key: CryptoKey, raw: [string, string][]): Promise<Record<string, string>> {
+export async function fingerprints(key: CryptoKey, source: IntakeSource, raw: [string, string][]): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
   for (const [name, value] of raw) {
+    if (!isReviewColumn(source, name)) continue;
     const v = value.trim().replace(/\s+/g, ' ').toLowerCase();
     if (!v) continue;
     const col = name.replace(/\s+/g, ' ').slice(0, 80);
@@ -117,3 +120,20 @@ export async function fingerprints(key: CryptoKey, raw: [string, string][]): Pro
 
 /** The full 64-character dietary fingerprint the roster keeps (same scheme as the one-file import). */
 export const dietaryFingerprint = (key: CryptoKey, text: string) => hmac(key, text.trim().replace(/\s+/g, ' ').toLowerCase());
+
+/**
+ * What's filled in without a check: names from MyScout; photo consent from
+ * Consent2Go (else MyScout); swimming and medication answers from Consent2Go.
+ */
+export function autoDetails(files: Partial<Record<IntakeSource, SourceRecord>>) {
+  const ms = files.myscout?.prepared.row;
+  const cg = files.consent2go?.prepared.row;
+  const photo = [cg?.photoConsent, ms?.photoConsent].find((v) => v === 'yes' || v === 'no') as 'yes' | 'no' | undefined;
+  const extra = cg?.extra ? Object.fromEntries(Object.entries(cg.extra).filter(([, v]) => v !== '')) : {};
+  return {
+    names: ms ? { firstName: ms.firstName, preferredName: ms.preferredName, lastName: ms.lastName } : cg ? { firstName: cg.firstName, preferredName: '', lastName: cg.lastName } : undefined,
+    namesFromMyScout: !!ms,
+    photoConsent: photo,
+    extra: Object.keys(extra).length ? extra : undefined,
+  };
+}
