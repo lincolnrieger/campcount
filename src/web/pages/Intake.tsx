@@ -305,10 +305,16 @@ const show = (k: FieldKey, v: string) => (k === 'photoConsent' ? (PHOTO[v] ?? v)
 type Col = 'myscout' | 'consent2go' | 'now';
 const COL_NAME: Record<Col, string> = { myscout: 'MyScout', consent2go: 'Consent2Go', now: 'CampCount now' };
 
-/** Which value to keep by default: MyScout for who they are, Consent2Go for photo consent. */
+/** Which value to keep by default: MyScout for names; Consent2Go for section, group and photo consent. */
 function defaultPick(k: FieldKey, values: Record<Col, string | undefined>): Col | null {
   const has = (c: Col) => values[c] !== undefined && values[c] !== '' && !(k === 'photoConsent' && values[c] === 'unknown');
-  const order: Col[] = k === 'photoConsent' ? ['consent2go', 'myscout', 'now'] : k === 'preferredName' ? ['myscout', 'now'] : ['myscout', 'now', 'consent2go'];
+  // Consent2Go's class and tab say the section and Scout group (MyScout shows only the highest appointment).
+  const order: Col[] =
+    k === 'photoConsent' || k === 'section' || k === 'groupName'
+      ? ['consent2go', 'myscout', 'now']
+      : k === 'preferredName'
+        ? ['myscout', 'now']
+        : ['myscout', 'now', 'consent2go'];
   return order.find(has) ?? (values.now !== undefined ? 'now' : values.myscout !== undefined ? 'myscout' : values.consent2go !== undefined ? 'consent2go' : null);
 }
 
@@ -340,7 +346,8 @@ function CheckCard({
   const now = person.roster;
   const values = (k: FieldKey): Record<Col, string | undefined> => ({
     myscout: ms ? String(ms.row[k] ?? '') : undefined,
-    consent2go: cg ? (k === 'preferredName' ? undefined : String(cg.row[k] ?? '')) : undefined,
+    // A Consent2Go class that names no section is a blank, not "Other".
+    consent2go: cg ? (k === 'preferredName' ? undefined : k === 'section' && cg.row.section === 'Other' ? '' : String(cg.row[k] ?? '')) : undefined,
     now: now ? String(now[k] ?? '') : undefined,
   });
   const [pick, setPick] = useState<Record<FieldKey, Col | null>>(() => Object.fromEntries(FIELDS.map((f) => [f.key, defaultPick(f.key, values(f.key))])) as Record<FieldKey, Col | null>);
@@ -518,7 +525,7 @@ function CheckCard({
               </tbody>
             </table>
           </div>
-          <p className="meta">Where they differ, tick the one to keep. MyScout is picked for who they are, and Consent2Go for photo consent, unless you change it.</p>
+          <p className="meta">Where they differ, tick the one to keep. Names come from MyScout; section (from the class), Scout group (from the tab) and photo consent come from Consent2Go, unless you change them.</p>
         </Section>
 
         <Section title="Dietary and medical notes" id="notes">
@@ -549,39 +556,6 @@ function CheckCard({
               ))}
             </dl>
           )}
-        </Section>
-
-        <Section title="Everything in the files" id="everything">
-          <p className="meta">Every column, exactly as in each file, so nothing is missed. Only what’s above is saved.</p>
-          <div className="intake-notes">
-            {(['myscout', 'consent2go'] as const).map((s) => (
-              <div key={s} className="intake-raw">
-                <h3>{SOURCE_NAME[s]}</h3>
-                {files[s] ? (
-                  <>
-                    <p className="meta">{files[s]!.where}</p>
-                    <dl className="intake-dl">
-                      {files[s]!.raw
-                        .filter(([, v]) => v)
-                        .map(([k, v], i) => (
-                          <div key={`${k}-${i}`}>
-                            <dt>{k}</dt>
-                            <dd>{v}</dd>
-                          </div>
-                        ))}
-                    </dl>
-                    {files[s]!.raw.some(([, v]) => !v) && (
-                      <p className="meta">
-                        Blank: {files[s]!.raw.filter(([, v]) => !v).map(([k]) => k).join(', ')}
-                      </p>
-                    )}
-                  </>
-                ) : (
-                  <p className="meta">{person[s] ? `Upload the ${SOURCE_NAME[s]} file to see it.` : `Not in ${SOURCE_NAME[s]}.`}</p>
-                )}
-              </div>
-            ))}
-          </div>
         </Section>
 
         <Section title="Checklist" id="checklist">
