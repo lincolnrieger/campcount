@@ -70,6 +70,8 @@ export async function runMaintenance(env: Env, now = nowIso()): Promise<{ sensit
       env.DB.prepare(`DELETE FROM credentials WHERE event_id = ?`).bind(id),
       env.DB.prepare(`DELETE FROM stations WHERE event_id = ?`).bind(id),
       env.DB.prepare(`DELETE FROM registrations WHERE event_id = ?`).bind(id),
+      env.DB.prepare(`DELETE FROM intake_sightings WHERE event_id = ?`).bind(id),
+      env.DB.prepare(`DELETE FROM intake_checks WHERE event_id = ?`).bind(id),
       env.DB.prepare(`UPDATE events SET records_purged_at = ? WHERE id = ?`).bind(now, id),
       auditStatement(env.DB, { actor: { type: 'system' }, action: 'retention.purge_records', eventId: id }),
     ]);

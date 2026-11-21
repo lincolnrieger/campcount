@@ -23,7 +23,7 @@ export const rosterRoutes = new Hono<AppEnv>();
 
 const BATCH_SIZE = 80;
 
-async function runInBatches(db: D1Database, statements: D1PreparedStatement[]): Promise<void> {
+export async function runInBatches(db: D1Database, statements: D1PreparedStatement[]): Promise<void> {
   for (let i = 0; i < statements.length; i += BATCH_SIZE) {
     await db.batch(statements.slice(i, i + BATCH_SIZE));
   }
@@ -443,7 +443,7 @@ function mergeConsent2Go(row: ImportRow, existing: ExistingRegistration[]): Impo
  * on another camp's roster and lanyards. Returns the membership numbers whose
  * names this caller must leave alone.
  */
-async function namesLockedElsewhere(c: AppContext, eventId: string, memberNumbers: string[]): Promise<Set<string>> {
+export async function namesLockedElsewhere(c: AppContext, eventId: string, memberNumbers: string[]): Promise<Set<string>> {
   const principal = c.get('principal')!;
   const distinct = [...new Set(memberNumbers)];
   const locked = new Set<string>();

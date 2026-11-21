@@ -102,8 +102,7 @@ export function Roster() {
         )
       }
       menu={[
-        can('roster.import') && { label: 'Import from MyScout', to: 'import' },
-        can('roster.import') && { label: 'Import from Consent2Go', to: 'import?source=consent2go' },
+        can('roster.import') && { label: 'Import & check (MyScout and Consent2Go)', to: 'import' },
         { label: 'Leader roster', to: 'leader-roster' },
         can('event.configure') && { label: 'Design lanyards', to: 'lanyards' },
         can('credentials.manage') && active.length > 0 && { label: withoutCard > 0 ? `Print lanyards (${withoutCard} new)` : 'Print lanyards', to: 'lanyards/print' },
