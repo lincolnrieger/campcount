@@ -28,6 +28,7 @@ import { Schedule } from './pages/Schedule';
 import { TeamEventPage, TeamEvents } from './pages/Teams';
 import { LeaderRoster } from './pages/LeaderRoster';
 import { BannerSettings } from './pages/BannerSettings';
+import { Intake } from './pages/Intake';
 import { Pair } from './pages/Pair';
 import { ScanHub } from './pages/ScanHub';
 import { Stations } from './pages/Stations';
@@ -192,7 +193,8 @@ function EventSiteApp({ site }: { site: Extract<SiteInfo, { kind: 'event' }> }) 
             <Route path="scan" element={<ScanHub />} />
             <Route path="people" element={<Roster />} />
             <Route path="people/add" element={<AddPerson />} />
-            <Route path="people/import" element={<Import />} />
+            <Route path="people/import" element={<Intake />} />
+            <Route path="people/import/columns" element={<Import />} />
             <Route path="people/lanyards" element={<LanyardDesigner />} />
             <Route path="people/lanyards/print" element={<LanyardPrint />} />
             <Route path="people/roll-sheet" element={<RollSheet />} />
@@ -269,7 +271,8 @@ function PlatformApp() {
             <Route index element={<PlatformEventHome />} />
             <Route path="people" element={<Roster />} />
             <Route path="people/add" element={<AddPerson />} />
-            <Route path="people/import" element={<Import />} />
+            <Route path="people/import" element={<Intake />} />
+            <Route path="people/import/columns" element={<Import />} />
             <Route path="people/lanyards" element={<LanyardDesigner />} />
             <Route path="people/lanyards/print" element={<LanyardPrint />} />
             <Route path="people/roll-sheet" element={<RollSheet />} />
