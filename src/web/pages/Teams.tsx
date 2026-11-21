@@ -409,6 +409,7 @@ export function TeamEventPage() {
                   }
                   actions={
                     <span className="team-actions">
+                      {t.locked && <Badge>Locked{t.joinCode ? ` · code ${t.joinCode}` : ''}</Badge>}
                       <Badge tone={st.tone}>{st.text}</Badge>
                       {editable && (
                         <Menu

@@ -24,6 +24,7 @@ interface PersonData {
     lastName: string;
     displayName: string;
     kind: 'youth' | 'adult';
+    carRego?: string | null;
     section: string;
     groupName: string;
     position: string;
@@ -429,6 +430,12 @@ export function Person() {
                 <dt>{r.kind === 'adult' ? 'Role' : 'Section'}</dt>
                 <dd>{r.kind === 'adult' ? r.position || 'Leader' : r.section}</dd>
               </div>
+              {r.kind === 'adult' && (
+                <div>
+                  <dt>Car rego</dt>
+                  <dd>{r.carRego || <span className="meta">None given</span>}</dd>
+                </div>
+              )}
               <div>
                 <dt>Scout group</dt>
                 <dd>{r.groupName || 'Not recorded'}</dd>
@@ -542,6 +549,7 @@ function DetailsForm({ r, back, path, onSaved }: { r: PersonData['registration']
     groupName: r.groupName,
     position: r.position,
     photoConsent: r.photoConsent,
+    carRego: r.carRego ?? '',
   });
   const [extra, setExtra] = useState<Record<string, string>>(r.extra ?? {});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -612,6 +620,11 @@ function DetailsForm({ r, back, path, onSaved }: { r: PersonData['registration']
         {kindForSection(f.section, event.youthSections ?? []) === 'adult' && (
           <Field id="p-position" label="Role" optional hint="For example, Cub Leader, cook, first aider">
             <input className="input" value={f.position} onChange={set('position')} autoComplete="off" />
+          </Field>
+        )}
+        {r.kind === 'adult' && (
+          <Field id="p-rego" label="Car rego" optional hint="Their car on site, so the camp knows who to contact.">
+            <input className="input" value={f.carRego} maxLength={20} onChange={set('carRego')} autoComplete="off" />
           </Field>
         )}
         {f.photoConsent !== undefined && (

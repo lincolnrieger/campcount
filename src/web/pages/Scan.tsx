@@ -95,6 +95,61 @@ function DietaryAlert({ alert }: { alert: string }) {
   );
 }
 
+/**
+ * The first time a leader is scanned (usually when they collect their
+ * lanyard): ask whether they have a car on site, and its rego, so the camp
+ * knows who to contact. One tap to skip. Asked once.
+ */
+const regoAsked = new Set<string>();
+function RegoPrompt({ eventId, person }: { eventId: string; person: SnapshotPerson }) {
+  const [rego, setRego] = useState('');
+  const [state, setState] = useState<'ask' | 'saving' | 'done' | 'failed'>('ask');
+  async function send(value: string | null) {
+    setState('saving');
+    try {
+      await api(`/events/${eventId}/registrations/${person.id}/rego`, { body: { rego: value } });
+      // Don't ask again on this device (the next list download won't ask either).
+      regoAsked.add(person.id);
+      setState('done');
+    } catch {
+      setState('failed');
+    }
+  }
+  if (state === 'done') return <p className="rego-done">Saved. Thanks.</p>;
+  return (
+    <form
+      className="rego-prompt"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (rego.trim()) void send(rego.trim());
+      }}
+    >
+      <label htmlFor="rego-input" className="rego-label">
+        Car on site? Ask for its rego.
+      </label>
+      <div className="rego-row">
+        <input
+          id="rego-input"
+          className="input rego-input"
+          value={rego}
+          maxLength={20}
+          autoComplete="off"
+          autoCapitalize="characters"
+          placeholder="e.g. S123ABC"
+          onChange={(e) => setRego(e.target.value.toUpperCase())}
+        />
+        <Button type="submit" kind="primary" disabled={!rego.trim() || state === 'saving'}>
+          Save
+        </Button>
+        <Button kind="ghost" disabled={state === 'saving'} onClick={() => void send(null)}>
+          Skip
+        </Button>
+      </div>
+      {state === 'failed' && <p className="rego-failed">Couldn’t save (no signal?). It’ll be asked again next time.</p>}
+    </form>
+  );
+}
+
 /** The big answer after each scan: icon, word and name. Announced to screen readers. */
 function ScanResult({ feedback, contextType }: { feedback: Feedback | null; contextType: ContextType }) {
   if (!feedback) {
@@ -427,6 +482,7 @@ export function Scan() {
             {camera === 'on' && <span className="viewfinder-guide" aria-hidden="true" />}
           </div>
           <ScanResult feedback={feedback} contextType={ctx.type} />
+          {feedback?.person?.askRego && !regoAsked.has(feedback.person.id) && feedback.tone !== 'stop' && <RegoPrompt key={feedback.key} eventId={eventId} person={feedback.person} />}
           <Button className="scanner-big scanner-people-btn" block onClick={() => setView('people')}>
             <Icon name="search" size={24} />
             <span>{words.not}</span>

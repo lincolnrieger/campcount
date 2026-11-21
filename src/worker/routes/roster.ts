@@ -87,6 +87,7 @@ rosterRoutes.get('/registrations', async (c) => {
       position: r.position,
       roleLabel: r.role_label,
       status: r.status,
+      carRego: r.car_rego,
       shortCode: r.short_code ? formatShortCode(r.short_code) : null,
       ...(withPhoto ? { photoConsent: r.photo_consent } : {}),
       ...(withDietary ? { dietary: dietary.get(r.id!) ?? [], dietaryFingerprint: r.dietary_source_hash } : {}),
@@ -111,7 +112,7 @@ rosterRoutes.get('/registrations/:registrationId', async (c) => {
   if (!event) throw notFound();
   const r = await c.env.DB.prepare(
     `SELECT r.id, p.member_number, p.first_name, p.preferred_name, p.last_name, r.kind, r.section, r.group_name, r.position,
-            r.role_label, r.team, r.photo_consent, r.status, r.created_at, r.updated_at, r.extra_fields,
+            r.role_label, r.team, r.photo_consent, r.status, r.created_at, r.updated_at, r.extra_fields, r.car_rego,
             (SELECT short_code FROM credentials cr WHERE cr.registration_id = r.id AND cr.status = 'active') AS short_code
        FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.id = ? AND r.event_id = ?`,
   )
@@ -164,6 +165,7 @@ rosterRoutes.get('/registrations/:registrationId', async (c) => {
       // Medication permissions and the like are health information: only for people who see dietary detail.
       extra: Object.fromEntries(Object.entries(parseExtra(r.extra_fields)).filter(([k]) => withDietary || !isHealthExtra(k))),
       status: r.status,
+      carRego: r.car_rego,
       shortCode: r.short_code ? formatShortCode(r.short_code) : null,
       ...(withPhoto ? { photoConsent: r.photo_consent } : {}),
       ...(withDietary ? { dietary: dietary!.results } : {}),
@@ -204,7 +206,7 @@ rosterRoutes.patch('/registrations/:registrationId', async (c) => {
   if (!reg) throw notFound();
 
   const personCols: Record<string, string> = { memberNumber: 'member_number', firstName: 'first_name', preferredName: 'preferred_name', lastName: 'last_name' };
-  const regCols: Record<string, string> = { kind: 'kind', section: 'section', groupName: 'group_name', position: 'position', photoConsent: 'photo_consent', status: 'status' };
+  const regCols: Record<string, string> = { kind: 'kind', section: 'section', groupName: 'group_name', position: 'position', photoConsent: 'photo_consent', status: 'status', carRego: 'car_rego' };
   const set = (cols: Record<string, string>) => Object.keys(input).filter((k) => k in cols && input[k as keyof typeof input] !== undefined);
   const pKeys = set(personCols);
   const rKeys = set(regCols);

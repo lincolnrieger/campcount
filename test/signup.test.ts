@@ -47,6 +47,41 @@ async function camp() {
   return { eventId, manager, card, kayak9, archery10, kayak11, code: screen.link.split('/signup/')[1] as string };
 }
 
+describe('booking links and typed numbers', () => {
+  it('books from an emailed link by membership number, saying nothing about who it is', async () => {
+    const c = await camp();
+    const links = await json(await api(`/events/${c.eventId}/signup/links`, { cookie: c.manager.cookie }));
+    expect(links.code).toMatch(/^[A-Za-z0-9_-]{10,}$/);
+    expect(links.code).not.toBe(c.code);
+    const page = await json(await api(`/public/signup/link/${links.code}/${c.kayak9}`));
+    expect(page.session).toMatchObject({ name: 'Kayaking', booked: 0 });
+    const res = await api(`/public/signup/link/${links.code}/${c.kayak9}`, { body: { memberNumber: '100' } });
+    expect(res.status).toBe(200);
+    const body = await json(res);
+    expect(body).toEqual({ booked: true, already: false, activity: 'Kayaking' });
+    expect(JSON.stringify(body)).not.toContain('First100');
+    expect(await json(await api(`/public/signup/link/${links.code}/${c.kayak9}`, { body: { memberNumber: '100' } }))).toMatchObject({ already: true });
+    // A clash, an unknown number, the kiosk's code, and a staff-only activity.
+    expect((await api(`/public/signup/link/${links.code}/${c.archery10}`, { body: { memberNumber: '100' } })).status).toBe(409);
+    expect((await api(`/public/signup/link/${links.code}/${c.kayak9}`, { body: { memberNumber: '999999' } })).status).toBe(409);
+    expect((await api(`/public/signup/link/${c.code}/${c.kayak9}`)).status).toBe(404);
+    // New links: the old ones stop working.
+    await api(`/events/${c.eventId}/signup/links/new`, { cookie: c.manager.cookie, body: {} });
+    expect((await api(`/public/signup/link/${links.code}/${c.kayak9}`)).status).toBe(404);
+  });
+
+  it('shows a reduced page for a typed number, and keeps it reduced after booking', async () => {
+    const c = await camp();
+    const typed = await json(await api('/public/signup/identify', { body: { shortCode: c.card('100').shortCode, code: c.code } }));
+    expect(typed.person).toMatchObject({ firstName: 'First100', lastName: '', groupName: '' });
+    const after = await json(await api('/public/signup/book', { body: { pass: typed.pass, activityId: c.kayak9 } }));
+    expect(after.person).toMatchObject({ lastName: '', groupName: '' });
+    // Their own lanyard link shows everything.
+    const own = await json(await api('/public/signup/identify', { body: { token: c.card('100').token } }));
+    expect(own.person).toMatchObject({ lastName: 'Person', groupName: 'Example Troop' });
+  });
+});
+
 describe('activity sign-up', () => {
   it('shows open sessions with places left, but no names, before anyone scans', async () => {
     const c = await camp();

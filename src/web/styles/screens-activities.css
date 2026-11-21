@@ -393,3 +393,42 @@
 .team-new .field {
   flex: 1 1 14rem;
 }
+.team-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+.team-add .field {
+  flex: 1 1 12rem;
+}
+.team-lock {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.team-code strong {
+  font-size: 1.25rem;
+  letter-spacing: 0.08em;
+}
+.team-code-input {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.team-notice {
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  background: var(--warning-bg);
+  color: var(--warning-fg);
+  font-weight: var(--weight-bold);
+}
+.team-new {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 30rem;
+}
+.team-new .btn {
+  justify-self: start;
+}

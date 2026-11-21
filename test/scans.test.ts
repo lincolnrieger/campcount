@@ -91,11 +91,12 @@ describe('scan snapshot', () => {
     const text = await res.text();
     for (const card of c.cards) {
       expect(text).not.toContain(card.token);
-      // The typed code is the membership number, which scanners already see; only the QR token is secret.
     }
     const snap = JSON.parse(text);
+    // Membership numbers (the typed codes) only go to people who can see the roster.
+    expect(snap.people.every((p: any) => p.memberNumber === undefined)).toBe(true);
     expect(snap.people[0]).not.toHaveProperty('dietaryAlert');
-    expect(snap.people.find((p: any) => p.memberNumber === '200').noPhotos).toBe(true);
+    expect(snap.people.find((p: any) => p.fullName.startsWith('First200')).noPhotos).toBe(true);
     expect(snap.credentials[0].tokenHash).toMatch(/^[0-9a-f]{64}$/);
   });
 
@@ -103,9 +104,9 @@ describe('scan snapshot', () => {
     const c = await camp();
     const meal = await staff(c.eventId, 'meal_leader');
     const snap = await json(await api(`/events/${c.eventId}/scan/meal/${c.mealId}/snapshot`, { cookie: meal.cookie }));
-    expect(snap.people.find((p: any) => p.memberNumber === '100').dietaryAlert).toBe('Allergy: Peanut (anaphylactic)');
+    expect(snap.people.find((p: any) => p.fullName.startsWith('First100')).dietaryAlert).toBe('Allergy: Peanut (anaphylactic)');
     // Meal leaders are not given photo markers (they don't hold photo.view_status).
-    expect(snap.people.find((p: any) => p.memberNumber === '200')).not.toHaveProperty('noPhotos');
+    expect(snap.people.find((p: any) => p.fullName.startsWith('First200'))).not.toHaveProperty('noPhotos');
     const gate = await staff(c.eventId, 'scanner');
     expect((await api(`/events/${c.eventId}/scan/meal/${c.mealId}/snapshot`, { cookie: gate.cookie })).status).toBe(403);
   });

@@ -11,11 +11,11 @@ import { useSiteEvent } from '../site';
 
 const ICONS: Record<string, IconName> = { '': 'home', scan: 'scan', people: 'user', activities: 'events', schedule: 'events', teams: 'user', meals: 'events', reports: 'download', settings: 'admin', more: 'more', account: 'user' };
 
-/** The event's own logo (or the CampCount mark when it has none). */
-export function SiteLogo({ size = 32 }: { size?: number }) {
+/** The event's own logo (or the CampCount mark when it has none, unless `mark` is false). */
+export function SiteLogo({ size = 32, mark = true }: { size?: number; mark?: boolean }) {
   const event = useSiteEvent();
   if (event?.logoUrl) return <img className="site-logo" src={event.logoUrl} alt="" width={size} height={size} />;
-  return <BrandMark size={size} />;
+  return mark ? <BrandMark size={size} /> : null;
 }
 
 /** How many sections fit in the phone tab bar before the rest go under More. */
@@ -97,7 +97,8 @@ export function SiteShell() {
       <div className="shell-main">
         <header className="topbar">
           <Link to="/" className="topbar-title">
-            <SiteLogo size={28} />
+            {/* Signed out (the sign-in page): the camp's own logo only, never the CampCount mark. */}
+            <SiteLogo size={28} mark={!!me} />
             <span>{site.name}</span>
           </Link>
           {me?.kind === 'station' && (
