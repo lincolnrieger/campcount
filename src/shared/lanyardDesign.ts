@@ -163,18 +163,38 @@ export function designAssetIds(d: LanyardDesign): string[] {
 
 /** Scouts Australia section colours. The section word is always printed too, so colour is never the only signal. */
 export const SECTION_COLOURS: Record<string, { bg: string; fg: string }> = {
+  Joey: { bg: '#8B5A2B', fg: '#FFFFFF' },
+  Cub: { bg: '#FFC82E', fg: '#1A1A1A' },
   Scout: { bg: '#00843D', fg: '#FFFFFF' },
   Venturer: { bg: '#7A1F3D', fg: '#FFFFFF' },
+  Rover: { bg: '#C8102E', fg: '#FFFFFF' },
   // Navy, RGB 38 38 97.
-  Adult: { bg: '#262661', fg: '#FFFFFF' },
+  Leader: { bg: '#262661', fg: '#FFFFFF' },
 };
+/** Anyone not in a section: no word on the card, and a neutral band. */
+const NO_SECTION = { bg: '#5A6770', fg: '#FFFFFF' };
 
-/** The one word for someone's section on a card: Scout, Venturer or Adult (leaders and Rovers). */
-export function sectionWord(kind: 'youth' | 'adult', section: string): 'Scout' | 'Venturer' | 'Adult' {
-  const s = section.toLowerCase();
-  if (kind === 'adult' || s.startsWith('rover') || s.startsWith('leader')) return 'Adult';
+export type SectionWord = 'Joey' | 'Cub' | 'Scout' | 'Venturer' | 'Rover' | 'Leader' | '';
+
+/**
+ * The one word for someone's section on a card. Leaders (adults) are Leader;
+ * Joeys, Cubs, Scouts, Venturers and Rovers keep their section. Anyone else
+ * gets no word.
+ */
+export function sectionWord(kind: 'youth' | 'adult', section: string): SectionWord {
+  const s = section.trim().toLowerCase();
+  if (s.startsWith('rover')) return 'Rover';
+  if (kind === 'adult' || s.startsWith('leader')) return 'Leader';
+  if (s.startsWith('joey')) return 'Joey';
+  if (s.startsWith('cub')) return 'Cub';
+  if (s.startsWith('scout')) return 'Scout';
   if (s.startsWith('venturer')) return 'Venturer';
-  return 'Scout';
+  return '';
+}
+
+/** A section's card colours (the neutral band for anyone without a section). */
+export function sectionColours(word: string): { bg: string; fg: string } {
+  return SECTION_COLOURS[word] ?? NO_SECTION;
 }
 
 export interface CardPerson {
@@ -208,7 +228,7 @@ export function fillFields(text: string, person: CardPerson, campName: string): 
 
 export function resolveColour(c: Colour, person: CardPerson | null): string {
   if (c !== SECTION_COLOUR && c !== SECTION_TEXT_COLOUR) return c;
-  const s = SECTION_COLOURS[person ? sectionWord(person.kind, person.section) : 'Scout']!;
+  const s = person ? sectionColours(sectionWord(person.kind, person.section)) : SECTION_COLOURS.Scout!;
   return c === SECTION_COLOUR ? s.bg : s.fg;
 }
 

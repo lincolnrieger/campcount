@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { SECTION_COLOURS } from '../../shared/lanyardDesign';
+import { sectionColours } from '../../shared/lanyardDesign';
 import { dayInZone, dayLabel, timeInZone, todayInZone } from '../../shared/time';
 import { api } from '../api';
 import type { CollectResult, ProgrammeItem, SideQuestStanding, SignupSession, SignupView } from '../components/SignupPanel';
@@ -199,7 +199,7 @@ function Page({ view, busy, actions }: { view: SignupView; busy: boolean; action
   const meals = programme.filter((i) => i.kind === 'meal');
   const teamEvents = view.teamEvents ?? [];
   // Leaders don't book activities, so they don't get the Book tab.
-  const isAdult = view.person.sectionWord === 'Adult';
+  const isAdult = view.person.sectionWord === 'Leader' || view.person.sectionWord === 'Rover';
   const canBook = !isAdult && (view.sessions.length > 0 || view.bookings.length > 0);
   const quest = view.sideQuest && view.sideQuest.collected > 0 ? view.sideQuest : null;
 
@@ -265,8 +265,8 @@ function Page({ view, busy, actions }: { view: SignupView; busy: boolean; action
 
 /** Who you are, at which camp. Coloured like your section's lanyard band. */
 function Pass({ view }: { view: SignupView }) {
-  const word = view.person.sectionWord ?? 'Scout';
-  const colour = SECTION_COLOURS[word]?.bg ?? '#00843D';
+  const word = view.person.sectionWord ?? '';
+  const colour = sectionColours(word).bg;
   const first = view.person.firstName ?? view.person.name.split(' ')[0];
   const last = view.person.lastName ?? '';
   const banner = view.event.banner;
@@ -285,7 +285,7 @@ function Pass({ view }: { view: SignupView }) {
         {first}
         {last && <span className="pp-surname">{last}</span>}
       </h1>
-      <span className="pp-section-pill">{word}</span>
+      {word && <span className="pp-section-pill">{word}</span>}
     </header>
   );
 }
@@ -594,7 +594,7 @@ function CollectScreen({ result, onDone, onMine }: { result: CollectResult; onDo
   const reduced = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const [shown, setShown] = useState(result.fresh && !reduced ? Math.max(0, s.collected - 1) : s.collected);
   const done = useRef<HTMLButtonElement>(null);
-  const questKey = result.friend.sectionWord === 'Adult' ? 'leaders' : (SECTION_QUEST[result.friend.section] ?? '');
+  const questKey = result.friend.sectionWord === 'Leader' ? 'leaders' : (SECTION_QUEST[result.friend.section] ?? '');
   const quest = s.quests.find((q) => q.key === questKey);
   const milestone = result.fresh && (s.collected === 1 || s.collected % 10 === 0 || (quest?.done && quest.collected === quest.total));
 

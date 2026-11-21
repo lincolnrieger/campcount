@@ -32,7 +32,7 @@ describe('reading a Consent2Go workbook', () => {
     expect(by('5000001').where).toBe('Joeys, row 3');
     expect(by('5000002').row).toMatchObject({ section: 'Scouts', photoConsent: 'no' });
     expect(by('5000003').row.section).toBe('Venturers');
-    expect(by('5000004').row).toMatchObject({ section: 'Leaders', kind: 'adult' });
+    expect(by('5000004').row).toMatchObject({ section: 'Rovers', kind: 'youth' });
     // A tab named after a group: the group is the tab, the section comes from HomeRoom.
     expect(by('5000005').row).toMatchObject({ section: 'Scouts', groupName: '1st Glenelg' });
     // Parent and emergency contacts are never kept.
@@ -50,7 +50,7 @@ describe('reading a Consent2Go workbook', () => {
   });
 
   it('maps sections as asked: Joeys, Scouts, Venturers, everyone else a leader', () => {
-    expect(['Joey Mob', 'Scout Troop', 'Venturer Unit', 'Cub Pack', 'Rovers', 'Event team'].map(c2gSection)).toEqual(['Joeys', 'Scouts', 'Venturers', 'Leaders', 'Leaders', 'Leaders']);
+    expect(['Joey Mob', 'Scout Troop', 'Venturer Unit', 'Cub Pack', 'Rovers', 'Event team'].map(c2gSection)).toEqual(['Joeys', 'Scouts', 'Venturers', 'Cubs', 'Rovers', 'Leaders']);
     expect(isHealthExtra('Ibuprofen OK')).toBe(true);
     expect(isHealthExtra('Swimming ability')).toBe(false);
   });
