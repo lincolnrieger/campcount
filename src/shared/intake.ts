@@ -11,13 +11,25 @@ export const INTAKE_SOURCES = ['myscout', 'consent2go'] as const;
 export type IntakeSource = (typeof INTAKE_SOURCES)[number];
 export const SOURCE_NAME: Record<IntakeSource, string> = { myscout: 'MyScout', consent2go: 'Consent2Go' };
 
-/** What the person checking ticks off for each person. */
+/** What the person checking ticks off for each person. Everything else is filled in automatically. */
 export const CHECKLIST = [
-  { key: 'details', label: 'Name, section and group are right' },
-  { key: 'photo', label: 'Photo consent is right' },
+  { key: 'section', label: 'Section is right' },
+  { key: 'group', label: 'Scout group is right' },
   { key: 'dietary', label: 'Dietary needs read and recorded' },
-  { key: 'health', label: 'Medical, medication and swimming notes read' },
 ] as const;
+
+const norm = (s: string) => s.trim().toLowerCase().replace(/[\s_]+/g, ' ');
+/**
+ * The columns that decide what gets checked by hand: section and group
+ * (class, tab; formation, position, role) and dietary notes. A change in
+ * any of these puts a person back on the list; changes elsewhere (photo
+ * consent, swimming, medication…) are applied without a re-check.
+ */
+const REVIEW_COLUMNS: Record<IntakeSource, Set<string>> = {
+  myscout: new Set(['formation', 'group', 'unit', 'position', 'role', 'medical conditions', 'dietary', 'dietary requirements', 'dietaries']),
+  consent2go: new Set(['tab', 'year', 'homeroom', 'home room', 'house', 'dietary requirement 1', 'dietary requirement 2', 'non-medical dietary requirements']),
+};
+export const isReviewColumn = (source: IntakeSource, column: string) => REVIEW_COLUMNS[source].has(norm(column));
 export type ChecklistKey = (typeof CHECKLIST)[number]['key'];
 
 /** Fingerprints are the first 16 hex characters of an HMAC. */
@@ -47,6 +59,21 @@ export const intakeCheckSchema = z.strictObject({
   /** What to put on the roster, as chosen. Required unless leftOff. */
   row: importRowSchema.optional(),
   checklist: z.record(z.string().max(20), z.boolean()).refine((o) => Object.keys(o).length <= 10),
+});
+
+/** Details filled in automatically on each upload, for people already on the roster. */
+export const intakeSyncSchema = z.strictObject({
+  people: z
+    .array(
+      z.strictObject({
+        memberNumber: importRowSchema.shape.memberNumber,
+        names: z.strictObject({ firstName: importRowSchema.shape.firstName, preferredName: importRowSchema.shape.preferredName, lastName: importRowSchema.shape.lastName }).optional(),
+        photoConsent: z.enum(['yes', 'no']).optional(),
+        extra: importRowSchema.shape.extra,
+      }),
+    )
+    .min(1)
+    .max(200),
 });
 
 export type IntakeState = 'new' | 'changed' | 'in_progress' | 'checked' | 'left_off' | 'roster_only';

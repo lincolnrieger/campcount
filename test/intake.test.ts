@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { api, createEvent, createUser, grant, json, testEnv } from './helpers';
 
 const fp = (n: number) => n.toString(16).padStart(16, '0');
-const ALL = { details: true, photo: true, dietary: true, health: true };
+const ALL = { section: true, group: true, dietary: true };
 
 const row = (memberNumber: string, over: Record<string, unknown> = {}) => ({
   memberNumber,
@@ -35,7 +35,7 @@ async function camp() {
     changed: string[];
     myscout: unknown;
     consent2go: unknown;
-    roster: { firstName: string; photoConsent: string; dietary?: unknown[] } | null;
+    roster: { firstName: string; photoConsent: string; section: string; groupName: string; dietary?: unknown[] } | null;
   }[];
   const check = (body: Record<string, unknown>) => api(`/events/${eventId}/intake/check`, { cookie: manager.cookie, body });
   return { eventId, manager, seen, boardOf, check };
@@ -69,6 +69,30 @@ describe('import & check', () => {
     await c.check({ memberNumber: '100', checklist: ALL, row: row('100') });
     await c.seen('myscout', [{ memberNumber: '100', name: 'Ava Example', fields: { 'First name': fp(1), Dietary: fp(5) } }]);
     expect((await c.boardOf()).find((p) => p.memberNumber === '100')).toMatchObject({ state: 'changed', changed: ['MyScout: Dietary'] });
+  });
+
+  it('only puts people back on the list for section, group or dietary changes, and fills in the rest', async () => {
+    const c = await camp();
+    await c.seen('myscout', [{ memberNumber: '500', name: 'Eve E', fields: { formation: fp(1), medical_conditions: fp(2) } }]);
+    await c.check({ memberNumber: '500', checklist: ALL, row: row('500', { photoConsent: 'unknown' }) });
+    // Consent2Go arrives: back on the list.
+    await c.seen('consent2go', [{ memberNumber: '500', name: 'Eve E', fields: { Year: fp(3), 'Swimming Ability': fp(4) } }]);
+    expect((await c.boardOf()).find((p) => p.memberNumber === '500')).toMatchObject({ state: 'changed', changed: ['Now in Consent2Go'] });
+    await c.check({ memberNumber: '500', checklist: ALL, row: row('500') });
+    // Swimming changes: not a re-check. The class changes: a re-check.
+    await c.seen('consent2go', [{ memberNumber: '500', name: 'Eve E', fields: { Year: fp(3), 'Swimming Ability': fp(5) } }]);
+    expect((await c.boardOf()).find((p) => p.memberNumber === '500')!.state).toBe('checked');
+    await c.seen('consent2go', [{ memberNumber: '500', name: 'Eve E', fields: { Year: fp(6), 'Swimming Ability': fp(5) } }]);
+    expect((await c.boardOf()).find((p) => p.memberNumber === '500')).toMatchObject({ state: 'changed', changed: ['Consent2Go: Year'] });
+
+    // Photo consent, names and Consent2Go answers fill in for people on the roster, leaving section and group alone.
+    const res = await api(`/events/${c.eventId}/intake/sync`, {
+      cookie: c.manager.cookie,
+      body: { people: [{ memberNumber: '500', names: { firstName: 'Evelyn', preferredName: 'Eve', lastName: 'Example' }, photoConsent: 'no', extra: { 'Swimming ability': 'Strong' } }] },
+    });
+    expect(res.status).toBe(200);
+    const p = (await c.boardOf()).find((x) => x.memberNumber === '500')!;
+    expect(p.roster).toMatchObject({ firstName: 'Evelyn', photoConsent: 'no', section: 'Scouts', groupName: '1st Example' });
   });
 
   it('keeps half-done checks and people left off the camp apart', async () => {
