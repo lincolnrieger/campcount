@@ -600,3 +600,38 @@
 .camp-delete {
   margin-top: var(--section-gap);
 }
+
+/* A leader's first scan: their car's rego */
+.rego-prompt {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 2px var(--brand);
+}
+.rego-label {
+  font-size: 1.125rem;
+  font-weight: var(--weight-heavy);
+}
+.rego-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.rego-input {
+  flex: 1 1 10rem;
+  font-size: 1.25rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.rego-failed {
+  color: var(--error-fg, #B3261E);
+  font-weight: var(--weight-bold);
+}
+.rego-done {
+  margin-top: var(--space-2);
+  font-weight: var(--weight-bold);
+}
