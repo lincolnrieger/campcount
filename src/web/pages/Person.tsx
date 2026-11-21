@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import type { DietaryEntryInput } from '../../shared/schemas';
-import { SECTIONS } from '../../shared/sections';
+import { SECTIONS, kindForSection } from '../../shared/sections';
 import { dayInZone, dayLabel, timeInZone, timeRange } from '../../shared/time';
 import { ApiFailure, api } from '../api';
 import { DietaryEditor, describeEntry } from '../components/DietaryEditor';
@@ -531,6 +531,7 @@ export function PersonEdit() {
 
 function DetailsForm({ r, back, path, onSaved }: { r: PersonData['registration']; back: { to: string; label: string }; path: string; onSaved: () => void }) {
   const navigate = useNavigate();
+  const { event } = useEvent();
   const [f, setF] = useState({
     firstName: r.firstName,
     preferredName: r.preferredName,
@@ -598,25 +599,17 @@ function DetailsForm({ r, back, path, onSaved }: { r: PersonData['registration']
         <Field id="p-member" label="Membership number" error={errors.memberNumber}>
           <input className="input" inputMode="numeric" value={f.memberNumber} onChange={set('memberNumber')} autoComplete="off" />
         </Field>
-        <div className="field-pair">
-          <Field id="p-kind" label="Youth or leader">
-            <select className="select" value={f.kind} onChange={set('kind')}>
-              <option value="youth">Youth</option>
-              <option value="adult">Leader</option>
-            </select>
-          </Field>
-          <Field id="p-section" label="Section">
-            <select className="select" value={f.section} onChange={set('section')}>
-              {SECTIONS.map((s) => (
-                <option key={s}>{s}</option>
-              ))}
-            </select>
-          </Field>
-        </div>
+        <Field id="p-section" label="Section" hint={`Counts as ${kindForSection(f.section, event.youthSections ?? []) === 'adult' ? 'an adult' : 'youth'} at this camp (Settings › Event details › Youth sections).`}>
+          <select className="select" value={f.section} onChange={set('section')}>
+            {SECTIONS.map((s) => (
+              <option key={s}>{s}</option>
+            ))}
+          </select>
+        </Field>
         <Field id="p-group" label="Scout group" optional>
           <input className="input" value={f.groupName} onChange={set('groupName')} autoComplete="off" />
         </Field>
-        {f.kind === 'adult' && (
+        {kindForSection(f.section, event.youthSections ?? []) === 'adult' && (
           <Field id="p-position" label="Role" optional hint="For example, Cub Leader, cook, first aider">
             <input className="input" value={f.position} onChange={set('position')} autoComplete="off" />
           </Field>
