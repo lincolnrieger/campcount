@@ -7,12 +7,11 @@ import { useSession } from '../session';
 import type { Me } from '../types';
 import { useTitle } from '../shell';
 
-/** The public card for sign-in pages: the CampCount mark and one task. */
+/** The public card for sign-in pages: one task, no branding. */
 export function PublicFrame({ children }: { children: ReactNode }) {
   return (
     <main className="public" id="main">
       <div className="public-card">
-        <img className="public-logo" src="/logo.png" alt="CampCount" width={112} height={112} />
         {children}
       </div>
     </main>

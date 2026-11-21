@@ -189,6 +189,8 @@ export const registrationPatchSchema = z.strictObject({
   lastName: importRowSchema.shape.lastName.optional(),
   kind: z.enum(['youth', 'adult']).optional(),
   section: trimmed(40).min(1).optional(),
+  /** A leader's car registration, for contacting them about it at camp. */
+  carRego: trimmed(20).optional(),
   groupName: trimmed(120).optional(),
   position: trimmed(120).optional(),
   photoConsent: z.enum(['yes', 'no', 'unknown']).optional(),

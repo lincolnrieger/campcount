@@ -36,13 +36,15 @@ export async function readMe(c: AppContext): Promise<Me | null> {
   return { registrationId, credentialId };
 }
 
-export async function writeMe(c: AppContext, me: Me) {
+/** Remember whose phone this is: until two days after the camp ends (at most 60 days), not for good. */
+export async function writeMe(c: AppContext, me: Me, endsOn?: string) {
+  const untilEnd = endsOn ? Math.floor((Date.parse(`${endsOn}T00:00:00Z`) + 2 * 86_400_000 - Date.now()) / 1000) : ME_DAYS * 86_400;
   setCookie(c, ME_COOKIE, `${me.registrationId}.${me.credentialId}.${await sign(c, me)}`, {
     path: '/',
     secure: true,
     httpOnly: true,
     sameSite: 'Strict',
-    maxAge: ME_DAYS * 86_400,
+    maxAge: Math.max(3600, Math.min(ME_DAYS * 86_400, untilEnd)),
   });
 }
 

@@ -43,7 +43,7 @@ export interface TeamEvent {
   maxSize: number | null;
   maxTeams: number | null;
   registrationOpen: boolean;
-  teams: { id: string; name: string; members: TeamMember[] }[];
+  teams: { id: string; name: string; locked?: boolean; joinCode?: string | null; members: TeamMember[] }[];
 }
 
 export interface Meal {

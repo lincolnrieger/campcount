@@ -43,6 +43,7 @@ export function Activities() {
               { label: 'Import programme', to: 'import' },
               { label: 'Schedule view', to: `${base}/schedule` },
               event.features.selfSignup && { label: 'Sign-up kiosk and posters', to: 'signup' },
+              event.features.selfSignup && { label: 'Booking links for emails', to: 'links' },
             ]
           : undefined
       }

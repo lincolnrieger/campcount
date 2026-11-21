@@ -97,7 +97,7 @@ describe('team events', () => {
     expect(joined.teamEvents[0].myTeam.members).toHaveLength(2);
     // Other people only see team names and sizes, never names.
     const d = await json(await api('/public/signup/identify', { body: { token: c.card('300').token } }));
-    expect(d.teamEvents[0].teams).toEqual([{ id: mine.myTeam.id, name: 'Dolphins', size: 2, full: true }]);
+    expect(d.teamEvents[0].teams).toEqual([{ id: mine.myTeam.id, name: 'Dolphins', locked: false, size: 2, full: true }]);
     expect((await api('/public/signup/team/join', { body: { pass: d.pass, teamId: mine.myTeam.id } })).status).toBe(409);
 
     // Leaving: the last one out removes the team.
@@ -106,6 +106,46 @@ describe('team events', () => {
     expect(left.teamEvents[0].teams).toEqual([]);
     const bookings = await testEnv.DB.prepare(`SELECT count(*) AS n FROM activity_bookings WHERE activity_id = ?`).bind(soccer).first<{ n: number }>();
     expect(bookings!.n).toBe(0);
+  });
+
+  it('keeps leaders off teams, and lets players lock a team and add friends', async () => {
+    const c = await camp();
+    const { id: soccer } = await json(
+      await api(`/events/${c.eventId}/team-events`, { cookie: c.manager.cookie, body: { name: 'Soccer', minSize: 1, maxSize: 4, registrationOpen: true } }),
+    );
+    // A leader on the camp.
+    await api(`/events/${c.eventId}/import/commit`, { cookie: c.manager.cookie, body: { rows: [{ ...person('900'), kind: 'adult', section: 'Leaders' }] } });
+    await api(`/events/${c.eventId}/credentials/issue`, { cookie: c.manager.cookie, body: { mode: 'missing' } });
+    const { cards } = await json(await api(`/events/${c.eventId}/credentials/print`, { cookie: c.manager.cookie, body: {} }));
+    const leader = cards.find((x: { name: string }) => x.name.startsWith('First900'));
+    const leaderView = await json(await api('/public/signup/identify', { body: { token: leader.qr.split('#')[1] } }));
+    expect(leaderView.teamEvents).toEqual([]);
+    expect((await api('/public/signup/team/create', { body: { pass: leaderView.pass, activityId: soccer, name: 'Coaches' } })).status).toBe(409);
+
+    // A locked team, made with a friend (and a leader, who can't be added).
+    const a = await passFor(c.card('100').token);
+    const made = await json(await api('/public/signup/team/create', { body: { pass: a, activityId: soccer, name: 'Owls', locked: true, friends: ['200', '900', '999999'] } }));
+    const owls = made.teamEvents[0].myTeam;
+    expect(owls).toMatchObject({ name: 'Owls', locked: true, members: ['First100 P.', 'First200 P.'] });
+    expect(owls.joinCode).toMatch(/^[A-Z0-9]{6}$/);
+    expect(made.teamNotice).toMatch(/900: leaders can’t be on teams; 999999: no one at camp/);
+
+    // Others see it locked and without its code; they need the code to join.
+    const d = await json(await api('/public/signup/identify', { body: { token: c.card('300').token } }));
+    expect(d.teamEvents[0].teams[0]).toMatchObject({ name: 'Owls', locked: true });
+    expect(JSON.stringify(d.teamEvents)).not.toContain(owls.joinCode);
+    expect((await api('/public/signup/team/join', { body: { pass: d.pass, teamId: owls.id } })).status).toBe(409);
+    expect((await api('/public/signup/team/join-code', { body: { pass: d.pass, activityId: soccer, code: 'WRONG1' } })).status).toBe(409);
+    const joined = await json(await api('/public/signup/team/join-code', { body: { pass: d.pass, activityId: soccer, code: owls.joinCode.toLowerCase() } }));
+    expect(joined.teamEvents[0].myTeam.members).toHaveLength(3);
+
+    // Someone on the team adds another friend; someone not on it can't.
+    const e = await passFor(c.card('400').token);
+    expect((await api('/public/signup/team/add', { body: { pass: e, teamId: owls.id, memberNumber: '100' } })).status).toBe(403);
+    const added = await json(await api('/public/signup/team/add', { body: { pass: a, teamId: owls.id, memberNumber: '400' } }));
+    expect(added.teamEvents[0].myTeam.members).toHaveLength(4);
+    // Staff can't put a leader on a team either.
+    expect((await api(`/events/${c.eventId}/teams/${owls.id}/members`, { cookie: c.manager.cookie, body: { registrationId: leader.registrationId } })).status).toBe(409);
   });
 
   it("is only for the event team and that event's own leader", async () => {

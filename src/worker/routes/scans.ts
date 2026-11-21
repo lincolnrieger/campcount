@@ -17,7 +17,7 @@ import { forgetDashboard } from '../services/reports';
 import type { ScanContext } from '../services/contexts';
 import { canScan, loadContext, loadTimeline } from '../services/contexts';
 import type { Principal } from '../services/principal';
-import { can } from '../services/principal';
+import { activityAccess, can } from '../services/principal';
 import { SESSION_COOKIE, createSession } from '../services/sessions';
 import { getEventRow } from './events';
 import { displayName } from '../../shared/names';
@@ -51,7 +51,9 @@ export function codeHash(eventId: string, code: string): Promise<string> {
 /**
  * Everything a scanning device needs to work offline for one context: who is
  * on the roster (display fields only), credential hashes, and current state.
- * Raw tokens and typed codes are never included, only their hashes.
+ * Raw tokens are never included. Typed codes are membership numbers, so their
+ * hashes only slow down, not stop, someone holding the device: the numbers
+ * themselves go only to people who can see the roster.
  */
 async function snapshot(c: AppContext) {
   const eventId = c.req.param('eventId')!;
@@ -63,10 +65,12 @@ async function snapshot(c: AppContext) {
 
   const showPhoto = event.feature_photo === 1 && can(principal, 'photo.view_status', { eventId });
   const showDietary = ctx.type === 'meal' && event.feature_dietary === 1 && can(principal, 'dietary.view_alert', { eventId });
+  const showNumbers = can(principal, 'roster.view', { eventId });
 
   const [people, credentials, dietary, bookings, timeline] = await Promise.all([
     c.env.DB.prepare(
-      `SELECT r.id, p.member_number, p.first_name, p.preferred_name, p.last_name, r.kind, r.section, r.group_name, r.photo_consent, r.status
+      `SELECT r.id, p.member_number, p.first_name, p.preferred_name, p.last_name, r.kind, r.section, r.group_name, r.photo_consent, r.status,
+              r.car_rego_asked_at
          FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.event_id = ?`,
     )
       .bind(eventId)
@@ -101,12 +105,14 @@ async function snapshot(c: AppContext) {
         name: displayName(p.first_name!, p.preferred_name!, p.last_name!),
         // Full name for staff search on the scanner (lanyards only show the initial).
         fullName: `${p.preferred_name || p.first_name} ${p.last_name}`,
-        memberNumber: p.member_number,
+        ...(showNumbers ? { memberNumber: p.member_number } : {}),
         group: p.group_name,
         section: p.section,
         kind: p.kind,
         withdrawn: p.status === 'withdrawn',
         booked: booked.has(p.id!),
+        // Leaders are asked for their car's rego the first time they're scanned.
+        ...(p.kind === 'adult' && !p.car_rego_asked_at && p.status === 'active' ? { askRego: true } : {}),
         ...(showPhoto && p.photo_consent !== 'yes' ? { noPhotos: true } : {}),
         ...(showDietary ? { dietaryAlert: dietaryAlert(dietaryBy.get(p.id!) ?? []) } : {}),
         state: state ? { present: state.present, visits: state.visits, lastAcceptedAt: state.lastAcceptedAt } : null,
@@ -485,4 +491,40 @@ scanRoutes.get('/meals/:mealId/served', async (c) => {
       };
     }),
   });
+});
+
+/**
+ * A leader's car rego, asked at their first scan (or skipped: rego null).
+ * Anyone who can scan at this camp can record it; it's then shown on the
+ * person's page to people who can see the roster.
+ */
+scanRoutes.post('/registrations/:registrationId/rego', async (c) => {
+  const eventId = c.req.param('eventId')!;
+  const principal = c.get('principal');
+  if (!principal) throw forbidden();
+  const scans =
+    can(principal, 'site.scan', { eventId }) ||
+    can(principal, 'meal.scan', { eventId }) ||
+    can(principal, 'roster.edit', { eventId }) ||
+    activityAccess(principal, 'activity.scan', eventId) === 'all' ||
+    (activityAccess(principal, 'activity.scan', eventId) as Set<string>).size > 0;
+  if (!scans) throw forbidden();
+  const id = z.uuid().safeParse(c.req.param('registrationId'));
+  if (!id.success) throw notFound();
+  const { rego } = await parseBody(c, z.strictObject({ rego: z.string().trim().max(20).nullable() }));
+  const now = nowIso();
+  const res = await c.env.DB.prepare(
+    `UPDATE registrations SET car_rego = COALESCE(?, car_rego), car_rego_asked_at = COALESCE(car_rego_asked_at, ?), updated_at = ? WHERE id = ? AND event_id = ? AND kind = 'adult'`,
+  )
+    .bind(rego ? rego.toUpperCase() : null, now, now, id.data, eventId)
+    .run();
+  if (res.meta.changes !== 1) throw notFound();
+  await auditStatement(c.env.DB, {
+    actor: principal.kind === 'user' ? { type: 'user', id: principal.userId } : { type: 'station', id: principal.stationId },
+    action: rego ? 'registration.car_rego' : 'registration.car_rego_skipped',
+    eventId,
+    targetType: 'registration',
+    targetId: id.data,
+  }).run();
+  return c.json({ ok: true });
 });

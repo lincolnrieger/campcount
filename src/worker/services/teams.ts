@@ -34,6 +34,9 @@ export interface TeamMember {
 export interface TeamDto {
   id: string;
   name: string;
+  /** Locked teams are joined with their code, or by being added by someone on them. */
+  locked: boolean;
+  joinCode: string | null;
   members: TeamMember[];
 }
 
@@ -63,7 +66,10 @@ export async function loadTeamEvents(db: D1Database, eventId: string, only?: Set
       .prepare(`${TEAM_EVENT_SELECT} WHERE t.event_id = ? ORDER BY a.starts_at IS NULL, a.starts_at, a.name COLLATE NOCASE`)
       .bind(eventId)
       .all<TeamEventRow>(),
-    db.prepare(`SELECT id, activity_id, name FROM teams WHERE event_id = ? ORDER BY created_at`).bind(eventId).all<{ id: string; activity_id: string; name: string }>(),
+    db
+      .prepare(`SELECT id, activity_id, name, locked, join_code FROM teams WHERE event_id = ? ORDER BY created_at`)
+      .bind(eventId)
+      .all<{ id: string; activity_id: string; name: string; locked: number; join_code: string | null }>(),
     db
       .prepare(
         `SELECT m.team_id, m.registration_id, m.source, p.first_name, p.preferred_name, p.last_name, r.group_name, r.section, r.kind
@@ -99,7 +105,9 @@ export async function loadTeamEvents(db: D1Database, eventId: string, only?: Set
       maxSize: e.max_size,
       maxTeams: e.max_teams,
       registrationOpen: e.registration_open === 1,
-      teams: teams.results.filter((t) => t.activity_id === e.activity_id).map((t) => ({ id: t.id, name: t.name, members: byTeam.get(t.id) ?? [] })),
+      teams: teams.results
+        .filter((t) => t.activity_id === e.activity_id)
+        .map((t) => ({ id: t.id, name: t.name, locked: t.locked === 1, joinCode: t.join_code, members: byTeam.get(t.id) ?? [] })),
     }));
 }
 
@@ -108,20 +116,42 @@ export async function teamEventRow(db: D1Database, eventId: string, activityId: 
 }
 
 export async function teamRow(db: D1Database, eventId: string, teamId: string) {
-  return db.prepare(`SELECT id, activity_id, name FROM teams WHERE id = ? AND event_id = ?`).bind(teamId, eventId).first<{ id: string; activity_id: string; name: string }>();
+  return db
+    .prepare(`SELECT id, activity_id, name, locked, join_code FROM teams WHERE id = ? AND event_id = ?`)
+    .bind(teamId, eventId)
+    .first<{ id: string; activity_id: string; name: string; locked: number; join_code: string | null }>();
 }
 
-/** Make a team. Checks the event's team limit and that the name is free. */
-export async function createTeam(db: D1Database, eventId: string, te: TeamEventRow, name: string): Promise<string> {
+/** A locked team's code: six letters and numbers that are hard to mix up. */
+export function newJoinCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  return [...bytes].map((b) => chars[b % chars.length]).join('');
+}
+
+/** Someone at this camp by membership number (as on their lanyard), if they're active. */
+export async function findByMemberNumber(db: D1Database, eventId: string, memberNumber: string) {
+  const k = memberNumber.replace(/\s+/g, '').toUpperCase().replace(/^0+(?=.)/, '');
+  return db
+    .prepare(
+      `SELECT r.id, r.kind FROM registrations r JOIN people p ON p.id = r.person_id
+        WHERE r.event_id = ? AND r.status = 'active' AND ltrim(upper(replace(p.member_number, ' ', '')), '0') = ?`,
+    )
+    .bind(eventId, k)
+    .first<{ id: string; kind: string }>();
+}
+
+/** Make a team (open, or locked with a join code). Checks the event's team limit and that the name is free. */
+export async function createTeam(db: D1Database, eventId: string, te: TeamEventRow, name: string, locked = false): Promise<string> {
   const id = crypto.randomUUID();
   const taken = await db.prepare(`SELECT 1 FROM teams WHERE activity_id = ? AND name = ? COLLATE NOCASE`).bind(te.activity_id, name).first();
   if (taken) throw conflict(`There's already a team called ${name}. Choose another name.`);
   const res = await db
     .prepare(
-      `INSERT INTO teams (id, event_id, activity_id, name, created_at)
-       SELECT ?1, ?2, ?3, ?4, ?5 WHERE ?6 IS NULL OR (SELECT count(*) FROM teams WHERE activity_id = ?3) < ?6`,
+      `INSERT INTO teams (id, event_id, activity_id, name, created_at, locked, join_code)
+       SELECT ?1, ?2, ?3, ?4, ?5, ?7, ?8 WHERE ?6 IS NULL OR (SELECT count(*) FROM teams WHERE activity_id = ?3) < ?6`,
     )
-    .bind(id, eventId, te.activity_id, name, nowIso(), te.max_teams)
+    .bind(id, eventId, te.activity_id, name, nowIso(), te.max_teams, locked ? 1 : 0, locked ? newJoinCode() : null)
     .run();
   if (res.meta.changes !== 1) throw conflict(`${te.name} already has ${te.max_teams} teams, the most allowed.`);
   return id;
@@ -139,8 +169,10 @@ export async function addMember(
   registrationId: string,
   source: 'manual' | 'self_signup',
 ): Promise<void> {
-  const reg = await db.prepare(`SELECT 1 FROM registrations WHERE id = ? AND event_id = ? AND status = 'active'`).bind(registrationId, eventId).first();
+  const reg = await db.prepare(`SELECT kind FROM registrations WHERE id = ? AND event_id = ? AND status = 'active'`).bind(registrationId, eventId).first<{ kind: string }>();
   if (!reg) throw notFound();
+  // Teams are for young people: leaders run them, they don't play on them.
+  if (reg.kind === 'adult') throw conflict('Leaders can’t be on teams.');
   const already = await db
     .prepare(`SELECT team_id FROM team_members WHERE activity_id = ? AND registration_id = ?`)
     .bind(te.activity_id, registrationId)
@@ -213,8 +245,9 @@ export async function participantTeams(db: D1Database, eventId: string, registra
         maxSize: e.maxSize,
         open: e.registrationOpen,
         canMakeTeam: e.registrationOpen && !mine && (e.maxTeams === null || e.teams.length < e.maxTeams),
-        myTeam: mine ? { id: mine.id, name: mine.name, members: mine.members.map((m) => m.name) } : null,
-        teams: e.teams.map((t) => ({ id: t.id, name: t.name, size: t.members.length, full: e.maxSize !== null && t.members.length >= e.maxSize })),
+        // The code is only for people on the team, to share with friends.
+        myTeam: mine ? { id: mine.id, name: mine.name, locked: mine.locked, joinCode: mine.locked ? mine.joinCode : null, members: mine.members.map((m) => m.name) } : null,
+        teams: e.teams.map((t) => ({ id: t.id, name: t.name, locked: t.locked, size: t.members.length, full: e.maxSize !== null && t.members.length >= e.maxSize })),
       };
     });
 }

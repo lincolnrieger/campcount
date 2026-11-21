@@ -240,8 +240,11 @@ function Page({ view, busy, actions }: { view: SignupView; busy: boolean; action
                 teamEvents={teamEvents}
                 tz={tz}
                 busy={busy}
-                onCreate={(id, name) => actions.createTeam(id, name)}
+                notice={view.teamNotice}
+                onCreate={(id, name, locked, friends) => actions.createTeam(id, name, locked, friends)}
                 onJoin={(id, name) => actions.joinTeam(id, name)}
+                onJoinCode={(id, code) => actions.joinTeamWithCode(id, code)}
+                onAddFriend={(id, n) => actions.addFriend(id, n)}
                 onLeave={(id) => actions.leaveTeam(id)}
               />
             </div>

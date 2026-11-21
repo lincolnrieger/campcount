@@ -30,6 +30,8 @@ import { LeaderRoster } from './pages/LeaderRoster';
 import { BannerSettings } from './pages/BannerSettings';
 import { SectionsSettings } from './pages/SectionsSettings';
 import { Intake } from './pages/Intake';
+import { BookingLinks } from './pages/BookingLinks';
+const BookLink = lazy(() => import('./pages/BookLink').then((m) => ({ default: m.BookLink })));
 import { Pair } from './pages/Pair';
 import { ScanHub } from './pages/ScanHub';
 import { Stations } from './pages/Stations';
@@ -173,6 +175,7 @@ function EventSiteApp({ site }: { site: Extract<SiteInfo, { kind: 'event' }> }) 
         <Route path="/pair" element={<Pair />} />
         <Route path="/signup/:code" element={<SignupKiosk />} />
         <Route path="/c" element={<Participant />} />
+        <Route path="/book/:code/:activityId" element={<BookLink />} />
         <Route
           path="/events/:eventId/scan/:type/:contextId?"
           element={
@@ -210,6 +213,7 @@ function EventSiteApp({ site }: { site: Extract<SiteInfo, { kind: 'event' }> }) 
             <Route path="teams" element={<TeamEvents />} />
             <Route path="teams/:teamEventId" element={<TeamEventPage />} />
             <Route path="activities/signup" element={<SignupScreen />} />
+            <Route path="activities/links" element={<BookingLinks />} />
             <Route path="activities/:activityId" element={<ActivityRoster />} />
             <Route path="activities/:activityId/edit" element={<ActivityEdit />} />
             <Route path="meals" element={<Meals />} />
@@ -248,6 +252,7 @@ function PlatformApp() {
         <Route path="/pair" element={<Pair />} />
         <Route path="/signup/:code" element={<SignupKiosk />} />
         <Route path="/c" element={<Participant />} />
+        <Route path="/book/:code/:activityId" element={<BookLink />} />
         {/* The scanner is full screen: no sidebar or tab bar. */}
         <Route
           path="/events/:eventId/scan/:type/:contextId?"
@@ -289,6 +294,7 @@ function PlatformApp() {
             <Route path="teams" element={<TeamEvents />} />
             <Route path="teams/:teamEventId" element={<TeamEventPage />} />
             <Route path="activities/signup" element={<SignupScreen />} />
+            <Route path="activities/links" element={<BookingLinks />} />
             <Route path="activities/:activityId" element={<ActivityRoster />} />
             <Route path="activities/:activityId/edit" element={<ActivityEdit />} />
             <Route path="meals" element={<Meals />} />

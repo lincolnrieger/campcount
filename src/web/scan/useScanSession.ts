@@ -12,13 +12,16 @@ export interface SnapshotPerson {
   id: string;
   name: string;
   fullName?: string;
-  memberNumber: string;
+  /** Only for people who can see the roster. */
+  memberNumber?: string;
   group: string;
   section: string;
   kind: 'youth' | 'adult';
   withdrawn: boolean;
   booked: boolean;
   noPhotos?: boolean;
+  /** A leader not yet asked for their car's rego. */
+  askRego?: boolean;
   dietaryAlert?: string | null;
   state: PersonState | null;
 }
