@@ -67,6 +67,10 @@ export async function saveSnapshot(key: string, snapshot: unknown): Promise<void
   await request((await store('snapshots', 'readwrite')).put(snapshot, key));
 }
 
+export async function deleteSnapshot(key: string): Promise<void> {
+  await request((await store('snapshots', 'readwrite')).delete(key));
+}
+
 export async function loadSnapshot<T>(key: string): Promise<T | undefined> {
   return (await request((await store('snapshots')).get(key))) as T | undefined;
 }

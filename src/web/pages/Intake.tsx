@@ -1,163 +1,223 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { IntakePerson, IntakeSource, IntakeState } from '../../shared/intake';
-import { SOURCE_NAME, needsCheck } from '../../shared/intake';
-import { csvCell } from '../../shared/csv';
-import { suggestDietary } from '../../shared/dietarySuggest';
-import { matchesSearch } from '../../shared/search';
-import { saysNothing } from '../../shared/myscout';
-import { SECTIONS } from '../../shared/sections';
-import type { DietaryEntryInput, ImportRow } from '../../shared/schemas';
-import { ApiFailure, api } from '../api';
-import { DietaryEditor, describeEntry } from '../components/DietaryEditor';
-import type { ReadFile, SourceRecord } from '../import/intakeFiles';
-import { autoDetails, dietaryFingerprint, fingerprints, hmacKey, memberKey, readIntakeFile } from '../import/intakeFiles';
-import { useApi } from '../useApi';
-import { Badge, Button, ButtonLink, Choice, CountTile, EmptyState, Icon, LoadError, Loading, Notice, PageHeader, SearchField, Section, plural, useConfirm, useToast } from '../ui';
-import { useEvent } from './EventLayout';
+import { useEffect, useMemo, useState } from "react";
+import { csvCell } from "../../shared/csv";
+import { suggestDietary } from "../../shared/dietarySuggest";
+import type {
+  Linked,
+  RosterPerson,
+  Section as SectionName,
+} from "../../shared/localIntake";
+import {
+  autoSection,
+  buildRow,
+  dietaryNotes,
+  dietarySignature,
+  displayName,
+  hasDietaryNotes,
+  linkPeople,
+  memberKey,
+  needsSection,
+} from "../../shared/localIntake";
+import type { DietaryEntryInput, ImportRow } from "../../shared/schemas";
+import { ApiFailure, api } from "../api";
+import { DietaryEditor } from "../components/DietaryEditor";
+import type { LocalImport, ReadFile, Source } from "../import/intakeFiles";
+import {
+  SOURCE_NAME,
+  clearLocal,
+  emptyLocal,
+  loadLocal,
+  readIntakeFile,
+  saveLocal,
+} from "../import/intakeFiles";
+import { useApi } from "../useApi";
+import {
+  Badge,
+  Button,
+  CountTile,
+  EmptyState,
+  Icon,
+  LoadError,
+  Loading,
+  Notice,
+  PageHeader,
+  Section,
+  plural,
+  useConfirm,
+  useToast,
+} from "../ui";
+import { useEvent } from "./EventLayout";
 
-interface Board {
-  people: IntakePerson[];
-  lastUpload: Record<IntakeSource, string | null>;
-  fingerprintKey: string;
-  dietaryEnabled: boolean;
-  canEditDietary: boolean;
-  editable: boolean;
-  checklist: { key: string; label: string }[];
+interface Registration {
+  id: string;
+  memberNumber: string;
+  firstName: string;
+  preferredName: string;
+  lastName: string;
+  section: string;
+  groupName: string;
+  position: string;
+  status: string;
+  dietary?: DietaryEntryInput[];
 }
 
-type Files = Map<string, Partial<Record<IntakeSource, SourceRecord>>>;
-type Filter = 'todo' | 'all' | 'checked' | 'both' | 'myscout' | 'consent2go' | 'left_off' | 'roster_only';
+const SECTION_CHOICES: { value: SectionName; label: string }[] = [
+  { value: "Joeys", label: "Joey" },
+  { value: "Cubs", label: "Cub" },
+  { value: "Scouts", label: "Scout" },
+  { value: "Venturers", label: "Venturer" },
+  { value: "Rovers", label: "Rover" },
+  { value: "Leaders", label: "Leader / Adult Helper" },
+  { value: "Other", label: "Other" },
+];
 
-const STATE_BADGE: Record<IntakeState, { tone: 'neutral' | 'success' | 'warning' | 'info' | 'error'; text: string }> = {
-  new: { tone: 'info', text: 'To check' },
-  changed: { tone: 'warning', text: 'Changed' },
-  in_progress: { tone: 'warning', text: 'Half done' },
-  checked: { tone: 'success', text: 'Checked' },
-  left_off: { tone: 'neutral', text: 'Left off camp' },
-  roster_only: { tone: 'neutral', text: 'Not in either file' },
-};
-
-const FILTER_FILE: Record<Filter, string> = {
-  todo: 'To check',
-  all: 'Everyone',
-  checked: 'Checked',
-  both: 'Done both',
-  myscout: 'No Consent2Go yet',
-  consent2go: 'Not in MyScout',
-  left_off: 'Left off camp',
-  roster_only: 'In neither file',
-};
+const fail = (err: unknown) =>
+  err instanceof ApiFailure || err instanceof Error
+    ? err.message
+    : "No connection. Check your signal and try again.";
+const when = (iso: string) =>
+  new Date(iso).toLocaleString("en-AU", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 
 function downloadCsv(filename: string, rows: string[][]) {
-  const text = rows.map((r) => r.map(csvCell).join(',')).join('\r\n');
-  const url = URL.createObjectURL(new Blob(['\uFEFF' + text], { type: 'text/csv' }));
-  const a = document.createElement('a');
+  const text = rows.map((r) => r.map(csvCell).join(",")).join("\r\n");
+  const url = URL.createObjectURL(new Blob(["﻿" + text], { type: "text/csv" }));
+  const a = document.createElement("a");
   a.href = url;
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
 }
 
-const fail = (err: unknown) => (err instanceof ApiFailure || err instanceof Error ? err.message : 'No connection. Check your signal and try again.');
-const when = (iso: string) => new Date(iso).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
-
 /**
- * People › Import & check. Upload the MyScout and Consent2Go exports
- * (together or one at a time, as often as you like), then check each person
- * with both files side by side. People already checked are skipped next time
- * unless something about them changed, or they've since filled in the other.
+ * People › Import & check. Upload the MyScout and Consent2Go exports (as
+ * often as you like). Everyone goes onto the roster straight away; sections
+ * come from the MyScout position, and anyone whose position isn't a plain
+ * section gets one chosen here. Dietary notes from both files are then read
+ * one person at a time. The files, and what's been done, stay in this
+ * browser only: nothing about them is kept on the server.
  */
 export function Intake() {
   const { event, base } = useEvent();
   const toast = useToast();
   const confirm = useConfirm();
-  const { data, error, loading, reload } = useApi<Board>(`/events/${event.id}/intake`);
-  const [board, setBoard] = useState<Board | null>(null);
-  const [files, setFiles] = useState<Files>(new Map());
-  const [read, setRead] = useState<ReadFile[]>([]);
+  const context = useApi<{ dietaryEnabled: boolean; canEditDietary: boolean }>(
+    `/events/${event.id}/import/context`,
+  );
+  const registrations = useApi<{ registrations: Registration[] }>(
+    `/events/${event.id}/registrations`,
+  );
+  const [local, setLocalState] = useState<LocalImport | null>(null);
+  useEffect(() => {
+    let live = true;
+    void loadLocal(event.id).then((l) => live && setLocalState(l));
+    return () => {
+      live = false;
+    };
+  }, [event.id]);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  const [filter, setFilter] = useState<Filter>('todo');
-  const [q, setQ] = useState('');
-  const [open, setOpen] = useState<string | null>(null);
-  const top = useRef<HTMLDivElement>(null);
+  const [summary, setSummary] = useState<string | null>(null);
+  /** People put off for now (this visit only): they go to the back of the dietary queue. */
+  const [later, setLater] = useState<string[]>([]);
+  const update = (fn: (l: LocalImport) => LocalImport) =>
+    setLocalState((prev) => {
+      const next = fn(prev ?? emptyLocal());
+      saveLocal(event.id, next);
+      return next;
+    });
 
-  useEffect(() => {
-    if (data) setBoard(data);
-  }, [data]);
-
-  const people = useMemo(() => board?.people ?? [], [board]);
-  const counts = useMemo(
-    () => ({
-      todo: people.filter((p) => needsCheck(p.state)).length,
-      checked: people.filter((p) => p.state === 'checked').length,
-      both: people.filter((p) => p.myscout && p.consent2go).length,
-      myscout: people.filter((p) => p.myscout && !p.consent2go).length,
-      consent2go: people.filter((p) => !p.myscout && p.consent2go).length,
-      left_off: people.filter((p) => p.state === 'left_off').length,
-      roster_only: people.filter((p) => p.state === 'roster_only').length,
-      all: people.length,
-    }),
-    [people],
+  const regs = useMemo(
+    () => registrations.data?.registrations ?? [],
+    [registrations.data],
   );
-  const shown = people.filter((p) => {
-    const keep =
-      filter === 'all' ||
-      (filter === 'todo' && needsCheck(p.state)) ||
-      (filter === 'checked' && p.state === 'checked') ||
-      (filter === 'both' && p.myscout && p.consent2go) ||
-      (filter === 'myscout' && p.myscout && !p.consent2go) ||
-      (filter === 'consent2go' && !p.myscout && p.consent2go) ||
-      (filter === 'left_off' && p.state === 'left_off') ||
-      (filter === 'roster_only' && p.state === 'roster_only');
-    return keep && (!q.trim() || matchesSearch(q, `${p.name} ${p.memberNumber} ${p.groupName}`));
-  });
+  const roster: RosterPerson[] = useMemo(
+    () =>
+      regs.map((r) => ({
+        id: r.id,
+        memberNumber: r.memberNumber,
+        firstName: r.firstName,
+        preferredName: r.preferredName,
+        lastName: r.lastName,
+        section: r.section,
+        groupName: r.groupName,
+        position: r.position,
+        status: r.status,
+      })),
+    [regs],
+  );
+  const files = local?.files;
+  const { people, unmatched } = useMemo(
+    () =>
+      linkPeople(
+        files?.myscout?.people ?? [],
+        files?.consent2go?.people ?? [],
+        roster,
+      ),
+    [files, roster],
+  );
+  const regByKey = useMemo(
+    () => new Map(regs.map((r) => [memberKey(r.memberNumber), r])),
+    [regs],
+  );
+
+  async function sendToRoster(
+    files: LocalImport["files"],
+    chosen: LocalImport["chosen"],
+  ) {
+    const { people: linked } = linkPeople(
+      files.myscout?.people ?? [],
+      files.consent2go?.people ?? [],
+      roster,
+    );
+    const rows = linked
+      .map((p) => buildRow(p, chosen[p.key] as SectionName | undefined))
+      .filter((r): r is ImportRow => r !== null);
+    const totals = { create: 0, update: 0, unchanged: 0 };
+    for (let i = 0; i < rows.length; i += 1000) {
+      const res = await api<{ counts: typeof totals }>(
+        `/events/${event.id}/import/commit`,
+        {
+          body: {
+            rows: rows.slice(i, i + 1000),
+            withdrawMissing: false,
+            sourceLabel: "Import & check",
+            source: "myscout",
+          },
+        },
+      );
+      totals.create += res.counts.create;
+      totals.update += res.counts.update;
+      totals.unchanged += res.counts.unchanged;
+    }
+    return totals;
+  }
 
   async function upload(list: FileList) {
-    if (!board) return;
     setProblem(null);
+    setSummary(null);
     setBusy(true);
     try {
-      const key = await hmacKey(board.fingerprintKey);
       const results: ReadFile[] = [];
       for (const f of [...list]) results.push(await readIntakeFile(f));
-      const next: Files = new Map(files);
-      for (const r of results) {
-        for (const rec of r.records) next.set(rec.key, { ...next.get(rec.key), [r.source]: rec });
-        // Tell the server who is in the file: names and fingerprints only.
-        const sent = await Promise.all(
-          r.records.map(async (rec) => ({
-            memberNumber: rec.prepared.row.memberNumber,
-            name: `${rec.prepared.row.preferredName || rec.prepared.row.firstName} ${rec.prepared.row.lastName}`.trim().slice(0, 130),
-            section: rec.prepared.row.section,
-            groupName: rec.prepared.row.groupName,
-            fields: await fingerprints(key, r.source, rec.raw),
-          })),
-        );
-        for (let i = 0; i < sent.length; i += 100) await api(`/events/${event.id}/intake/seen`, { body: { source: r.source, people: sent.slice(i, i + 100) } });
-      }
-      // People already on the roster: fill in names, photo consent and Consent2Go answers straight away.
-      const onRoster = new Set(board.people.filter((p) => p.roster).map((p) => memberKey(p.memberNumber)));
-      const touched = new Set(results.flatMap((r) => r.records.map((rec) => rec.key)));
-      const sync = [...touched]
-        .filter((k) => onRoster.has(k))
-        .map((k) => {
-          const f = next.get(k)!;
-          const auto = autoDetails(f);
-          return {
-            memberNumber: (f.myscout ?? f.consent2go)!.prepared.row.memberNumber,
-            ...(auto.namesFromMyScout && auto.names ? { names: auto.names } : {}),
-            ...(auto.photoConsent ? { photoConsent: auto.photoConsent } : {}),
-            ...(auto.extra ? { extra: auto.extra } : {}),
-          };
-        })
-        .filter((x) => Object.keys(x).length > 1);
-      for (let i = 0; i < sync.length; i += 200) await api(`/events/${event.id}/intake/sync`, { body: { people: sync.slice(i, i + 200) } });
-      setFiles(next);
-      setRead((prev) => [...prev.filter((p) => !results.some((r) => r.source === p.source)), ...results]);
-      await reload();
-      setFilter('todo');
-      toast(results.map((r) => `${SOURCE_NAME[r.source]}: ${plural(r.records.length, 'person', 'people')}`).join(' · '));
+      const next = { ...local?.files };
+      for (const r of results)
+        next[r.source] = {
+          fileName: r.fileName,
+          at: new Date().toISOString(),
+          people: r.people,
+          problems: r.problems,
+        };
+      const totals = await sendToRoster(next, local?.chosen ?? {});
+      update((l) => ({ ...l, files: next }));
+      await registrations.reload();
+      setSummary(
+        `${results.map((r) => `${SOURCE_NAME[r.source]}: ${plural(r.people.length, "person", "people")}`).join(" · ")}. On the roster: ${totals.create} added, ${totals.update} updated, ${totals.unchanged} unchanged.`,
+      );
     } catch (err) {
       setProblem(fail(err));
     } finally {
@@ -165,104 +225,116 @@ export function Intake() {
     }
   }
 
-  /** Forget files: on this screen, and the server's record of who was in them. */
-  async function clear(which: IntakeSource | 'all') {
-    const ok = await confirm(
-      which === 'all'
-        ? {
-            title: 'Start over?',
-            body: (
-              <p>
-                Forgets both uploads and every check, so the list is empty. People already added to the roster stay there; remove them on the People page if they
-                shouldn’t be.
-              </p>
-            ),
-            confirm: 'Start over',
-            danger: true,
-          }
-        : {
-            title: `Clear the ${SOURCE_NAME[which]} upload?`,
-            body: <p>Forgets who was in the {SOURCE_NAME[which]} file. Checks and the roster stay as they are. Upload the right file to bring people back.</p>,
-            confirm: 'Clear',
-            danger: true,
-          },
-    );
-    if (!ok) return;
-    setBusy(true);
+  async function chooseSection(p: Linked, section: SectionName) {
+    const reg = regByKey.get(p.key);
+    if (!reg) return;
     try {
-      await api(`/events/${event.id}/intake/uploads?source=${which}`, { method: 'DELETE' });
-      const drop = (src: IntakeSource) => which === 'all' || which === src;
-      setRead((prev) => prev.filter((r) => !drop(r.source)));
-      setFiles((prev) => {
-        const next: Files = new Map();
-        for (const [k, v] of prev) {
-          const kept = Object.fromEntries(Object.entries(v).filter(([src]) => !drop(src as IntakeSource)));
-          if (Object.keys(kept).length) next.set(k, kept);
-        }
-        return next;
+      await api(`/events/${event.id}/registrations/${reg.id}`, {
+        method: "PATCH",
+        body: { section, kind: section === "Leaders" ? "adult" : "youth" },
       });
-      await reload();
-      toast(which === 'all' ? 'Started over' : `${SOURCE_NAME[which]} upload cleared`);
+      update((l) => ({ ...l, chosen: { ...l.chosen, [p.key]: section } }));
+      await registrations.reload();
+      toast(
+        `${displayName(p)}: ${SECTION_CHOICES.find((c) => c.value === section)?.label}`,
+      );
     } catch (err) {
-      setProblem(fail(err));
-    } finally {
-      setBusy(false);
+      toast(fail(err), { tone: "error" });
     }
   }
 
-  const back = { to: `${base}/people`, label: 'People' };
+  async function forget() {
+    const ok = await confirm({
+      title: "Clear from this computer?",
+      body: (
+        <p>
+          Forgets the uploaded files, the sections you chose and which dietary
+          notes you’ve done, on this computer. The roster stays as it is.
+        </p>
+      ),
+      confirm: "Clear",
+      danger: true,
+    });
+    if (!ok) return;
+    await clearLocal(event.id);
+    setLocalState(emptyLocal());
+    setSummary(null);
+  }
+
   const header = (
     <PageHeader
       title="Import & check"
-      back={back}
-      summary="Upload the MyScout export once, and Consent2Go as often as you like. Check each person’s section, Scout group and dietary needs; everything else fills in by itself. Anyone checked is skipped next time, unless their section, group or dietary notes change, or their Consent2Go arrives."
-      menu={[{ label: 'Import with column matching', to: `${base}/people/import/columns` }]}
+      back={{ to: `${base}/people`, label: "People" }}
+      summary="Upload the MyScout and Consent2Go exports, as often as you like. Everyone goes onto the roster straight away. Then choose sections where the MyScout position doesn’t say, and read through dietary notes. The files stay on this computer."
+      menu={[
+        {
+          label: "Import with column matching",
+          to: `${base}/people/import/columns`,
+        },
+      ]}
     />
   );
-  if (loading && !board) return (<>{header}<Loading what="the import" rows={6} /></>);
-  if (error && !board) return (<>{header}<LoadError error={error} onRetry={reload} what="the import" /></>);
-  if (!board) return null;
-
-  const openIndex = open ? shown.findIndex((p) => memberKey(p.memberNumber) === open) : -1;
-  const person = open ? people.find((p) => memberKey(p.memberNumber) === open) : undefined;
-  if (person) {
-    const go = (i: number) => {
-      const p = shown[i];
-      setOpen(p ? memberKey(p.memberNumber) : null);
-      top.current?.scrollIntoView();
-    };
+  if (
+    !local ||
+    (context.loading && !context.data) ||
+    (registrations.loading && !registrations.data)
+  )
     return (
-      <div ref={top}>
-        <CheckCard
-          key={person.memberNumber}
-          eventId={event.id}
-          peopleBase={`${base}/people`}
-          board={board}
-          person={person}
-          files={files.get(memberKey(person.memberNumber)) ?? {}}
-          position={openIndex >= 0 ? { at: openIndex + 1, of: shown.length } : null}
-          onBack={() => setOpen(null)}
-          onPrev={openIndex > 0 ? () => go(openIndex - 1) : undefined}
-          onNext={openIndex >= 0 && openIndex < shown.length - 1 ? () => go(openIndex + 1) : undefined}
-          onSaved={(updated, advance) => {
-            setBoard((b) => (b ? { ...b, people: b.people.map((p) => (memberKey(p.memberNumber) === memberKey(updated.memberNumber) ? updated : p)) } : b));
-            if (advance) {
-              // The list is filtered: the next one to do is at the same place once this one drops off "To check".
-              const rest = shown.filter((p) => memberKey(p.memberNumber) !== memberKey(updated.memberNumber));
-              const stillShown = filter !== 'todo' || needsCheck(updated.state);
-              const nextP = stillShown ? shown[openIndex + 1] : rest[openIndex];
-              setOpen(nextP ? memberKey(nextP.memberNumber) : null);
-              top.current?.scrollIntoView();
-            }
-          }}
-        />
-      </div>
+      <>
+        {header}
+        <Loading what="the import" rows={6} />
+      </>
     );
-  }
+  const loadError = context.error ?? registrations.error;
+  if (loadError)
+    return (
+      <>
+        {header}
+        <LoadError
+          error={loadError}
+          onRetry={() => {
+            void context.reload();
+            void registrations.reload();
+          }}
+          what="the import"
+        />
+      </>
+    );
 
-  const tile = (f: Filter, label: string, tone: 'neutral' | 'success' | 'warning' | 'info' = 'neutral') => (
-    <CountTile value={counts[f]} label={label} tone={tone} pressed={filter === f} onPress={() => setFilter(f)} />
+  const onRoster = (p: Linked) => regByKey.has(p.key);
+  const chosenMap = local.chosen as Record<string, SectionName>;
+  const toChoose = people.filter(
+    (p) => onRoster(p) && needsSection(p, chosenMap),
   );
+  const chosen = people.filter(
+    (p) => onRoster(p) && autoSection(p) === null && chosenMap[p.key],
+  );
+  const dietaryTodo = people
+    .filter(
+      (p) =>
+        onRoster(p) &&
+        hasDietaryNotes(p) &&
+        local.dietaryDone[p.key] !== dietarySignature(p),
+    )
+    .sort((a, b) => later.indexOf(a.key) - later.indexOf(b.key));
+  const dietaryDone = people.filter(
+    (p) =>
+      onRoster(p) &&
+      hasDietaryNotes(p) &&
+      local.dietaryDone[p.key] === dietarySignature(p),
+  );
+  const noC2G = people.filter((p) => p.ms && !p.cg);
+  const notInMyScout = people.filter((p) => !p.ms && p.cg);
+  const nameMatched = people.filter((p) => p.ms && p.link === "name");
+  const problems = (["myscout", "consent2go"] as const).flatMap((s) =>
+    (local.files[s]?.problems ?? []).map((pr) => ({ source: s, ...pr })),
+  );
+  const anyFile = !!(local.files.myscout || local.files.consent2go);
+  const current = dietaryTodo[0];
+  const canDiet = !!(
+    context.data?.dietaryEnabled && context.data.canEditDietary
+  );
+
   return (
     <>
       {header}
@@ -272,412 +344,485 @@ export function Intake() {
             <p>{problem}</p>
           </Notice>
         )}
-        {board.editable && (
-          <Section title="Upload exports" id="upload">
-            <label className="dropzone">
-              <Icon name="download" size={24} />
-              <strong>{busy ? 'Reading…' : 'Choose the MyScout and Consent2Go files'}</strong>
-              <span className="meta">Pick one or both. Each is recognised by its columns. The files stay on this computer: only names and fingerprints are sent.</span>
-              <input type="file" multiple accept=".xlsx,.csv,.tsv,.txt,text/csv" disabled={busy} onChange={(e) => e.target.files?.length && void upload(e.target.files)} />
-            </label>
-            <ul className="intake-sources">
-              {(['myscout', 'consent2go'] as const).map((s) => {
-                const r = read.find((x) => x.source === s);
-                return (
-                  <li key={s}>
-                    <strong>{SOURCE_NAME[s]}</strong>
-                    <span className="meta">
-                      {r ? `${r.fileName}: ${plural(r.records.length, 'person', 'people')} read now` : 'Not uploaded on this visit'}
-                      {board.lastUpload[s] ? ` · last uploaded ${when(board.lastUpload[s]!)}` : ' · never uploaded'}
-                    </span>
-                    {board.lastUpload[s] && (
-                      <span>
-                        <Button small kind="ghost" disabled={busy} onClick={() => void clear(s)}>
-                          Clear {SOURCE_NAME[s]} upload
-                        </Button>
-                      </span>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-            {(board.lastUpload.myscout || board.lastUpload.consent2go) && (
-              <div className="intake-clear">
-                <Button small kind="ghost" disabled={busy} onClick={() => void clear('all')}>
-                  Start over
-                </Button>
-                <span className="meta">Forgets both uploads and every check. The roster stays as it is.</span>
-              </div>
-            )}
-            {read.some((r) => r.problems.length) && (
-              <Notice tone="warning" title="Rows that couldn’t be read">
-                <ul>
-                  {read.flatMap((r) =>
-                    r.problems.map((p, i) => (
-                      <li key={`${r.source}-${i}`}>
-                        {SOURCE_NAME[r.source]}, {p.where}: {p.errors.join('; ')}
-                      </li>
-                    )),
-                  )}
-                </ul>
-              </Notice>
-            )}
-          </Section>
+        {summary && (
+          <Notice tone="success">
+            <p>{summary}</p>
+          </Notice>
         )}
 
-        <Section title="Everyone" id="everyone">
-          <div className="tiles intake-tiles">
-            {tile('todo', 'To check', counts.todo ? 'warning' : 'success')}
-            {tile('checked', 'Checked', 'success')}
-            {tile('myscout', 'No Consent2Go yet', counts.myscout ? 'warning' : 'success')}
-            {tile('both', 'Done both')}
-            {counts.consent2go > 0 && tile('consent2go', 'Not in MyScout', 'warning')}
-            {counts.left_off > 0 && tile('left_off', 'Left off camp')}
-            {counts.roster_only > 0 && tile('roster_only', 'In neither file')}
-            {tile('all', 'Everyone')}
-          </div>
-          <div className="intake-tools">
-            <SearchField id="intake-q" label="Find a person" value={q} onChange={setQ} placeholder="Name, membership number or group" />
-            {shown.length > 0 && (
-              <Button
-                kind="ghost"
-                onClick={() =>
-                  downloadCsv(`${FILTER_FILE[filter]}.csv`, [
-                    ['Name', 'Membership number', 'Section', 'Scout group', 'MyScout', 'Consent2Go', 'Status'],
-                    ...shown.map((p) => [p.name, p.memberNumber, p.section, p.groupName, p.myscout ? 'Yes' : 'No', p.consent2go ? 'Yes' : 'No', STATE_BADGE[p.state].text]),
-                  ])
-                }
-              >
-                <Icon name="download" /> Download this list
+        <Section title="Upload" id="upload">
+          <label className="dropzone">
+            <Icon name="download" size={24} />
+            <strong>
+              {busy
+                ? "Reading and updating the roster…"
+                : "Choose the MyScout and Consent2Go files"}
+            </strong>
+            <span className="meta">
+              One or both. Each is recognised by its columns, and read on this
+              computer.
+            </span>
+            <input
+              type="file"
+              multiple
+              accept=".xlsx,.csv,.tsv,.txt,text/csv"
+              disabled={busy}
+              onChange={(e) =>
+                e.target.files?.length && void upload(e.target.files)
+              }
+            />
+          </label>
+          <ul className="intake-sources">
+            {(["myscout", "consent2go"] as Source[]).map((s) => {
+              const f = local.files[s];
+              return (
+                <li key={s}>
+                  <strong>{SOURCE_NAME[s]}</strong>
+                  <span className="meta">
+                    {f
+                      ? `${f.fileName}: ${plural(f.people.length, "person", "people")} · uploaded ${when(f.at)}`
+                      : "Not uploaded on this computer yet"}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+          {anyFile && (
+            <div className="intake-clear">
+              <Button small kind="ghost" onClick={() => void forget()}>
+                Clear from this computer
               </Button>
-            )}
-            {counts.todo > 0 && filter === 'todo' && shown.length > 0 && (
-              <Button kind="primary" onClick={() => setOpen(memberKey(shown[0]!.memberNumber))}>
-                Start checking
-              </Button>
-            )}
-          </div>
-          {people.length === 0 ? (
-            <EmptyState title="No one yet">Upload the MyScout export, the Consent2Go export, or both.</EmptyState>
-          ) : shown.length === 0 ? (
-            <p className="meta">{filter === 'todo' ? 'Everyone is checked. Upload new exports any time to catch late registrations and changes.' : 'No one here.'}</p>
-          ) : (
-            <ul className="list intake-list">
-              {shown.map((p) => {
-                const b = STATE_BADGE[p.state];
-                const k = memberKey(p.memberNumber);
-                return (
-                  <li key={k}>
-                    <button type="button" className="row row-button" onClick={() => setOpen(k)}>
-                      <span className="row-main">
-                        <span className="row-title">{p.name}</span>
-                        <span className="row-meta">{[p.memberNumber, p.section, p.groupName].filter(Boolean).join(' · ')}</span>
-                        {p.changed.length > 0 && <span className="row-meta intake-changed">Changed: {p.changed.slice(0, 3).join(', ')}{p.changed.length > 3 ? ` and ${p.changed.length - 3} more` : ''}</span>}
-                      </span>
-                      <span className="intake-marks">
-                        <SourceMark label="MyScout" on={!!p.myscout} />
-                        <SourceMark label="Consent2Go" on={!!p.consent2go} />
-                        <Badge tone={b.tone}>{b.text}</Badge>
-                      </span>
-                    </button>
+              <span className="meta">
+                The files are kept in this browser only, so you can come back to
+                them.
+              </span>
+            </div>
+          )}
+          {problems.length > 0 && (
+            <Notice tone="warning" title="Rows that couldn’t be read">
+              <ul>
+                {problems.map((p, i) => (
+                  <li key={i}>
+                    {SOURCE_NAME[p.source]}, {p.where}: {p.errors.join("; ")}
                   </li>
-                );
-              })}
-            </ul>
+                ))}
+              </ul>
+            </Notice>
           )}
         </Section>
+
+        {!anyFile ? (
+          <EmptyState title="Nothing uploaded yet">
+            Choose the MyScout export, the Consent2Go export, or both.
+          </EmptyState>
+        ) : (
+          <>
+            <div className="tiles intake-tiles">
+              <CountTile
+                value={canDiet ? dietaryTodo.length : "–"}
+                label="Dietary to read"
+                tone={canDiet && dietaryTodo.length ? "warning" : "success"}
+              />
+              <CountTile
+                value={toChoose.length}
+                label="Section to choose"
+                tone={toChoose.length ? "warning" : "success"}
+              />
+              <CountTile
+                value={local.files.consent2go ? noC2G.length : "–"}
+                label="No Consent2Go yet"
+              />
+              <CountTile value={people.length} label="Everyone in the files" />
+            </div>
+
+            <Section title="Dietary notes" id="dietary">
+              {!context.data?.dietaryEnabled ? (
+                <p className="meta">
+                  Dietary needs are switched off for this camp (Settings › Event
+                  details).
+                </p>
+              ) : !context.data.canEditDietary ? (
+                <p className="meta">
+                  Someone who can edit dietary needs reads these.
+                </p>
+              ) : !current ? (
+                <p className="meta">
+                  {dietaryDone.length
+                    ? `All ${plural(dietaryDone.length, "person", "people")} with dietary notes are done.`
+                    : "No one has dietary notes."}{" "}
+                  New or changed notes show here after each upload.
+                </p>
+              ) : (
+                <DietaryReview
+                  key={current.key}
+                  eventId={event.id}
+                  person={current}
+                  reg={regByKey.get(current.key)!}
+                  left={dietaryTodo.length}
+                  onDone={async (p) => {
+                    update((l) => ({
+                      ...l,
+                      dietaryDone: {
+                        ...l.dietaryDone,
+                        [p.key]: dietarySignature(p),
+                      },
+                    }));
+                    await registrations.reload();
+                  }}
+                  onLater={
+                    dietaryTodo.length > 1
+                      ? (p) =>
+                          setLater((l) => [
+                            ...l.filter((k) => k !== p.key),
+                            p.key,
+                          ])
+                      : undefined
+                  }
+                />
+              )}
+            </Section>
+
+            <Section
+              title={`Choose a section${toChoose.length ? ` (${toChoose.length})` : ""}`}
+              id="sections"
+            >
+              <p className="meta">
+                Joeys, Cubs, Scouts, Venturers, Rovers and Adult Helpers get
+                their section from their MyScout position. Choose one for
+                everyone else. Their MyScout position stays on their profile.
+              </p>
+              {toChoose.length === 0 ? (
+                <p className="meta">Nothing to choose.</p>
+              ) : (
+                <ul className="list">
+                  {toChoose.map((p) => (
+                    <SectionRow
+                      key={p.key}
+                      person={p}
+                      current=""
+                      onChoose={(s) => void chooseSection(p, s)}
+                    />
+                  ))}
+                </ul>
+              )}
+              {chosen.length > 0 && (
+                <details className="intake-more">
+                  <summary>Chosen already ({chosen.length})</summary>
+                  <ul className="list">
+                    {chosen.map((p) => (
+                      <SectionRow
+                        key={p.key}
+                        person={p}
+                        current={chosenMap[p.key] ?? ""}
+                        onChoose={(s) => void chooseSection(p, s)}
+                      />
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </Section>
+
+            <Section title="No Consent2Go yet" id="noc2g">
+              {!local.files.consent2go ? (
+                <p className="meta">
+                  Upload the Consent2Go export to see who hasn’t done it.
+                </p>
+              ) : noC2G.length === 0 ? (
+                <p className="meta">Everyone in MyScout has done Consent2Go.</p>
+              ) : (
+                <>
+                  <div>
+                    <Button
+                      small
+                      kind="ghost"
+                      onClick={() =>
+                        downloadCsv("No Consent2Go yet.csv", [
+                          ["Name", "Membership number", "Position", "Group"],
+                          ...noC2G.map((p) => [
+                            displayName(p),
+                            p.memberNumber,
+                            p.ms?.position ?? "",
+                            p.ms?.groupName ?? "",
+                          ]),
+                        ])
+                      }
+                    >
+                      <Icon name="download" /> Download the list ({noC2G.length}
+                      )
+                    </Button>
+                  </div>
+                  <details className="intake-more">
+                    <summary>Show names ({noC2G.length})</summary>
+                    <ul className="list">
+                      {noC2G.map((p) => (
+                        <li key={p.key} className="row">
+                          <span className="row-main">
+                            <span className="row-title">{displayName(p)}</span>
+                            <span className="row-meta">
+                              {[p.memberNumber, p.ms?.position, p.ms?.groupName]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                </>
+              )}
+            </Section>
+
+            {(notInMyScout.length > 0 ||
+              unmatched.length > 0 ||
+              nameMatched.length > 0) && (
+              <Section title="Matching Consent2Go to MyScout" id="matching">
+                {nameMatched.length > 0 && (
+                  <>
+                    <h3 className="intake-subhead">
+                      Matched by name ({nameMatched.length})
+                    </h3>
+                    <p className="meta">
+                      Their Consent2Go Student ID didn’t match a MyScout
+                      membership number, but their name did.
+                    </p>
+                    <ul className="list">
+                      {nameMatched.map((p) => (
+                        <li key={p.key} className="row">
+                          <span className="row-main">
+                            <span className="row-title">{displayName(p)}</span>
+                            <span className="row-meta">
+                              MyScout {p.memberNumber} · Consent2Go Student ID{" "}
+                              {p.cg?.memberNumber || "(blank)"} · {p.cg?.where}
+                            </span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                {notInMyScout.length > 0 && (
+                  <>
+                    <h3 className="intake-subhead">
+                      In Consent2Go but not MyScout ({notInMyScout.length})
+                    </h3>
+                    <p className="meta">
+                      Added to the roster from Consent2Go. Check they’ve
+                      registered.
+                    </p>
+                    <ul className="list">
+                      {notInMyScout.map((p) => (
+                        <li key={p.key} className="row">
+                          <span className="row-main">
+                            <span className="row-title">{displayName(p)}</span>
+                            <span className="row-meta">
+                              {[p.memberNumber, p.cg?.where]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </span>
+                          </span>
+                          {p.link === "name" && (
+                            <Badge>Matched to the roster by name</Badge>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                {unmatched.length > 0 && (
+                  <>
+                    <h3 className="intake-subhead">
+                      Couldn’t be matched ({unmatched.length})
+                    </h3>
+                    <p className="meta">
+                      No usable Student ID, and no one in MyScout or on the
+                      roster with this name. Not added.
+                    </p>
+                    <ul className="list">
+                      {unmatched.map((c, i) => (
+                        <li key={i} className="row">
+                          <span className="row-main">
+                            <span className="row-title">
+                              {c.firstName} {c.lastName}
+                            </span>
+                            <span className="row-meta">{c.where}</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </Section>
+            )}
+          </>
+        )}
       </div>
     </>
   );
 }
 
-function SourceMark({ label, on }: { label: string; on: boolean }) {
+function SectionRow({
+  person,
+  current,
+  onChoose,
+}: {
+  person: Linked;
+  current: string;
+  onChoose: (s: SectionName) => void;
+}) {
+  const id = `section-${person.key}`;
   return (
-    <span className={on ? 'intake-mark is-on' : 'intake-mark'}>
-      <Icon name={on ? 'check' : 'cross'} size={14} />
-      {label}
-      <span className="visually-hidden">{on ? ': in the file' : ': not in the file'}</span>
-    </span>
+    <li className="row intake-section-row">
+      <span className="row-main">
+        <label htmlFor={id} className="row-title">
+          {displayName(person)}
+        </label>
+        <span className="row-meta">
+          {[
+            person.memberNumber,
+            person.ms?.position
+              ? `MyScout position: ${person.ms.position}`
+              : "No MyScout position",
+            person.cg?.groupName || person.ms?.groupName,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </span>
+      </span>
+      <select
+        id={id}
+        className="select intake-section-select"
+        value={current}
+        onChange={(e) =>
+          e.target.value && onChoose(e.target.value as SectionName)
+        }
+      >
+        {!current && <option value="">Choose…</option>}
+        {SECTION_CHOICES.map((c) => (
+          <option key={c.value} value={c.value}>
+            {c.label}
+          </option>
+        ))}
+      </select>
+    </li>
   );
 }
 
-// ---------------------------------------------------------------- one person
-
-const PHOTO: Record<string, string> = { yes: 'Yes', no: 'No', unknown: 'Not given' };
-
-/** Consent2Go's class and tab say section and Scout group; MyScout only shows someone's highest appointment. */
-function autoSection(cg: SourceRecord['prepared']['row'] | undefined, ms: SourceRecord['prepared']['row'] | undefined, now: IntakePerson['roster']): string {
-  if (cg && cg.section !== 'Other') return cg.section;
-  return ms?.section ?? now?.section ?? cg?.section ?? 'Other';
-}
-function autoGroup(cg: SourceRecord['prepared']['row'] | undefined, ms: SourceRecord['prepared']['row'] | undefined, now: IntakePerson['roster']): string {
-  return cg?.groupName || ms?.groupName || now?.groupName || '';
-}
-
-function CheckCard({
+/** One person's dietary notes from both files, side by side, and what to record. */
+function DietaryReview({
   eventId,
-  peopleBase,
-  board,
   person,
-  files,
-  position,
-  onBack,
-  onPrev,
-  onNext,
-  onSaved,
+  reg,
+  left,
+  onDone,
+  onLater,
 }: {
   eventId: string;
-  peopleBase: string;
-  board: Board;
-  person: IntakePerson;
-  files: Partial<Record<IntakeSource, SourceRecord>>;
-  position: { at: number; of: number } | null;
-  onBack: () => void;
-  onPrev?: () => void;
-  onNext?: () => void;
-  onSaved: (p: IntakePerson, advance: boolean) => void;
+  person: Linked;
+  reg: Registration;
+  left: number;
+  onDone: (p: Linked) => Promise<void>;
+  onLater?: (p: Linked) => void;
 }) {
-  const ms = files.myscout?.prepared;
-  const cg = files.consent2go?.prepared;
-  const now = person.roster;
-  const loaded = !!(ms || cg);
-  const auto = autoDetails(files);
-  const recheck = person.state === 'changed';
-  // Once checked, what's on the roster is what was chosen: start from it unless something changed.
-  const [section, setSection] = useState(() => (now && person.check && !recheck ? now.section : autoSection(cg?.row, ms?.row, now)));
-  const [group, setGroup] = useState(() => (now && person.check && !recheck ? now.groupName : autoGroup(cg?.row, ms?.row, now)));
-  const notes = { myscout: ms?.dietaryText ?? '', consent2go: cg?.dietaryText ?? '' };
-  const existingDiet = now?.dietary as DietaryEntryInput[] | undefined;
-  const nothingNoted = [notes.myscout, notes.consent2go].every((t) => !t.trim() || saysNothing(t));
-  const suggested = useMemo(() => suggestDietary(notes.myscout, notes.consent2go), [notes.myscout, notes.consent2go]);
-  const [dietary, setDietary] = useState<DietaryEntryInput[] | undefined>(() => {
-    if (existingDiet && existingDiet.length && !recheck) return existingDiet;
-    if (nothingNoted) return existingDiet ?? [];
-    // Suggestions from the notes, plus anything already recorded.
-    const merged = [...(existingDiet ?? [])];
-    for (const e of suggested) if (!merged.some((x) => x.category === e.category && x.item.toLowerCase() === e.item.toLowerCase())) merged.push(e);
-    return merged.length ? merged : undefined;
-  });
-  const fromNotes = !nothingNoted && suggested.length > 0 && !(existingDiet && existingDiet.length && !recheck);
-  const [checks, setChecks] = useState<Record<string, boolean>>(person.check && !recheck ? person.check.checklist : {});
-  const [busy, setBusy] = useState<'save' | 'leave' | 'undo' | null>(null);
+  const notes = dietaryNotes(person);
+  const [entries, setEntries] = useState<DietaryEntryInput[] | undefined>(
+    () => {
+      const merged = [...(reg.dietary ?? [])];
+      for (const e of suggestDietary(notes.myscout, notes.consent2go))
+        if (
+          !merged.some(
+            (x) =>
+              x.category === e.category &&
+              x.item.toLowerCase() === e.item.toLowerCase(),
+          )
+        )
+          merged.push(e);
+      return merged.length ? merged : undefined;
+    },
+  );
+  const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const toast = useToast();
-  const allTicked = board.checklist.every((c) => checks[c.key]);
 
-  const sources = (pick: (r: SourceRecord['prepared']['row']) => string, cgLabel: string) =>
-    [
-      ms && { label: 'MyScout', value: pick(ms.row) },
-      cg && { label: cgLabel, value: pick(cg.row) === 'Other' ? '' : pick(cg.row) },
-      now && { label: 'CampCount now', value: pick(now as unknown as SourceRecord['prepared']['row']) },
-    ].filter((x): x is { label: string; value: string } => !!x);
-
-  async function save(leftOff: boolean) {
+  async function save() {
+    if (entries === undefined)
+      return setProblem("Add what they need, or choose “No dietary needs”.");
+    setBusy(true);
     setProblem(null);
-    setBusy(leftOff ? 'leave' : 'save');
     try {
-      let row: ImportRow | undefined;
-      if (!leftOff) {
-        if (!loaded && !now) throw new Error('Upload the files again to see what they say about this person.');
-        if (!(SECTIONS as readonly string[]).includes(section)) throw new Error('Choose a section.');
-        const names = auto.names ?? (now ? { firstName: now.firstName, preferredName: now.preferredName, lastName: now.lastName } : undefined);
-        if (!names?.firstName || !names.lastName) throw new Error('This person has no name in either file.');
-        const sec = section as ImportRow['section'];
-        const kind: ImportRow['kind'] = sec === 'Leaders' ? 'adult' : sec === 'Rovers' ? (ms?.row.kind ?? now?.kind ?? 'youth') : 'youth';
-        const text = [notes.myscout, notes.consent2go].filter(Boolean).join('\n');
-        const key = await hmacKey(board.fingerprintKey);
-        row = {
-          memberNumber: ms?.row.memberNumber ?? cg?.row.memberNumber ?? person.memberNumber,
-          ...names,
-          kind,
-          section: sec,
-          groupName: group.trim().slice(0, 120),
-          position: ms?.row.position ?? now?.position ?? '',
-          roleLabel: ms?.row.roleLabel ?? now?.roleLabel ?? '',
-          team: ms?.row.team ?? now?.team ?? '',
-          sourceStatus: ms?.row.sourceStatus ?? now?.sourceStatus ?? '',
-          photoConsent: auto.photoConsent ?? ((now?.photoConsent as ImportRow['photoConsent']) || 'unknown'),
-          dietaryFingerprint: text ? await dietaryFingerprint(key, text) : null,
-          ...(board.canEditDietary && dietary !== undefined ? { dietary } : {}),
-          ...(auto.extra ? { extra: auto.extra } : {}),
-        };
-      }
-      const res = await api<{ person: IntakePerson }>(`/events/${eventId}/intake/check`, {
-        body: { memberNumber: person.memberNumber, leftOff, checklist: checks, ...(row ? { row } : {}) },
+      await api(`/events/${eventId}/registrations/${reg.id}/dietary`, {
+        method: "PUT",
+        body: { entries },
       });
-      toast(leftOff ? `${person.name} left off this camp` : allTicked ? `${person.name} checked and on the roster` : `${person.name} saved for later`);
-      onSaved(res.person, true);
+      toast(`${displayName(person)} done`);
+      await onDone(person);
     } catch (err) {
       setProblem(fail(err));
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   }
 
-  async function undo() {
-    setBusy('undo');
-    try {
-      await api(`/events/${eventId}/intake/check/${encodeURIComponent(person.memberNumber)}`, { method: 'DELETE' });
-      setChecks({});
-      onSaved({ ...person, check: null, state: 'new', changed: [] }, false);
-    } catch (err) {
-      setProblem(fail(err));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  const tick = (k: string) => (
-    <div className="intake-tick">
-      <Choice label={board.checklist.find((c) => c.key === k)?.label ?? k} checked={!!checks[k]} onChange={(e) => setChecks({ ...checks, [k]: e.target.checked })} disabled={!board.editable} />
-    </div>
-  );
-  const st = STATE_BADGE[person.state];
   return (
-    <>
-      <button type="button" className="back-link intake-back" onClick={onBack}>
-        <Icon name="back" />
-        Everyone
-      </button>
-      <PageHeader title={person.name} summary={[person.memberNumber, auto.photoConsent ? `Photos: ${PHOTO[auto.photoConsent]}` : now?.photoConsent ? `Photos: ${PHOTO[now.photoConsent] ?? ''}` : null].filter(Boolean).join(' · ')} />
-      <div className="sections intake-card">
-        <div className="intake-card-bar">
-          <span className="intake-marks">
-            <SourceMark label="MyScout" on={!!person.myscout} />
-            <SourceMark label="Consent2Go" on={!!person.consent2go} />
-            <Badge tone={st.tone}>{st.text}</Badge>
-          </span>
-          {position && (
-            <span className="intake-nav">
-              <Button small kind="ghost" disabled={!onPrev} onClick={onPrev}>
-                <Icon name="back" /> Previous
-              </Button>
-              <span className="meta num">
-                {position.at} of {position.of}
-              </span>
-              <Button small kind="ghost" disabled={!onNext} onClick={onNext}>
-                Next <Icon name="chevron" />
-              </Button>
-            </span>
+    <div className="intake-diet">
+      <div className="intake-diet-head">
+        <h3>{displayName(person)}</h3>
+        <span className="meta">
+          {[person.memberNumber, reg.section].filter(Boolean).join(" · ")} ·{" "}
+          {plural(left, "person", "people")} to go
+        </span>
+      </div>
+      <div className="intake-notes">
+        <div className="intake-note">
+          <h4>MyScout</h4>
+          {!person.ms ? (
+            <p className="meta">Not in MyScout.</p>
+          ) : notes.myscout ? (
+            <p className="intake-note-text">{notes.myscout}</p>
+          ) : (
+            <p className="meta">Nothing written.</p>
           )}
         </div>
-        {person.check && !recheck && (
-          <p className="meta">
-            {person.check.leftOff ? 'Left off this camp' : person.check.complete ? 'Checked' : 'Started'} {when(person.check.at)}
-            {person.check.by ? ` by ${person.check.by}` : ''}.
-          </p>
-        )}
-        {person.changed.length > 0 && (
-          <Notice tone="warning" title="Look again: this changed since it was checked">
-            <ul>
-              {person.changed.map((c) => (
-                <li key={c}>{c}</li>
-              ))}
-            </ul>
-          </Notice>
-        )}
-        {!loaded && (
-          <Notice title="Upload the files to see their details">
-            <p>The files stay on the computer they were opened on. Upload them again on the Everyone page: anyone already checked is skipped.</p>
-          </Notice>
-        )}
-        {problem && (
-          <Notice tone="error">
-            <p>{problem}</p>
-          </Notice>
-        )}
-
-        <Section title="Section" id="section">
-          <div className="intake-field">
-            <select className="select" aria-label="Section" value={section} onChange={(e) => setSection(e.target.value)} disabled={!board.editable}>
-              {SECTIONS.map((x) => (
-                <option key={x} value={x}>
-                  {x === 'Leaders' ? 'Leaders (adults)' : x}
-                </option>
-              ))}
-            </select>
-            <SourceHints items={sources((r) => r.section, `Consent2Go class${cg ? '' : ''}`)} current={section} onPick={setSection} />
-            {tick('section')}
-          </div>
-        </Section>
-
-        <Section title="Scout group" id="group">
-          <div className="intake-field">
-            <input className="input" aria-label="Scout group" value={group} maxLength={120} onChange={(e) => setGroup(e.target.value)} disabled={!board.editable} />
-            <SourceHints items={sources((r) => r.groupName, 'Consent2Go tab')} current={group} onPick={setGroup} />
-            {tick('group')}
-          </div>
-        </Section>
-
-        <Section title="Dietary needs" id="dietary">
-          <div className="intake-notes">
-            <NoteBox title="MyScout" text={notes.myscout} present={!!ms} />
-            <NoteBox title="Consent2Go" text={notes.consent2go} present={!!cg} missing={person.consent2go ? undefined : 'Not done Consent2Go yet.'} />
-          </div>
-          {fromNotes && <p className="meta">Filled in from the notes. Check each one, and add anything missed.</p>}
-          {board.dietaryEnabled && board.canEditDietary ? (
-            <DietaryEditor value={dietary} onChange={setDietary} labelPrefix={person.name} />
+        <div className="intake-note">
+          <h4>Consent2Go</h4>
+          {!person.cg ? (
+            <p className="meta">Not done Consent2Go yet.</p>
+          ) : notes.consent2go ? (
+            <p className="intake-note-text">{notes.consent2go}</p>
           ) : (
-            <p className="meta">{board.dietaryEnabled ? 'Someone who can edit dietary needs records these.' : 'Dietary needs are switched off for this camp.'}</p>
+            <p className="meta">Nothing written.</p>
           )}
-          {existingDiet && existingDiet.length > 0 && recheck && <p className="meta">Recorded before: {existingDiet.map(describeEntry).join('; ')}</p>}
-          {tick('dietary')}
-        </Section>
-
-        {board.editable && (
-          <div className="btn-row intake-save">
-            <Button kind="primary" busy={busy === 'save'} busyLabel="Saving…" disabled={busy !== null} onClick={() => void save(false)}>
-              {allTicked ? 'Checked: add to roster' : 'Save for later'}
-              {onNext ? ', next person' : ''}
-            </Button>
-            <Button kind="ghost" busy={busy === 'leave'} busyLabel="Saving…" disabled={busy !== null} onClick={() => void save(true)}>
-              Leave off this camp
-            </Button>
-            {person.check && (
-              <Button kind="ghost" busy={busy === 'undo'} busyLabel="Undoing…" disabled={busy !== null} onClick={() => void undo()}>
-                Undo check
-              </Button>
-            )}
-          </div>
-        )}
-        {person.roster && (
-          <p className="meta">
-            <ButtonLink small kind="ghost" to={`${peopleBase}/${person.roster.registrationId}`}>
-              Open their People page
-            </ButtonLink>
-          </p>
+        </div>
+      </div>
+      {entries && entries.length > 0 && !(reg.dietary ?? []).length && (
+        <p className="meta">
+          Filled in from the notes. Check them against what’s written.
+        </p>
+      )}
+      {problem && (
+        <Notice tone="error">
+          <p>{problem}</p>
+        </Notice>
+      )}
+      <DietaryEditor
+        value={entries}
+        onChange={setEntries}
+        labelPrefix={displayName(person)}
+      />
+      <div className="btn-row">
+        <Button
+          kind="primary"
+          busy={busy}
+          busyLabel="Saving…"
+          onClick={() => void save()}
+        >
+          Save, next person
+        </Button>
+        {onLater && (
+          <Button kind="ghost" disabled={busy} onClick={() => onLater(person)}>
+            Skip for now
+          </Button>
         )}
       </div>
-    </>
-  );
-}
-
-/** What each file says, as buttons that fill the box in. */
-function SourceHints({ items, current, onPick }: { items: { label: string; value: string }[]; current: string; onPick: (v: string) => void }) {
-  if (items.length === 0) return null;
-  return (
-    <ul className="intake-hints">
-      {items.map((i) => (
-        <li key={i.label}>
-          <span className="meta">{i.label}:</span>{' '}
-          {i.value ? (
-            <button type="button" className={i.value.trim().toLowerCase() === current.trim().toLowerCase() ? 'intake-hint is-picked' : 'intake-hint'} onClick={() => onPick(i.value)}>
-              {i.value}
-            </button>
-          ) : (
-            <span className="meta">(blank)</span>
-          )}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function NoteBox({ title, text, present, missing }: { title: string; text: string; present: boolean; missing?: string }) {
-  return (
-    <div className="intake-note">
-      <h3>{title}</h3>
-      {!present ? <p className="meta">{missing ?? 'Upload the file to see these notes.'}</p> : text ? <p className="intake-note-text">{text}</p> : <p className="meta">No notes.</p>}
     </div>
   );
 }
