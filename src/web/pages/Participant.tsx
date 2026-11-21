@@ -267,7 +267,7 @@ function Page({ view, busy, actions }: { view: SignupView; busy: boolean; action
 /** Who you are, at which camp. Coloured like your section's lanyard band. */
 function Pass({ view }: { view: SignupView }) {
   const word = view.person.sectionWord ?? '';
-  const colour = sectionColours(word).bg;
+  const colour = view.person.sectionColour ?? sectionColours(word).bg;
   const first = view.person.firstName ?? view.person.name.split(' ')[0];
   const last = view.person.lastName ?? '';
   const banner = view.event.banner;
@@ -584,7 +584,6 @@ function Board({ board }: { board: SideQuestStanding['board'] }) {
   );
 }
 
-const SECTION_QUEST: Record<string, string> = { Joeys: 'joeys', Cubs: 'cubs', Scouts: 'scouts', Venturers: 'venturers', Rovers: 'rovers', Leaders: 'leaders' };
 
 /**
  * The moment of collecting someone: a full-screen splash with the count
@@ -595,7 +594,8 @@ function CollectScreen({ result, onDone, onMine }: { result: CollectResult; onDo
   const reduced = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const [shown, setShown] = useState(result.fresh && !reduced ? Math.max(0, s.collected - 1) : s.collected);
   const done = useRef<HTMLButtonElement>(null);
-  const questKey = result.friend.sectionWord === 'Leader' ? 'leaders' : (SECTION_QUEST[result.friend.section] ?? '');
+  // Adults are one quest; everyone else is in their section's quest.
+  const questKey = (result.friend.kind ? result.friend.kind === 'adult' : result.friend.sectionWord === 'Leader') ? 'leaders' : result.friend.section.toLowerCase();
   const quest = s.quests.find((q) => q.key === questKey);
   const milestone = result.fresh && (s.collected === 1 || s.collected % 10 === 0 || (quest?.done && quest.collected === quest.total));
 

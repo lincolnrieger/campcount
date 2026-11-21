@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import type { DietaryEntryInput } from '../../shared/schemas';
-import { SECTIONS, kindForSection } from '../../shared/sections';
+import { kindForSection } from '../../shared/sections';
 import { dayInZone, dayLabel, timeInZone, timeRange } from '../../shared/time';
 import { ApiFailure, api } from '../api';
 import { DietaryEditor, describeEntry } from '../components/DietaryEditor';
@@ -601,7 +601,7 @@ function DetailsForm({ r, back, path, onSaved }: { r: PersonData['registration']
         </Field>
         <Field id="p-section" label="Section" hint={`Counts as ${kindForSection(f.section, event.youthSections ?? []) === 'adult' ? 'an adult' : 'youth'} at this camp (Settings › Event details › Youth sections).`}>
           <select className="select" value={f.section} onChange={set('section')}>
-            {SECTIONS.map((s) => (
+            {(event.sections.some((x) => x.name === f.section) ? event.sections.map((x) => x.name) : [f.section, ...event.sections.map((x) => x.name)]).map((s) => (
               <option key={s}>{s}</option>
             ))}
           </select>

@@ -1,5 +1,5 @@
+import { loadSections } from './sections';
 import { getCookie, setCookie } from 'hono/cookie';
-import { SECTIONS } from '../../shared/sections';
 import type { AppContext } from '../context';
 import { hmacHex, timingSafeEqualHex } from '../lib/crypto';
 import { nowIso } from '../lib/time';
@@ -112,15 +112,16 @@ export async function standing(db: D1Database, eventId: string, registrationId: 
   const got = new Set(mine.results.map((r) => r.collected_id).filter((id) => byId.has(id)));
   const others = people.results.filter((p) => p.id !== registrationId);
 
-  // Quests: everyone in each section (leaders and the event team as one).
-  const groupOf = (p: { kind: string; section: string }) => (p.kind === 'adult' || p.section === 'Leaders' ? 'Leaders' : p.section || 'Other');
+  // Quests: everyone in each of the camp's sections, with adults (leaders and the event team) as one.
+  const sections = await loadSections(db, eventId);
+  const groupOf = (p: { kind: string; section: string }) => (p.kind === 'adult' ? 'leaders' : p.section.toLowerCase());
   const quests: Quest[] = [];
-  for (const s of SECTIONS) {
-    if (s === 'Other') continue;
-    const inGroup = others.filter((p) => groupOf(p) === s);
+  const keys = [...sections.filter((s) => s.youth && s.base !== 'Other').map((s) => ({ key: s.name.toLowerCase(), label: s.name })), { key: 'leaders', label: 'Leaders and the event team' }];
+  for (const { key, label } of keys) {
+    const inGroup = others.filter((p) => groupOf(p) === key);
     if (inGroup.length === 0) continue;
     const n = inGroup.filter((p) => got.has(p.id)).length;
-    quests.push({ key: s.toLowerCase(), label: s === 'Leaders' ? 'Leaders and the event team' : s, collected: n, total: inGroup.length, done: n === inGroup.length });
+    quests.push({ key, label, collected: n, total: inGroup.length, done: n === inGroup.length });
   }
 
   // Rank by how many each player has collected; ties share a place.

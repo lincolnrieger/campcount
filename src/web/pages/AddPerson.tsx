@@ -57,6 +57,7 @@ export function AddPerson() {
       <form className="form" onSubmit={submit} noValidate>
         <ErrorSummary errors={summary} />
         <PersonFields
+          youthSections={event.sections.filter((x) => x.youth).map((x) => x.name)}
           value={person}
           onChange={setPerson}
           askPhotos={event.features.photo}

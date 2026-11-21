@@ -11,7 +11,7 @@ import { loadEventModel, openItems } from '../services/reports';
 import { can, eventPermissions } from '../services/principal';
 import { resolveSite } from '../services/site';
 import { syncKindsStatement } from '../services/rosterWrites';
-import { YOUTH_SECTION_OPTIONS, parseYouthSections } from '../../shared/sections';
+import { SECTIONS, parseSectionSettings, parseYouthSections } from '../../shared/sections';
 
 export interface EventRow {
   id: string;
@@ -41,6 +41,7 @@ export interface EventRow {
   photo_marker_label: number;
   lanyard_print_band: number;
   youth_sections: string;
+  section_settings: string | null;
   /** From event_logos, when the query includes it. */
   logo_updated_at?: string | null;
 }
@@ -80,6 +81,7 @@ export function eventDto(row: EventRow) {
       printBand: row.lanyard_print_band !== 0,
     } satisfies LanyardSettings,
     youthSections: parseYouthSections(row.youth_sections),
+    sections: parseSectionSettings(row.section_settings, row.youth_sections),
     logoUrl: row.logo_updated_at ? `/api/events/${row.id}/logo?v=${encodeURIComponent(row.logo_updated_at)}` : null,
   };
 }
@@ -220,7 +222,30 @@ eventRoutes.patch('/:eventId', async (c) => {
   for (const [key, value] of Object.entries(input.features ?? {})) {
     if (value !== undefined) set(FEATURE_COLUMNS[key as keyof EventFeatures], value ? 1 : 0);
   }
-  if (input.youthSections !== undefined) set('youth_sections', JSON.stringify(YOUTH_SECTION_OPTIONS.filter((x) => input.youthSections!.includes(x))));
+  if (input.youthSections !== undefined && input.sections === undefined) set('youth_sections', JSON.stringify([...new Set(input.youthSections)].filter((x) => x !== 'Leaders')));
+  // Sections: renames move everyone in them; an added section can go only once it's empty.
+  const renames: { from: string; to: string }[] = [];
+  if (input.sections !== undefined) {
+    const list = input.sections;
+    const names = list.map((x) => x.name.toLowerCase());
+    if (new Set(names).size !== names.length) throw badRequest('Two sections have the same name.');
+    for (const b of SECTIONS) if (list.filter((x) => x.base === b).length !== 1) throw badRequest('The built-in sections can be renamed, but not removed.');
+    const before = parseSectionSettings(row.section_settings, row.youth_sections);
+    for (const x of list) if (x.from && x.from !== x.name && before.some((b) => b.name === x.from)) renames.push({ from: x.from, to: x.name });
+    const kept = new Set(list.map((x) => x.from ?? x.name));
+    const removed = before.filter((b) => !kept.has(b.name)).map((b) => b.name);
+    if (removed.length) {
+      const inUse = await c.env.DB.prepare(
+        `SELECT section, count(*) AS n FROM registrations WHERE event_id = ? AND section IN (SELECT value FROM json_each(?)) GROUP BY section`,
+      )
+        .bind(eventId, JSON.stringify(removed))
+        .all<{ section: string; n: number }>();
+      if (inUse.results.length) throw conflict(`Move everyone out of ${inUse.results.map((r) => `${r.section} (${r.n})`).join(', ')} before removing it.`);
+    }
+    const stored = list.map(({ name, base, word, colour, youth }) => ({ name, base, word, colour: colour.toUpperCase(), youth: base === 'Leaders' ? false : youth }));
+    set('section_settings', JSON.stringify(stored));
+    set('youth_sections', JSON.stringify(stored.filter((x) => x.youth).map((x) => x.name)));
+  }
   if (sets.length === 0) return c.json({ event: eventDto(row) });
 
   const startsOn = input.startsOn ?? row.starts_on;
@@ -230,9 +255,14 @@ eventRoutes.patch('/:eventId', async (c) => {
   set('updated_at', nowIso());
   await c.env.DB.batch([
     // Column names come from the fixed map above, never from the client.
+    // Renamed sections: everyone in them moves with the name (via a placeholder, so swapping two names works).
+    ...renames.map((r, i) =>
+      c.env.DB.prepare(`UPDATE registrations SET section = ? WHERE event_id = ? AND section = ?`).bind(`__rename_${i}__`, eventId, r.from),
+    ),
+    ...renames.map((r, i) => c.env.DB.prepare(`UPDATE registrations SET section = ? WHERE event_id = ? AND section = ?`).bind(r.to, eventId, `__rename_${i}__`)),
     c.env.DB.prepare(`UPDATE events SET ${sets.join(', ')} WHERE id = ?`).bind(...values, eventId),
     // Everyone's youth or adult follows the new setting.
-    ...(input.youthSections !== undefined ? [syncKindsStatement(c.env.DB, eventId)] : []),
+    ...(input.youthSections !== undefined || input.sections !== undefined ? [syncKindsStatement(c.env.DB, eventId)] : []),
     auditStatement(c.env.DB, {
       actor: { type: 'user', id: (principal as { userId: string }).userId },
       action: 'event.update',

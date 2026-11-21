@@ -94,7 +94,7 @@ function readConsent2Go(fileName: string, sheets: { name: string; rows: string[]
       preferredName: '',
       lastName: r.lastName,
       position: '',
-      section: r.section,
+      section: r.section as FilePerson["section"],
       groupName: r.groupName,
       photo: r.photoConsent,
       dietaryText: p.dietaryText,

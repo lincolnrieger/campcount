@@ -1,3 +1,5 @@
+import type { SectionSetting } from '../../shared/sections';
+import { sectionStyle } from '../../shared/sections';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Navigate } from 'react-router';
@@ -297,7 +299,7 @@ export function LanyardDesigner() {
             label={`The ${side} of the card, as it will print for ${person.name}`}
           />
           <div className="studio-footer">
-            <PreviewPicker eventId={event.id} canList={can('roster.view')} value={preview} onChange={setPreview} />
+            <PreviewPicker eventId={event.id} sections={event.sections} canList={can('roster.view')} value={preview} onChange={setPreview} />
             {event.features.photo && (
               <label className="choice studio-inline-choice">
                 <input type="checkbox" checked={noPhotos} onChange={(e) => setNoPhotos(e.target.checked)} />
@@ -413,7 +415,7 @@ function SaveStatus({ state, message, onRetry, editable }: { state: string; mess
 }
 
 /** Preview the card with a real person from the camp, or the sample. */
-function PreviewPicker({ eventId, canList, value, onChange }: { eventId: string; canList: boolean; value: CardPerson; onChange: (p: CardPerson) => void }) {
+function PreviewPicker({ eventId, sections, canList, value, onChange }: { eventId: string; sections: SectionSetting[]; canList: boolean; value: CardPerson; onChange: (p: CardPerson) => void }) {
   const [people, setPeople] = useState<(CardPerson & { id: string })[] | null>(null);
   useEffect(() => {
     if (!canList) return;
@@ -431,13 +433,14 @@ function PreviewPicker({ eventId, canList, value, onChange }: { eventId: string;
               kind: x.kind,
               section: x.section,
               groupName: x.groupName,
+              style: sectionStyle(sections, x.section),
               shortCode: x.shortCode ?? SAMPLE_PERSON.shortCode,
               qr: SAMPLE_PERSON.qr,
             })),
         ),
       )
       .catch(() => setPeople([]));
-  }, [eventId, canList]);
+  }, [eventId, canList, sections]);
   const current = people?.find((p) => p.name === value.name && p.groupName === value.groupName)?.id ?? '';
   return (
     <div className="studio-preview-pick">

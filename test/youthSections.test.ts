@@ -24,7 +24,7 @@ describe('youth sections', () => {
     expect(kindForSection('Rovers', ['Scouts'])).toBe('adult');
     expect(kindForSection('Leaders', ['Leaders'])).toBe('adult');
     expect(parseYouthSections('nonsense')).toContain('Rovers');
-    expect(parseYouthSections('["Scouts","Bogus"]')).toEqual(['Scouts']);
+    expect(parseYouthSections('["Scouts","Leaders"]')).toEqual(['Scouts']);
   });
 
   it('is a camp setting that updates everyone on the roster, and later imports and edits', async () => {

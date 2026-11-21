@@ -6,8 +6,7 @@ import type { EventFeatures, EventStatus } from '../../shared/schemas';
 import { EVENT_TRANSITIONS } from '../../shared/lifecycle';
 import { useSession } from '../session';
 import { useApi } from '../useApi';
-import { Badge, Button, Choice, Icon, Notice, PageHeader, Section, plural, useConfirm, useToast } from '../ui';
-import { YOUTH_SECTION_OPTIONS } from '../../shared/sections';
+import { Badge, Button, Icon, Notice, PageHeader, Section, plural, useConfirm, useToast } from '../ui';
 import { EventFields, FeatureChecklist, checkEventForm } from './Events';
 import type { EventForm } from './Events';
 import { useEvent } from './EventLayout';
@@ -37,7 +36,8 @@ export function SettingsIndex() {
   const canCopy = !onSite && me?.kind === 'user' && me.platformPermissions.includes('platform.events.create');
 
   const rows = [
-    can('event.configure') && { to: 'event', title: 'Event details', meta: 'Name, dates, location, notes, features and youth sections' },
+    can('event.configure') && { to: 'event', title: 'Event details', meta: 'Name, dates, location, notes and features' },
+    can('event.configure') && { to: 'sections', title: 'Sections', meta: 'Names, lanyard words and colours, which count as youth, and adding your own' },
     can('event.configure') && { to: 'banner', title: 'Participant page banner', meta: 'A graphic across the top of the page each lanyard opens' },
     can('event.configure') && { to: 'lanyards', title: 'Lanyards', meta: 'Design the front and back of the card, and how no-photo consent is marked' },
     can('staff.manage') && { to: 'staff', title: 'Staff', meta: staff.data ? `${plural(staff.data.staff.length, 'person', 'people')} · who works on this event` : 'Who works on this event and what they can do' },
@@ -122,7 +122,6 @@ export function EventDetails() {
   const editable = can('event.configure') && (event.status === 'draft' || event.status === 'open');
   const [form, setForm] = useState<EventForm>({ name: event.name, location: event.location, startsOn: event.startsOn, endsOn: event.endsOn, description: event.description });
   const [features, setFeatures] = useState<EventFeatures>(event.features);
-  const [youth, setYouth] = useState<string[]>(event.youthSections ?? [...YOUTH_SECTION_OPTIONS]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [failure, setFailure] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -139,8 +138,7 @@ export function EventDetails() {
     if (Object.keys(local).length) return;
     setBusy(true);
     try {
-      const youthChanged = [...youth].sort().join() !== [...(event.youthSections ?? [])].sort().join();
-      await api(`/events/${event.id}`, { method: 'PATCH', body: { ...form, features, ...(youthChanged ? { youthSections: youth } : {}) } });
+      await api(`/events/${event.id}`, { method: 'PATCH', body: { ...form, features } });
       await reload();
       toast('Changes saved');
       navigate(back.to);
@@ -172,21 +170,6 @@ export function EventDetails() {
         <fieldset className="form" disabled={!editable || busy}>
           <EventFields form={form} set={set} errors={errors} />
           <FeatureChecklist value={features} onChange={setFeatures} />
-          <fieldset className="choices youth-sections">
-            <legend className="field-label">Youth sections</legend>
-            <p className="meta">
-              Tick the sections that count as youth at this camp. Everyone else is an adult, and Leaders always are. For example, untick Rovers when they come
-              as helpers. Changing this updates everyone already on the roster.
-            </p>
-            {YOUTH_SECTION_OPTIONS.map((sec) => (
-              <Choice
-                key={sec}
-                label={sec}
-                checked={youth.includes(sec)}
-                onChange={(e) => setYouth(e.target.checked ? [...youth, sec] : youth.filter((x) => x !== sec))}
-              />
-            ))}
-          </fieldset>
         </fieldset>
         {editable && (
           <div className="btn-row">

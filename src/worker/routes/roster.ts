@@ -17,6 +17,8 @@ import { getEventRow } from './events';
 import { loadEventModel, whereabouts } from '../services/reports';
 import type { ImportRow } from '../../shared/schemas';
 import { isHealthExtra } from '../../shared/consent2go';
+import { loadSections } from '../services/sections';
+import { normalizeSection, sectionStyle } from '../../shared/sections';
 import { addToRoster, guestNumber, rowStatements, syncKindsStatement, toImportRow } from '../services/rosterWrites';
 
 export const rosterRoutes = new Hono<AppEnv>();
@@ -197,6 +199,7 @@ rosterRoutes.patch('/registrations/:registrationId', async (c) => {
   const id = regParam(c.req.param('registrationId'));
   const input = await parseBody(c, registrationPatchSchema);
   await editableEvent(c, eventId);
+  if (input.section !== undefined) input.section = normalizeSection(input.section, await loadSections(c.env.DB, eventId));
   const reg = await c.env.DB.prepare(`SELECT person_id FROM registrations WHERE id = ? AND event_id = ?`).bind(id, eventId).first<{ person_id: string }>();
   if (!reg) throw notFound();
 
@@ -400,6 +403,9 @@ async function validatedImport(c: AppContext, eventId: string) {
     if (event.feature_dietary !== 1) throw badRequest('Dietary requirements are switched off for this event.');
     if (!can(c.get('principal')!, 'dietary.edit', { eventId })) throw forbidden();
   }
+  // Sections are filed under the camp's own names (Settings › Sections).
+  const sections = await loadSections(c.env.DB, eventId);
+  input.rows = input.rows.map((r) => ({ ...r, section: normalizeSection(r.section, sections) }));
   const existing = await loadExisting(c.env.DB, eventId);
   if (input.source === 'consent2go') {
     input.withdrawMissing = false;
@@ -609,6 +615,7 @@ async function activeCards(c: AppContext, eventId: string, registrationIds?: str
   const origin = new URL(c.req.url).origin;
   const event = await c.env.DB.prepare(`SELECT feature_photo FROM events WHERE id = ?`).bind(eventId).first<{ feature_photo: number }>();
   const photos = event?.feature_photo === 1 && can(c.get('principal')!, 'photo.view_status', { eventId });
+  const sections = await loadSections(c.env.DB, eventId);
   return Promise.all(
     rows.map(async (r) => ({
       registrationId: r.id!,
@@ -619,6 +626,7 @@ async function activeCards(c: AppContext, eventId: string, registrationIds?: str
       kind: r.kind!,
       section: r.section!,
       groupName: r.group_name!,
+      style: sectionStyle(sections, r.section!),
       shortCode: formatShortCode(r.short_code!),
       // Anyone without a "yes" is treated as no consent, the same as at the scanner.
       noPhotos: photos && r.photo_consent !== 'yes',
