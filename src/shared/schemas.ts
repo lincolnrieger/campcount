@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SECTIONS, YOUTH_SECTION_OPTIONS } from './sections';
+import { SECTIONS } from './sections';
 import { BRAND_COLOR_PATTERN, subdomainProblem } from './site';
 
 export { SECTIONS };
@@ -95,7 +95,21 @@ export const updateEventSchema = z
     brandColor: eventFields.brandColor.unwrap(),
     lanyard: lanyardSettingsSchema.partial(),
     /** Sections that count as youth at this camp; everyone else (and Leaders always) is an adult. */
-    youthSections: z.array(z.enum(YOUTH_SECTION_OPTIONS)).max(YOUTH_SECTION_OPTIONS.length),
+    youthSections: z.array(trimmed(40).min(1)).max(40),
+    /** The camp's sections (Settings › Sections). `from` is the name it had, for renames. */
+    sections: z
+      .array(
+        z.strictObject({
+          from: trimmed(40).optional(),
+          name: trimmed(40).min(1, 'Give each section a name'),
+          base: z.enum([...SECTIONS, 'custom']),
+          word: trimmed(20),
+          colour: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Choose a colour'),
+          youth: z.boolean(),
+        }),
+      )
+      .min(SECTIONS.length)
+      .max(40),
   })
   .partial();
 
@@ -150,7 +164,8 @@ export const importRowSchema = z.strictObject({
   preferredName: trimmed(60).default(''),
   lastName: trimmed(60).min(1, 'Last name is missing'),
   kind: z.enum(['youth', 'adult']),
-  section: z.enum(SECTIONS),
+  /** A section name. The server files anything it doesn't know under the camp's own name for it, or Other. */
+  section: trimmed(40).min(1),
   groupName: trimmed(120).default(''),
   position: trimmed(120).default(''),
   roleLabel: trimmed(60).default(''),
@@ -173,7 +188,7 @@ export const registrationPatchSchema = z.strictObject({
   preferredName: trimmed(60).optional(),
   lastName: importRowSchema.shape.lastName.optional(),
   kind: z.enum(['youth', 'adult']).optional(),
-  section: z.enum(SECTIONS).optional(),
+  section: trimmed(40).min(1).optional(),
   groupName: trimmed(120).optional(),
   position: trimmed(120).optional(),
   photoConsent: z.enum(['yes', 'no', 'unknown']).optional(),
@@ -194,7 +209,8 @@ export const personEntrySchema = z.strictObject({
   /** Null for people who aren't members (a guest number is made for them). */
   memberNumber: z.string().trim().regex(/^[A-Za-z0-9-]{1,20}$/, 'Check the membership number').nullable(),
   kind: z.enum(['youth', 'adult']),
-  section: z.enum(SECTIONS),
+  /** A section name. The server files anything it doesn't know under the camp's own name for it, or Other. */
+  section: trimmed(40).min(1),
   groupName: trimmed(120).default(''),
   position: trimmed(120).default(''),
   photoConsent: z.enum(['yes', 'no', 'unknown']),

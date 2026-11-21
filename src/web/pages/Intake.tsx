@@ -1,11 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import { csvCell } from "../../shared/csv";
-import { suggestDietary } from "../../shared/dietarySuggest";
-import type {
-  Linked,
-  RosterPerson,
-  Section as SectionName,
-} from "../../shared/localIntake";
+import { useEffect, useMemo, useState } from 'react';
+import { csvCell } from '../../shared/csv';
+import { suggestDietary } from '../../shared/dietarySuggest';
+import type { Linked, RosterPerson, Section as SectionName } from '../../shared/localIntake';
 import {
   autoSection,
   buildRow,
@@ -16,36 +12,15 @@ import {
   linkPeople,
   memberKey,
   needsSection,
-} from "../../shared/localIntake";
-import type { DietaryEntryInput, ImportRow } from "../../shared/schemas";
-import { ApiFailure, api } from "../api";
-import { DietaryEditor } from "../components/DietaryEditor";
-import type { LocalImport, ReadFile, Source } from "../import/intakeFiles";
-import {
-  SOURCE_NAME,
-  clearLocal,
-  emptyLocal,
-  loadLocal,
-  readIntakeFile,
-  saveLocal,
-} from "../import/intakeFiles";
-import { useApi } from "../useApi";
-import {
-  Badge,
-  Button,
-  CountTile,
-  EmptyState,
-  Icon,
-  LoadError,
-  Loading,
-  Notice,
-  PageHeader,
-  Section,
-  plural,
-  useConfirm,
-  useToast,
-} from "../ui";
-import { useEvent } from "./EventLayout";
+} from '../../shared/localIntake';
+import type { DietaryEntryInput, ImportRow } from '../../shared/schemas';
+import { ApiFailure, api } from '../api';
+import { DietaryEditor } from '../components/DietaryEditor';
+import type { LocalImport, ReadFile, Source } from '../import/intakeFiles';
+import { SOURCE_NAME, clearLocal, emptyLocal, loadLocal, readIntakeFile, saveLocal } from '../import/intakeFiles';
+import { useApi } from '../useApi';
+import { Badge, Button, CountTile, EmptyState, Icon, LoadError, Loading, Notice, PageHeader, Section, plural, useConfirm, useToast } from '../ui';
+import { useEvent } from './EventLayout';
 
 interface Registration {
   id: string;
@@ -60,33 +35,20 @@ interface Registration {
   dietary?: DietaryEntryInput[];
 }
 
-const SECTION_CHOICES: { value: SectionName; label: string }[] = [
-  { value: "Joeys", label: "Joey" },
-  { value: "Cubs", label: "Cub" },
-  { value: "Scouts", label: "Scout" },
-  { value: "Venturers", label: "Venturer" },
-  { value: "Rovers", label: "Rover" },
-  { value: "Leaders", label: "Leader / Adult Helper" },
-  { value: "Other", label: "Other" },
-];
-
-const fail = (err: unknown) =>
-  err instanceof ApiFailure || err instanceof Error
-    ? err.message
-    : "No connection. Check your signal and try again.";
+const fail = (err: unknown) => (err instanceof ApiFailure || err instanceof Error ? err.message : 'No connection. Check your signal and try again.');
 const when = (iso: string) =>
-  new Date(iso).toLocaleString("en-AU", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "numeric",
-    minute: "2-digit",
+  new Date(iso).toLocaleString('en-AU', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
   });
 
 function downloadCsv(filename: string, rows: string[][]) {
-  const text = rows.map((r) => r.map(csvCell).join(",")).join("\r\n");
-  const url = URL.createObjectURL(new Blob(["﻿" + text], { type: "text/csv" }));
-  const a = document.createElement("a");
+  const text = rows.map((r) => r.map(csvCell).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob(['﻿' + text], { type: 'text/csv' }));
+  const a = document.createElement('a');
   a.href = url;
   a.download = filename;
   a.click();
@@ -105,12 +67,8 @@ export function Intake() {
   const { event, base } = useEvent();
   const toast = useToast();
   const confirm = useConfirm();
-  const context = useApi<{ dietaryEnabled: boolean; canEditDietary: boolean }>(
-    `/events/${event.id}/import/context`,
-  );
-  const registrations = useApi<{ registrations: Registration[] }>(
-    `/events/${event.id}/registrations`,
-  );
+  const context = useApi<{ dietaryEnabled: boolean; canEditDietary: boolean }>(`/events/${event.id}/import/context`);
+  const registrations = useApi<{ registrations: Registration[] }>(`/events/${event.id}/registrations`);
   const [local, setLocalState] = useState<LocalImport | null>(null);
   useEffect(() => {
     let live = true;
@@ -131,10 +89,7 @@ export function Intake() {
       return next;
     });
 
-  const regs = useMemo(
-    () => registrations.data?.registrations ?? [],
-    [registrations.data],
-  );
+  const regs = useMemo(() => registrations.data?.registrations ?? [], [registrations.data]);
   const roster: RosterPerson[] = useMemo(
     () =>
       regs.map((r) => ({
@@ -151,45 +106,22 @@ export function Intake() {
     [regs],
   );
   const files = local?.files;
-  const { people, unmatched } = useMemo(
-    () =>
-      linkPeople(
-        files?.myscout?.people ?? [],
-        files?.consent2go?.people ?? [],
-        roster,
-      ),
-    [files, roster],
-  );
-  const regByKey = useMemo(
-    () => new Map(regs.map((r) => [memberKey(r.memberNumber), r])),
-    [regs],
-  );
+  const { people, unmatched } = useMemo(() => linkPeople(files?.myscout?.people ?? [], files?.consent2go?.people ?? [], roster), [files, roster]);
+  const regByKey = useMemo(() => new Map(regs.map((r) => [memberKey(r.memberNumber), r])), [regs]);
 
-  async function sendToRoster(
-    files: LocalImport["files"],
-    chosen: LocalImport["chosen"],
-  ) {
-    const { people: linked } = linkPeople(
-      files.myscout?.people ?? [],
-      files.consent2go?.people ?? [],
-      roster,
-    );
-    const rows = linked
-      .map((p) => buildRow(p, chosen[p.key] as SectionName | undefined))
-      .filter((r): r is ImportRow => r !== null);
+  async function sendToRoster(files: LocalImport['files'], chosen: LocalImport['chosen']) {
+    const { people: linked } = linkPeople(files.myscout?.people ?? [], files.consent2go?.people ?? [], roster);
+    const rows = linked.map((p) => buildRow(p, chosen[p.key] as SectionName | undefined)).filter((r): r is ImportRow => r !== null);
     const totals = { create: 0, update: 0, unchanged: 0 };
     for (let i = 0; i < rows.length; i += 1000) {
-      const res = await api<{ counts: typeof totals }>(
-        `/events/${event.id}/import/commit`,
-        {
-          body: {
-            rows: rows.slice(i, i + 1000),
-            withdrawMissing: false,
-            sourceLabel: "Import & check",
-            source: "myscout",
-          },
+      const res = await api<{ counts: typeof totals }>(`/events/${event.id}/import/commit`, {
+        body: {
+          rows: rows.slice(i, i + 1000),
+          withdrawMissing: false,
+          sourceLabel: 'Import & check',
+          source: 'myscout',
         },
-      );
+      });
       totals.create += res.counts.create;
       totals.update += res.counts.update;
       totals.unchanged += res.counts.unchanged;
@@ -216,7 +148,7 @@ export function Intake() {
       update((l) => ({ ...l, files: next }));
       await registrations.reload();
       setSummary(
-        `${results.map((r) => `${SOURCE_NAME[r.source]}: ${plural(r.people.length, "person", "people")}`).join(" · ")}. On the roster: ${totals.create} added, ${totals.update} updated, ${totals.unchanged} unchanged.`,
+        `${results.map((r) => `${SOURCE_NAME[r.source]}: ${plural(r.people.length, 'person', 'people')}`).join(' · ')}. On the roster: ${totals.create} added, ${totals.update} updated, ${totals.unchanged} unchanged.`,
       );
     } catch (err) {
       setProblem(fail(err));
@@ -230,29 +162,22 @@ export function Intake() {
     if (!reg) return;
     try {
       await api(`/events/${event.id}/registrations/${reg.id}`, {
-        method: "PATCH",
-        body: { section, kind: section === "Leaders" ? "adult" : "youth" },
+        method: 'PATCH',
+        body: { section },
       });
       update((l) => ({ ...l, chosen: { ...l.chosen, [p.key]: section } }));
       await registrations.reload();
-      toast(
-        `${displayName(p)}: ${SECTION_CHOICES.find((c) => c.value === section)?.label}`,
-      );
+      toast(`${displayName(p)}: ${section}`);
     } catch (err) {
-      toast(fail(err), { tone: "error" });
+      toast(fail(err), { tone: 'error' });
     }
   }
 
   async function forget() {
     const ok = await confirm({
-      title: "Clear from this computer?",
-      body: (
-        <p>
-          Forgets the uploaded files, the sections you chose and which dietary
-          notes you’ve done, on this computer. The roster stays as it is.
-        </p>
-      ),
-      confirm: "Clear",
+      title: 'Clear from this computer?',
+      body: <p>Forgets the uploaded files, the sections you chose and which dietary notes you’ve done, on this computer. The roster stays as it is.</p>,
+      confirm: 'Clear',
       danger: true,
     });
     if (!ok) return;
@@ -264,21 +189,17 @@ export function Intake() {
   const header = (
     <PageHeader
       title="Import & check"
-      back={{ to: `${base}/people`, label: "People" }}
+      back={{ to: `${base}/people`, label: 'People' }}
       summary="Upload the MyScout and Consent2Go exports, as often as you like. Everyone goes onto the roster straight away. Then choose sections where the MyScout position doesn’t say, and read through dietary notes. The files stay on this computer."
       menu={[
         {
-          label: "Import with column matching",
+          label: 'Import with column matching',
           to: `${base}/people/import/columns`,
         },
       ]}
     />
   );
-  if (
-    !local ||
-    (context.loading && !context.data) ||
-    (registrations.loading && !registrations.data)
-  )
+  if (!local || (context.loading && !context.data) || (registrations.loading && !registrations.data))
     return (
       <>
         {header}
@@ -301,39 +222,22 @@ export function Intake() {
       </>
     );
 
+  const sectionNames = event.sections.map((x) => x.name);
   const onRoster = (p: Linked) => regByKey.has(p.key);
   const chosenMap = local.chosen as Record<string, SectionName>;
-  const toChoose = people.filter(
-    (p) => onRoster(p) && needsSection(p, chosenMap),
-  );
-  const chosen = people.filter(
-    (p) => onRoster(p) && autoSection(p) === null && chosenMap[p.key],
-  );
+  const toChoose = people.filter((p) => onRoster(p) && needsSection(p, chosenMap));
+  const chosen = people.filter((p) => onRoster(p) && autoSection(p) === null && chosenMap[p.key]);
   const dietaryTodo = people
-    .filter(
-      (p) =>
-        onRoster(p) &&
-        hasDietaryNotes(p) &&
-        local.dietaryDone[p.key] !== dietarySignature(p),
-    )
+    .filter((p) => onRoster(p) && hasDietaryNotes(p) && local.dietaryDone[p.key] !== dietarySignature(p))
     .sort((a, b) => later.indexOf(a.key) - later.indexOf(b.key));
-  const dietaryDone = people.filter(
-    (p) =>
-      onRoster(p) &&
-      hasDietaryNotes(p) &&
-      local.dietaryDone[p.key] === dietarySignature(p),
-  );
+  const dietaryDone = people.filter((p) => onRoster(p) && hasDietaryNotes(p) && local.dietaryDone[p.key] === dietarySignature(p));
   const noC2G = people.filter((p) => p.ms && !p.cg);
   const notInMyScout = people.filter((p) => !p.ms && p.cg);
-  const nameMatched = people.filter((p) => p.ms && p.link === "name");
-  const problems = (["myscout", "consent2go"] as const).flatMap((s) =>
-    (local.files[s]?.problems ?? []).map((pr) => ({ source: s, ...pr })),
-  );
+  const nameMatched = people.filter((p) => p.ms && p.link === 'name');
+  const problems = (['myscout', 'consent2go'] as const).flatMap((s) => (local.files[s]?.problems ?? []).map((pr) => ({ source: s, ...pr })));
   const anyFile = !!(local.files.myscout || local.files.consent2go);
   const current = dietaryTodo[0];
-  const canDiet = !!(
-    context.data?.dietaryEnabled && context.data.canEditDietary
-  );
+  const canDiet = !!(context.data?.dietaryEnabled && context.data.canEditDietary);
 
   return (
     <>
@@ -353,35 +257,24 @@ export function Intake() {
         <Section title="Upload" id="upload">
           <label className="dropzone">
             <Icon name="download" size={24} />
-            <strong>
-              {busy
-                ? "Reading and updating the roster…"
-                : "Choose the MyScout and Consent2Go files"}
-            </strong>
-            <span className="meta">
-              One or both. Each is recognised by its columns, and read on this
-              computer.
-            </span>
+            <strong>{busy ? 'Reading and updating the roster…' : 'Choose the MyScout and Consent2Go files'}</strong>
+            <span className="meta">One or both. Each is recognised by its columns, and read on this computer.</span>
             <input
               type="file"
               multiple
               accept=".xlsx,.csv,.tsv,.txt,text/csv"
               disabled={busy}
-              onChange={(e) =>
-                e.target.files?.length && void upload(e.target.files)
-              }
+              onChange={(e) => e.target.files?.length && void upload(e.target.files)}
             />
           </label>
           <ul className="intake-sources">
-            {(["myscout", "consent2go"] as Source[]).map((s) => {
+            {(['myscout', 'consent2go'] as Source[]).map((s) => {
               const f = local.files[s];
               return (
                 <li key={s}>
                   <strong>{SOURCE_NAME[s]}</strong>
                   <span className="meta">
-                    {f
-                      ? `${f.fileName}: ${plural(f.people.length, "person", "people")} · uploaded ${when(f.at)}`
-                      : "Not uploaded on this computer yet"}
+                    {f ? `${f.fileName}: ${plural(f.people.length, 'person', 'people')} · uploaded ${when(f.at)}` : 'Not uploaded on this computer yet'}
                   </span>
                 </li>
               );
@@ -392,10 +285,7 @@ export function Intake() {
               <Button small kind="ghost" onClick={() => void forget()}>
                 Clear from this computer
               </Button>
-              <span className="meta">
-                The files are kept in this browser only, so you can come back to
-                them.
-              </span>
+              <span className="meta">The files are kept in this browser only, so you can come back to them.</span>
             </div>
           )}
           {problems.length > 0 && (
@@ -403,7 +293,7 @@ export function Intake() {
               <ul>
                 {problems.map((p, i) => (
                   <li key={i}>
-                    {SOURCE_NAME[p.source]}, {p.where}: {p.errors.join("; ")}
+                    {SOURCE_NAME[p.source]}, {p.where}: {p.errors.join('; ')}
                   </li>
                 ))}
               </ul>
@@ -412,45 +302,25 @@ export function Intake() {
         </Section>
 
         {!anyFile ? (
-          <EmptyState title="Nothing uploaded yet">
-            Choose the MyScout export, the Consent2Go export, or both.
-          </EmptyState>
+          <EmptyState title="Nothing uploaded yet">Choose the MyScout export, the Consent2Go export, or both.</EmptyState>
         ) : (
           <>
             <div className="tiles intake-tiles">
-              <CountTile
-                value={canDiet ? dietaryTodo.length : "–"}
-                label="Dietary to read"
-                tone={canDiet && dietaryTodo.length ? "warning" : "success"}
-              />
-              <CountTile
-                value={toChoose.length}
-                label="Section to choose"
-                tone={toChoose.length ? "warning" : "success"}
-              />
-              <CountTile
-                value={local.files.consent2go ? noC2G.length : "–"}
-                label="No Consent2Go yet"
-              />
+              <CountTile value={canDiet ? dietaryTodo.length : '–'} label="Dietary to read" tone={canDiet && dietaryTodo.length ? 'warning' : 'success'} />
+              <CountTile value={toChoose.length} label="Section to choose" tone={toChoose.length ? 'warning' : 'success'} />
+              <CountTile value={local.files.consent2go ? noC2G.length : '–'} label="No Consent2Go yet" />
               <CountTile value={people.length} label="Everyone in the files" />
             </div>
 
             <Section title="Dietary notes" id="dietary">
               {!context.data?.dietaryEnabled ? (
-                <p className="meta">
-                  Dietary needs are switched off for this camp (Settings › Event
-                  details).
-                </p>
+                <p className="meta">Dietary needs are switched off for this camp (Settings › Event details).</p>
               ) : !context.data.canEditDietary ? (
-                <p className="meta">
-                  Someone who can edit dietary needs reads these.
-                </p>
+                <p className="meta">Someone who can edit dietary needs reads these.</p>
               ) : !current ? (
                 <p className="meta">
-                  {dietaryDone.length
-                    ? `All ${plural(dietaryDone.length, "person", "people")} with dietary notes are done.`
-                    : "No one has dietary notes."}{" "}
-                  New or changed notes show here after each upload.
+                  {dietaryDone.length ? `All ${plural(dietaryDone.length, 'person', 'people')} with dietary notes are done.` : 'No one has dietary notes.'} New
+                  or changed notes show here after each upload.
                 </p>
               ) : (
                 <DietaryReview
@@ -469,39 +339,22 @@ export function Intake() {
                     }));
                     await registrations.reload();
                   }}
-                  onLater={
-                    dietaryTodo.length > 1
-                      ? (p) =>
-                          setLater((l) => [
-                            ...l.filter((k) => k !== p.key),
-                            p.key,
-                          ])
-                      : undefined
-                  }
+                  onLater={dietaryTodo.length > 1 ? (p) => setLater((l) => [...l.filter((k) => k !== p.key), p.key]) : undefined}
                 />
               )}
             </Section>
 
-            <Section
-              title={`Choose a section${toChoose.length ? ` (${toChoose.length})` : ""}`}
-              id="sections"
-            >
+            <Section title={`Choose a section${toChoose.length ? ` (${toChoose.length})` : ''}`} id="sections">
               <p className="meta">
-                Joeys, Cubs, Scouts, Venturers, Rovers and Adult Helpers get
-                their section from their MyScout position. Choose one for
-                everyone else. Their MyScout position stays on their profile.
+                Joeys, Cubs, Scouts, Venturers, Rovers and Adult Helpers get their section from their MyScout position. Choose one for everyone else. Their
+                MyScout position stays on their profile.
               </p>
               {toChoose.length === 0 ? (
                 <p className="meta">Nothing to choose.</p>
               ) : (
                 <ul className="list">
                   {toChoose.map((p) => (
-                    <SectionRow
-                      key={p.key}
-                      person={p}
-                      current=""
-                      onChoose={(s) => void chooseSection(p, s)}
-                    />
+                    <SectionRow key={p.key} person={p} options={sectionNames} current="" onChoose={(s) => void chooseSection(p, s)} />
                   ))}
                 </ul>
               )}
@@ -510,12 +363,7 @@ export function Intake() {
                   <summary>Chosen already ({chosen.length})</summary>
                   <ul className="list">
                     {chosen.map((p) => (
-                      <SectionRow
-                        key={p.key}
-                        person={p}
-                        current={chosenMap[p.key] ?? ""}
-                        onChoose={(s) => void chooseSection(p, s)}
-                      />
+                      <SectionRow key={p.key} person={p} options={sectionNames} current={chosenMap[p.key] ?? ''} onChoose={(s) => void chooseSection(p, s)} />
                     ))}
                   </ul>
                 </details>
@@ -524,9 +372,7 @@ export function Intake() {
 
             <Section title="No Consent2Go yet" id="noc2g">
               {!local.files.consent2go ? (
-                <p className="meta">
-                  Upload the Consent2Go export to see who hasn’t done it.
-                </p>
+                <p className="meta">Upload the Consent2Go export to see who hasn’t done it.</p>
               ) : noC2G.length === 0 ? (
                 <p className="meta">Everyone in MyScout has done Consent2Go.</p>
               ) : (
@@ -536,19 +382,13 @@ export function Intake() {
                       small
                       kind="ghost"
                       onClick={() =>
-                        downloadCsv("No Consent2Go yet.csv", [
-                          ["Name", "Membership number", "Position", "Group"],
-                          ...noC2G.map((p) => [
-                            displayName(p),
-                            p.memberNumber,
-                            p.ms?.position ?? "",
-                            p.ms?.groupName ?? "",
-                          ]),
+                        downloadCsv('No Consent2Go yet.csv', [
+                          ['Name', 'Membership number', 'Position', 'Group'],
+                          ...noC2G.map((p) => [displayName(p), p.memberNumber, p.ms?.position ?? '', p.ms?.groupName ?? '']),
                         ])
                       }
                     >
-                      <Icon name="download" /> Download the list ({noC2G.length}
-                      )
+                      <Icon name="download" /> Download the list ({noC2G.length})
                     </Button>
                   </div>
                   <details className="intake-more">
@@ -558,11 +398,7 @@ export function Intake() {
                         <li key={p.key} className="row">
                           <span className="row-main">
                             <span className="row-title">{displayName(p)}</span>
-                            <span className="row-meta">
-                              {[p.memberNumber, p.ms?.position, p.ms?.groupName]
-                                .filter(Boolean)
-                                .join(" · ")}
-                            </span>
+                            <span className="row-meta">{[p.memberNumber, p.ms?.position, p.ms?.groupName].filter(Boolean).join(' · ')}</span>
                           </span>
                         </li>
                       ))}
@@ -572,27 +408,19 @@ export function Intake() {
               )}
             </Section>
 
-            {(notInMyScout.length > 0 ||
-              unmatched.length > 0 ||
-              nameMatched.length > 0) && (
+            {(notInMyScout.length > 0 || unmatched.length > 0 || nameMatched.length > 0) && (
               <Section title="Matching Consent2Go to MyScout" id="matching">
                 {nameMatched.length > 0 && (
                   <>
-                    <h3 className="intake-subhead">
-                      Matched by name ({nameMatched.length})
-                    </h3>
-                    <p className="meta">
-                      Their Consent2Go Student ID didn’t match a MyScout
-                      membership number, but their name did.
-                    </p>
+                    <h3 className="intake-subhead">Matched by name ({nameMatched.length})</h3>
+                    <p className="meta">Their Consent2Go Student ID didn’t match a MyScout membership number, but their name did.</p>
                     <ul className="list">
                       {nameMatched.map((p) => (
                         <li key={p.key} className="row">
                           <span className="row-main">
                             <span className="row-title">{displayName(p)}</span>
                             <span className="row-meta">
-                              MyScout {p.memberNumber} · Consent2Go Student ID{" "}
-                              {p.cg?.memberNumber || "(blank)"} · {p.cg?.where}
+                              MyScout {p.memberNumber} · Consent2Go Student ID {p.cg?.memberNumber || '(blank)'} · {p.cg?.where}
                             </span>
                           </span>
                         </li>
@@ -602,27 +430,16 @@ export function Intake() {
                 )}
                 {notInMyScout.length > 0 && (
                   <>
-                    <h3 className="intake-subhead">
-                      In Consent2Go but not MyScout ({notInMyScout.length})
-                    </h3>
-                    <p className="meta">
-                      Added to the roster from Consent2Go. Check they’ve
-                      registered.
-                    </p>
+                    <h3 className="intake-subhead">In Consent2Go but not MyScout ({notInMyScout.length})</h3>
+                    <p className="meta">Added to the roster from Consent2Go. Check they’ve registered.</p>
                     <ul className="list">
                       {notInMyScout.map((p) => (
                         <li key={p.key} className="row">
                           <span className="row-main">
                             <span className="row-title">{displayName(p)}</span>
-                            <span className="row-meta">
-                              {[p.memberNumber, p.cg?.where]
-                                .filter(Boolean)
-                                .join(" · ")}
-                            </span>
+                            <span className="row-meta">{[p.memberNumber, p.cg?.where].filter(Boolean).join(' · ')}</span>
                           </span>
-                          {p.link === "name" && (
-                            <Badge>Matched to the roster by name</Badge>
-                          )}
+                          {p.link === 'name' && <Badge>Matched to the roster by name</Badge>}
                         </li>
                       ))}
                     </ul>
@@ -630,13 +447,8 @@ export function Intake() {
                 )}
                 {unmatched.length > 0 && (
                   <>
-                    <h3 className="intake-subhead">
-                      Couldn’t be matched ({unmatched.length})
-                    </h3>
-                    <p className="meta">
-                      No usable Student ID, and no one in MyScout or on the
-                      roster with this name. Not added.
-                    </p>
+                    <h3 className="intake-subhead">Couldn’t be matched ({unmatched.length})</h3>
+                    <p className="meta">No usable Student ID, and no one in MyScout or on the roster with this name. Not added.</p>
                     <ul className="list">
                       {unmatched.map((c, i) => (
                         <li key={i} className="row">
@@ -660,15 +472,7 @@ export function Intake() {
   );
 }
 
-function SectionRow({
-  person,
-  current,
-  onChoose,
-}: {
-  person: Linked;
-  current: string;
-  onChoose: (s: SectionName) => void;
-}) {
+function SectionRow({ person, options, current, onChoose }: { person: Linked; options: string[]; current: string; onChoose: (s: SectionName) => void }) {
   const id = `section-${person.key}`;
   return (
     <li className="row intake-section-row">
@@ -679,27 +483,18 @@ function SectionRow({
         <span className="row-meta">
           {[
             person.memberNumber,
-            person.ms?.position
-              ? `MyScout position: ${person.ms.position}`
-              : "No MyScout position",
+            person.ms?.position ? `MyScout position: ${person.ms.position}` : 'No MyScout position',
             person.cg?.groupName || person.ms?.groupName,
           ]
             .filter(Boolean)
-            .join(" · ")}
+            .join(' · ')}
         </span>
       </span>
-      <select
-        id={id}
-        className="select intake-section-select"
-        value={current}
-        onChange={(e) =>
-          e.target.value && onChoose(e.target.value as SectionName)
-        }
-      >
+      <select id={id} className="select intake-section-select" value={current} onChange={(e) => e.target.value && onChoose(e.target.value as SectionName)}>
         {!current && <option value="">Choose…</option>}
-        {SECTION_CHOICES.map((c) => (
-          <option key={c.value} value={c.value}>
-            {c.label}
+        {(current && !options.includes(current) ? [current, ...options] : options).map((name) => (
+          <option key={name} value={name}>
+            {name}
           </option>
         ))}
       </select>
@@ -724,33 +519,23 @@ function DietaryReview({
   onLater?: (p: Linked) => void;
 }) {
   const notes = dietaryNotes(person);
-  const [entries, setEntries] = useState<DietaryEntryInput[] | undefined>(
-    () => {
-      const merged = [...(reg.dietary ?? [])];
-      for (const e of suggestDietary(notes.myscout, notes.consent2go))
-        if (
-          !merged.some(
-            (x) =>
-              x.category === e.category &&
-              x.item.toLowerCase() === e.item.toLowerCase(),
-          )
-        )
-          merged.push(e);
-      return merged.length ? merged : undefined;
-    },
-  );
+  const [entries, setEntries] = useState<DietaryEntryInput[] | undefined>(() => {
+    const merged = [...(reg.dietary ?? [])];
+    for (const e of suggestDietary(notes.myscout, notes.consent2go))
+      if (!merged.some((x) => x.category === e.category && x.item.toLowerCase() === e.item.toLowerCase())) merged.push(e);
+    return merged.length ? merged : undefined;
+  });
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const toast = useToast();
 
   async function save() {
-    if (entries === undefined)
-      return setProblem("Add what they need, or choose “No dietary needs”.");
+    if (entries === undefined) return setProblem('Add what they need, or choose “No dietary needs”.');
     setBusy(true);
     setProblem(null);
     try {
       await api(`/events/${eventId}/registrations/${reg.id}/dietary`, {
-        method: "PUT",
+        method: 'PUT',
         body: { entries },
       });
       toast(`${displayName(person)} done`);
@@ -767,8 +552,7 @@ function DietaryReview({
       <div className="intake-diet-head">
         <h3>{displayName(person)}</h3>
         <span className="meta">
-          {[person.memberNumber, reg.section].filter(Boolean).join(" · ")} ·{" "}
-          {plural(left, "person", "people")} to go
+          {[person.memberNumber, reg.section].filter(Boolean).join(' · ')} · {plural(left, 'person', 'people')} to go
         </span>
       </div>
       <div className="intake-notes">
@@ -793,28 +577,15 @@ function DietaryReview({
           )}
         </div>
       </div>
-      {entries && entries.length > 0 && !(reg.dietary ?? []).length && (
-        <p className="meta">
-          Filled in from the notes. Check them against what’s written.
-        </p>
-      )}
+      {entries && entries.length > 0 && !(reg.dietary ?? []).length && <p className="meta">Filled in from the notes. Check them against what’s written.</p>}
       {problem && (
         <Notice tone="error">
           <p>{problem}</p>
         </Notice>
       )}
-      <DietaryEditor
-        value={entries}
-        onChange={setEntries}
-        labelPrefix={displayName(person)}
-      />
+      <DietaryEditor value={entries} onChange={setEntries} labelPrefix={displayName(person)} />
       <div className="btn-row">
-        <Button
-          kind="primary"
-          busy={busy}
-          busyLabel="Saving…"
-          onClick={() => void save()}
-        >
+        <Button kind="primary" busy={busy} busyLabel="Saving…" onClick={() => void save()}>
           Save, next person
         </Button>
         {onLater && (

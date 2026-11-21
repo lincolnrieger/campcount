@@ -61,6 +61,7 @@ export function PersonFields({
   errors = {},
   youthLabel = 'A young person',
   adultLabel = 'A leader or helper',
+  youthSections = YOUTH_SECTIONS,
 }: {
   value: PersonForm;
   onChange: (next: PersonForm) => void;
@@ -69,6 +70,8 @@ export function PersonFields({
   errors?: Record<string, string>;
   youthLabel?: string;
   adultLabel?: string;
+  /** The camp's youth sections, by name (Settings › Sections). */
+  youthSections?: string[];
 }) {
   const set = <K extends keyof PersonForm>(k: K, v: PersonForm[K]) => onChange({ ...value, [k]: v });
   const name = value.preferredName || value.firstName || 'them';
@@ -93,7 +96,7 @@ export function PersonFields({
       {value.kind === 'youth' && (
         <Field id="pf-section" label="Section">
           <select className="select" value={value.section} onChange={(e) => set('section', e.target.value)}>
-            {YOUTH_SECTIONS.map((s) => (
+            {(youthSections.includes(value.section) ? youthSections : [value.section, ...youthSections]).map((s) => (
               <option key={s}>{s}</option>
             ))}
           </select>

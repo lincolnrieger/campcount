@@ -14,7 +14,7 @@ import { contextState, loadContext } from '../services/contexts';
 import { can } from '../services/principal';
 import { addMember, createTeam, participantTeams, removeMember, teamEventRow, teamRow } from '../services/teams';
 import { teamNameSchema } from '../../shared/schemas';
-import { sectionWord } from '../../shared/lanyardDesign';
+import { parseSectionSettings, sectionStyle } from '../../shared/sections';
 import { bannerUrl } from './banner';
 import { dutiesFor } from './duties';
 import { activitiesDone, collect, meIsValid, readMe, standing, writeMe } from '../services/sideQuest';
@@ -41,6 +41,8 @@ interface SignupEvent {
   feature_self_signup: number;
   feature_side_quest: number;
   signup_code: string | null;
+  section_settings: string | null;
+  youth_sections: string;
 }
 
 export interface SignupSession {
@@ -131,7 +133,8 @@ interface Person {
 async function personFor(c: AppContext, { registrationId, credentialId }: Pass): Promise<Person> {
   const row = await c.env.DB.prepare(
     `SELECT r.id, r.group_name, r.kind, r.section, p.first_name, p.preferred_name, p.last_name,
-            e.id AS event_id, e.name AS event_name, e.status, e.timezone, e.starts_on, e.ends_on, e.feature_self_signup, e.feature_side_quest, e.signup_code
+            e.id AS event_id, e.name AS event_name, e.status, e.timezone, e.starts_on, e.ends_on, e.feature_self_signup, e.feature_side_quest, e.signup_code,
+            e.section_settings, e.youth_sections
        FROM registrations r JOIN people p ON p.id = r.person_id JOIN events e ON e.id = r.event_id
        JOIN credentials cr ON cr.registration_id = r.id AND cr.id = ? AND cr.status = 'active'
       WHERE r.id = ? AND r.status = 'active'`,
@@ -158,8 +161,15 @@ async function personFor(c: AppContext, { registrationId, credentialId }: Pass):
       feature_self_signup: Number(row.feature_self_signup),
       feature_side_quest: Number(row.feature_side_quest),
       signup_code: row.signup_code as string | null,
+      section_settings: row.section_settings as string | null,
+      youth_sections: String(row.youth_sections ?? ''),
     },
   };
+}
+
+/** The word and colour for someone's section at their camp (Settings › Sections). */
+function styleOf(p: Person) {
+  return sectionStyle(parseSectionSettings(p.event.section_settings, p.event.youth_sections), p.section);
 }
 
 /**
@@ -230,7 +240,7 @@ async function personView(c: AppContext, p: Person, opts: { sideQuest?: boolean 
   ]);
   return {
     pass: await makePass(c, p),
-    person: { name: p.name, firstName: p.firstName, lastName: p.lastName, kind: p.kind, groupName: p.groupName, section: p.section, sectionWord: sectionWord(p.kind, p.section) },
+    person: { name: p.name, firstName: p.firstName, lastName: p.lastName, kind: p.kind, groupName: p.groupName, section: p.section, sectionWord: styleOf(p).word, sectionColour: styleOf(p).bg },
     activitiesDone: done,
     // Only on someone's own link, and only once the camp has turned the game on.
     sideQuest: quest,
@@ -330,7 +340,7 @@ publicSignupRoutes.post('/identify', async (c) => {
       return c.json({
         collect: {
           fresh,
-          friend: { firstName: person.firstName, section: person.section, sectionWord: sectionWord(person.kind, person.section) },
+          friend: { firstName: person.firstName, section: person.section, kind: person.kind, sectionWord: styleOf(person).word },
           owner: { firstName: owner.firstName },
           standing: await standing(c.env.DB, person.event.id, owner.registrationId),
         },

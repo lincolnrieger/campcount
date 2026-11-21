@@ -208,6 +208,8 @@ export interface CardPerson {
   shortCode: string;
   qr: string;
   noPhotos?: boolean;
+  /** The camp's word and colours for their section (Settings › Sections). */
+  style?: { word: string; bg: string; fg: string };
 }
 
 /** Fill {fields} in text for one person. Unknown {words} are left as typed. */
@@ -219,7 +221,7 @@ export function fillFields(text: string, person: CardPerson, campName: string): 
     last: person.lastName ?? (parts.length > 1 ? parts.slice(1).join(' ') : ''),
     // Cards no longer show the group: {group} on an older design prints nothing.
     group: '',
-    section: sectionWord(person.kind, person.section),
+    section: person.style ? person.style.word : sectionWord(person.kind, person.section),
     code: person.shortCode,
     camp: campName,
   };
@@ -228,7 +230,7 @@ export function fillFields(text: string, person: CardPerson, campName: string): 
 
 export function resolveColour(c: Colour, person: CardPerson | null): string {
   if (c !== SECTION_COLOUR && c !== SECTION_TEXT_COLOUR) return c;
-  const s = person ? sectionColours(sectionWord(person.kind, person.section)) : SECTION_COLOURS.Scout!;
+  const s = person?.style ?? (person ? sectionColours(sectionWord(person.kind, person.section)) : SECTION_COLOURS.Scout!);
   return c === SECTION_COLOUR ? s.bg : s.fg;
 }
 
