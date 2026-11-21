@@ -287,6 +287,27 @@ intakeRoutes.post('/check', async (c) => {
   return c.json({ person: people.find((p) => key(p.memberNumber) === k) ?? null });
 });
 
+/**
+ * Forget uploads: one source's sightings, or both and every check (start
+ * over). People already put on the roster stay there.
+ */
+intakeRoutes.delete('/uploads', async (c) => {
+  const eventId = c.req.param('eventId')!;
+  requirePermission(c, 'roster.import', { eventId });
+  const user = requireUser(c);
+  await editableEvent(c, eventId);
+  const which = c.req.query('source');
+  if (which !== 'myscout' && which !== 'consent2go' && which !== 'all') throw badRequest('Say which uploads to clear.');
+  await c.env.DB.batch([
+    which === 'all'
+      ? c.env.DB.prepare(`DELETE FROM intake_sightings WHERE event_id = ?`).bind(eventId)
+      : c.env.DB.prepare(`DELETE FROM intake_sightings WHERE event_id = ? AND source = ?`).bind(eventId, which),
+    ...(which === 'all' ? [c.env.DB.prepare(`DELETE FROM intake_checks WHERE event_id = ?`).bind(eventId)] : []),
+    auditStatement(c.env.DB, { actor: { type: 'user', id: user.userId }, action: 'intake.clear', eventId, targetType: 'event', targetId: eventId, detail: { which } }),
+  ]);
+  return c.json({ ok: true });
+});
+
 /** Undo a check, so the person shows as needing a look again. */
 intakeRoutes.delete('/check/:memberNumber', async (c) => {
   const eventId = c.req.param('eventId')!;
