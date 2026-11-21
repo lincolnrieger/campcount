@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { c2gSection, isHealthExtra, prepareConsent2Go } from '../src/shared/consent2go';
+import { c2gClass, c2gSection, isHealthExtra, prepareConsent2Go } from '../src/shared/consent2go';
 import { api, createEvent, createRole, createUser, grant, json, testEnv } from './helpers';
 
 // The Consent2Go template's columns (row 2), with a title in row 1. All people here are made up.
@@ -21,7 +21,13 @@ describe('reading a Consent2Go workbook', () => {
       sheet('Joeys', [{ 'Student ID': '5000001', FirstName: 'Jo', LastName: 'Ey', 'Photo Use Authorised': 'Yes', 'Dietary Requirement 1': 'Peanut allergy', 'Dietary Requirement 2': 'Lactose', 'Swimming Ability': 'Weak', ParacetamolOK: 'Yes' }]),
       sheet('Scouts', [{ 'Student ID': '5000002', FirstName: 'Sc', LastName: 'Out', 'Photo Use Authorised': 'No' }]),
       sheet('Venturers', [{ 'Student ID': '5000003', FirstName: 'Ven', LastName: 'Turer' }]),
-      sheet('Rovers and helpers', [{ 'Student ID': '5000004', FirstName: 'Ro', LastName: 'Ver' }]),
+      sheet('Example Hills Scout Group', [
+        { 'Student ID': '5000004', FirstName: 'Ro', LastName: 'Ver', Year: 'Ldr' },
+        // A Venturer who is a Joey leader: the class says leader.
+        { 'Student ID': '5000006', FirstName: 'Vee', LastName: 'Leader', Year: 'Joey Ldr' },
+        { 'Student ID': '5000007', FirstName: 'Ven', LastName: 'Code', Year: 'Ven' },
+        { 'Student ID': '5000008', FirstName: 'No', LastName: 'Class' },
+      ]),
       sheet('1st Glenelg', [{ 'Student ID': '5000005', FirstName: 'Gl', LastName: 'Enelg', HomeRoom: 'Scouts' }]),
       { name: 'Notes', rows: [['Please return forms by Friday']] },
     ]);
@@ -32,8 +38,12 @@ describe('reading a Consent2Go workbook', () => {
     expect(by('5000001').where).toBe('Joeys, row 3');
     expect(by('5000002').row).toMatchObject({ section: 'Scouts', photoConsent: 'no' });
     expect(by('5000003').row.section).toBe('Venturers');
-    expect(by('5000004').row).toMatchObject({ section: 'Rovers', kind: 'youth' });
-    // A tab named after a group: the group is the tab, the section comes from HomeRoom.
+    // A tab named for a Scout group is the group; the class (Year) is the section.
+    expect(by('5000004').row).toMatchObject({ section: 'Leaders', kind: 'adult', groupName: 'Example Hills Scout Group' });
+    expect(by('5000006').row).toMatchObject({ section: 'Leaders', kind: 'adult' });
+    expect(by('5000007').row).toMatchObject({ section: 'Venturers', kind: 'youth', groupName: 'Example Hills Scout Group' });
+    expect(by('5000008').row).toMatchObject({ section: 'Other', groupName: 'Example Hills Scout Group' });
+    // The class can also be in HomeRoom.
     expect(by('5000005').row).toMatchObject({ section: 'Scouts', groupName: '1st Glenelg' });
     // Parent and emergency contacts are never kept.
     expect(JSON.stringify(prepared)).not.toMatch(/Parent|Emergency/);
@@ -50,6 +60,7 @@ describe('reading a Consent2Go workbook', () => {
   });
 
   it('maps sections as asked: Joeys, Scouts, Venturers, everyone else a leader', () => {
+    expect(['Ldr', 'Joey Ldr', 'Joey', 'Cub', 'Sct', 'Scouts', 'Ven', 'Rov', 'Year 7', ''].map(c2gClass)).toEqual(['Leaders', 'Leaders', 'Joeys', 'Cubs', 'Scouts', 'Scouts', 'Venturers', 'Rovers', null, null]);
     expect(['Joey Mob', 'Scout Troop', 'Venturer Unit', 'Cub Pack', 'Rovers', 'Event team'].map(c2gSection)).toEqual(['Joeys', 'Scouts', 'Venturers', 'Cubs', 'Rovers', 'Leaders']);
     expect(isHealthExtra('Ibuprofen OK')).toBe(true);
     expect(isHealthExtra('Swimming ability')).toBe(false);

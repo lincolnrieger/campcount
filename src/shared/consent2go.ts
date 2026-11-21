@@ -50,18 +50,31 @@ export function isHealthExtra(label: string): boolean {
   return HEALTH_EXTRA_FIELDS.includes(label) || /medic|paracetamol|histamine|inflammator|ibuprofen|allerg/i.test(label);
 }
 
-/** The section for a Consent2Go row: Joeys, Cubs, Scouts, Venturers or Rovers by name; everyone else is a leader. */
-export function c2gSection(text: string): (typeof SECTIONS)[number] {
-  const t = text.toLowerCase();
-  if (/joey/.test(t)) return 'Joeys';
-  if (/\bcub/.test(t)) return 'Cubs';
-  if (/venturer/.test(t)) return 'Venturers';
-  if (/rover/.test(t)) return 'Rovers';
-  if (/scout/.test(t)) return 'Scouts';
-  return 'Leaders';
+/**
+ * The section for a Consent2Go class, as typed in the Year (or HomeRoom,
+ * House) column: full words or short codes like "Ldr", "Joey", "Sct",
+ * "Ven". Leaders first, so a Venturer listed as a Joey leader is a leader.
+ * Null when the class doesn't say.
+ */
+export function c2gClass(text: string): (typeof SECTIONS)[number] | null {
+  const words = text.toLowerCase().split(/[^a-z]+/).filter(Boolean);
+  const has = (re: RegExp) => words.some((w) => re.test(w));
+  if (has(/^(ldr|ldrs|lead|leader|leaders|adult|adults|helper|helpers|parent|parents|volunteer|volunteers|staff)$/)) return 'Leaders';
+  if (has(/^jo/)) return 'Joeys';
+  if (has(/^cub/)) return 'Cubs';
+  if (has(/^ven/)) return 'Venturers';
+  if (has(/^rov/)) return 'Rovers';
+  if (has(/^(sc|sct|scts|scout|scouts)$/)) return 'Scouts';
+  return null;
 }
 
-const hasSectionWord = (text: string) => /joey|\bcub|venturer|rover|scout|leader/i.test(text);
+/** The section for a Consent2Go class or tab name; anything that names none is a leader. */
+export function c2gSection(text: string): (typeof SECTIONS)[number] {
+  return c2gClass(text) ?? 'Leaders';
+}
+
+/** A tab named only for a section ("Joeys", "Scout Troop"), rather than for a Scout group. */
+const isSectionTab = (name: string) => /^\s*(joeys?|cubs?|scouts?|venturers?|rovers?|leaders?)( (mob|pack|troop|unit|crew|team))?\s*$/i.test(name);
 
 function findHeader(rows: string[][]): number {
   for (let i = 0; i < Math.min(rows.length, 10); i++) {
@@ -92,7 +105,7 @@ export function prepareConsent2Go(sheets: { name: string; rows: string[][] }[]):
     const col = (names: readonly string[]) => headers.findIndex((x) => names.includes(x));
     const at = Object.fromEntries(Object.entries(COLUMNS).map(([k, names]) => [k, col(names)])) as Record<keyof typeof COLUMNS, number>;
     const extras = EXTRA.map((e) => ({ ...e, index: headers.indexOf(e.header) })).filter((e) => e.index >= 0);
-    const tabIsGroup = !hasSectionWord(sheet.name);
+    const tabIsGroup = !isSectionTab(sheet.name);
     let people = 0;
     sheet.rows.slice(h + 1).forEach((r, i) => {
       const get = (index: number) => (index >= 0 ? (r[index] ?? '').trim() : '');
@@ -108,10 +121,11 @@ export function prepareConsent2Go(sheets: { name: string; rows: string[][] }[]):
         lastName ||= b ?? '';
       }
       const memberNumber = get(at.memberNumber).replace(/\s+/g, '');
-      const where = [sheet.name, get(at.homeRoom), get(at.house), get(at.year)].join(' ');
-      const section = c2gSection(where);
+      // The class (Year, else HomeRoom or House) says the section; a tab named for a section is the fallback.
+      const section = c2gClass(get(at.year)) ?? c2gClass(get(at.homeRoom)) ?? c2gClass(get(at.house)) ?? (tabIsGroup ? 'Other' : c2gSection(sheet.name));
       const kind = section === 'Leaders' ? 'adult' : 'youth';
-      const groupName = tabIsGroup ? sheet.name : get(at.homeRoom) || get(at.house);
+      // Each tab is a Scout group.
+      const groupName = tabIsGroup ? sheet.name.trim() : '';
       const dietaryText = [get(at.dietary1), get(at.dietary2), get(at.dietaryOther)].filter(Boolean).join('; ');
       const errors: string[] = [];
       if (!/^[A-Za-z0-9-]{1,20}$/.test(memberNumber)) errors.push(memberNumber ? 'Student ID (membership number) is not valid' : 'Student ID (membership number) is missing');
