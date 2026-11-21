@@ -92,11 +92,10 @@ export function usePerson(onError: (text: string) => void) {
     setDone,
     book: (s: SignupSession) => view && void call('/public/signup/book', { pass: view.pass, activityId: s.id }, `Booked: ${s.name}`),
     cancel: (activityId: string) => view && void call('/public/signup/cancel', { pass: view.pass, activityId }, 'Booking cancelled.'),
-    createTeam: (activityId: string, name: string, locked: boolean, friends: string[]) =>
-      view && void call('/public/signup/team/create', { pass: view.pass, activityId, name, locked, friends }, `Team made: ${name}.`),
+    createTeam: (activityId: string, name: string, locked: boolean) =>
+      view && void call('/public/signup/team/create', { pass: view.pass, activityId, name, locked }, `Team made: ${name}.`),
     joinTeam: (teamId: string, name: string) => view && void call('/public/signup/team/join', { pass: view.pass, teamId }, `You joined ${name}.`),
     joinTeamWithCode: (activityId: string, code: string) => view && void call('/public/signup/team/join-code', { pass: view.pass, activityId, code }, 'You joined the team.'),
-    addFriend: (teamId: string, memberNumber: string) => view && void call('/public/signup/team/add', { pass: view.pass, teamId, memberNumber }, 'Friend added.'),
     leaveTeam: (teamId: string) => view && void call('/public/signup/team/leave', { pass: view.pass, teamId }, 'You left the team.'),
   };
 }
@@ -205,11 +204,9 @@ export function SignupKiosk() {
             teamEvents={person.view.teamEvents}
             tz={person.view.event.timezone}
             busy={person.busy}
-            notice={person.view.teamNotice}
-            onCreate={(id, name, locked, friends) => person.createTeam(id, name, locked, friends)}
+            onCreate={(id, name, locked) => person.createTeam(id, name, locked)}
             onJoin={(id, name) => person.joinTeam(id, name)}
             onJoinCode={(id, code) => person.joinTeamWithCode(id, code)}
-            onAddFriend={(id, n) => person.addFriend(id, n)}
             onLeave={(id) => person.leaveTeam(id)}
           />
         ) : (

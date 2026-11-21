@@ -19,8 +19,6 @@ export interface SignupView {
   pass: string;
   /** Leader roster duties this person is on, soonest first. */
   duties?: { title: string; location: string; notes: string; startsAt: string; endsAt: string | null; with: string }[];
-  /** After making a team or adding a friend: anyone who couldn't be added, and why. */
-  teamNotice?: string | null;
   person: { name: string; groupName: string; firstName?: string; lastName?: string; kind?: 'youth' | 'adult'; section?: string; sectionWord?: string; sectionColour?: string };
   /** Different activities they've been checked in to. */
   activitiesDone?: number;
