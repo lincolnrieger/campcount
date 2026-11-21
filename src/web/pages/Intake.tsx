@@ -12,7 +12,7 @@ import { DietaryEditor, describeEntry } from '../components/DietaryEditor';
 import type { ReadFile, SourceRecord } from '../import/intakeFiles';
 import { autoDetails, dietaryFingerprint, fingerprints, hmacKey, memberKey, readIntakeFile } from '../import/intakeFiles';
 import { useApi } from '../useApi';
-import { Badge, Button, ButtonLink, Choice, CountTile, EmptyState, Icon, LoadError, Loading, Notice, PageHeader, SearchField, Section, plural, useToast } from '../ui';
+import { Badge, Button, ButtonLink, Choice, CountTile, EmptyState, Icon, LoadError, Loading, Notice, PageHeader, SearchField, Section, plural, useConfirm, useToast } from '../ui';
 import { useEvent } from './EventLayout';
 
 interface Board {
@@ -70,6 +70,7 @@ const when = (iso: string) => new Date(iso).toLocaleString('en-AU', { weekday: '
 export function Intake() {
   const { event, base } = useEvent();
   const toast = useToast();
+  const confirm = useConfirm();
   const { data, error, loading, reload } = useApi<Board>(`/events/${event.id}/intake`);
   const [board, setBoard] = useState<Board | null>(null);
   const [files, setFiles] = useState<Files>(new Map());
@@ -164,6 +165,51 @@ export function Intake() {
     }
   }
 
+  /** Forget files: on this screen, and the server's record of who was in them. */
+  async function clear(which: IntakeSource | 'all') {
+    const ok = await confirm(
+      which === 'all'
+        ? {
+            title: 'Start over?',
+            body: (
+              <p>
+                Forgets both uploads and every check, so the list is empty. People already added to the roster stay there; remove them on the People page if they
+                shouldn’t be.
+              </p>
+            ),
+            confirm: 'Start over',
+            danger: true,
+          }
+        : {
+            title: `Clear the ${SOURCE_NAME[which]} upload?`,
+            body: <p>Forgets who was in the {SOURCE_NAME[which]} file. Checks and the roster stay as they are. Upload the right file to bring people back.</p>,
+            confirm: 'Clear',
+            danger: true,
+          },
+    );
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await api(`/events/${event.id}/intake/uploads?source=${which}`, { method: 'DELETE' });
+      const drop = (src: IntakeSource) => which === 'all' || which === src;
+      setRead((prev) => prev.filter((r) => !drop(r.source)));
+      setFiles((prev) => {
+        const next: Files = new Map();
+        for (const [k, v] of prev) {
+          const kept = Object.fromEntries(Object.entries(v).filter(([src]) => !drop(src as IntakeSource)));
+          if (Object.keys(kept).length) next.set(k, kept);
+        }
+        return next;
+      });
+      await reload();
+      toast(which === 'all' ? 'Started over' : `${SOURCE_NAME[which]} upload cleared`);
+    } catch (err) {
+      setProblem(fail(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const back = { to: `${base}/people`, label: 'People' };
   const header = (
     <PageHeader
@@ -244,10 +290,25 @@ export function Intake() {
                       {r ? `${r.fileName}: ${plural(r.records.length, 'person', 'people')} read now` : 'Not uploaded on this visit'}
                       {board.lastUpload[s] ? ` · last uploaded ${when(board.lastUpload[s]!)}` : ' · never uploaded'}
                     </span>
+                    {board.lastUpload[s] && (
+                      <span>
+                        <Button small kind="ghost" disabled={busy} onClick={() => void clear(s)}>
+                          Clear {SOURCE_NAME[s]} upload
+                        </Button>
+                      </span>
+                    )}
                   </li>
                 );
               })}
             </ul>
+            {(board.lastUpload.myscout || board.lastUpload.consent2go) && (
+              <div className="intake-clear">
+                <Button small kind="ghost" disabled={busy} onClick={() => void clear('all')}>
+                  Start over
+                </Button>
+                <span className="meta">Forgets both uploads and every check. The roster stays as it is.</span>
+              </div>
+            )}
             {read.some((r) => r.problems.length) && (
               <Notice tone="warning" title="Rows that couldn’t be read">
                 <ul>

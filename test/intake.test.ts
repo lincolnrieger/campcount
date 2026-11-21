@@ -118,3 +118,32 @@ describe('import & check', () => {
     expect((await c.seen('myscout', [{ memberNumber: '100', name: 'A', fields: { Dietary: 'peanut allergy' } }])).status).toBe(400);
   });
 });
+
+describe('clearing uploads', () => {
+  it('forgets one file, or starts over, and leaves the roster alone', async () => {
+    const admin = await createUser({ platformAdmin: true });
+    const eventId = await createEvent(admin.id, { status: 'open' });
+    const manager = await createUser();
+    await grant(manager.id, 'event_manager', eventId);
+    const seen = (source: string, memberNumber: string) =>
+      api(`/events/${eventId}/intake/seen`, { cookie: manager.cookie, body: { source, people: [{ memberNumber, name: 'X Y', fields: { Year: '0000000000000001' } }] } });
+    const board = async () => (await json(await api(`/events/${eventId}/intake`, { cookie: manager.cookie }))).people as { memberNumber: string; myscout: unknown; consent2go: unknown; roster: unknown; state: string }[];
+    await seen('myscout', '100');
+    await seen('consent2go', '100');
+    await seen('consent2go', '200');
+    await api(`/events/${eventId}/intake/check`, {
+      cookie: manager.cookie,
+      body: { memberNumber: '100', checklist: { section: true, group: true, dietary: true }, row: { memberNumber: '100', firstName: 'X', lastName: 'Y', kind: 'youth', section: 'Scouts', photoConsent: 'yes', dietaryFingerprint: null } },
+    });
+
+    expect((await api(`/events/${eventId}/intake/uploads?source=consent2go`, { cookie: manager.cookie, method: 'DELETE' })).status).toBe(200);
+    let people = await board();
+    expect(people.map((p) => [p.memberNumber, !!p.myscout, !!p.consent2go, p.state])).toEqual([['100', true, false, 'checked']]);
+
+    expect((await api(`/events/${eventId}/intake/uploads?source=all`, { cookie: manager.cookie, method: 'DELETE' })).status).toBe(200);
+    people = await board();
+    // Still on the roster, but no uploads or checks.
+    expect(people.map((p) => [p.memberNumber, !!p.myscout, !!p.roster, p.state])).toEqual([['100', false, true, 'roster_only']]);
+    expect((await api(`/events/${eventId}/intake/uploads?source=nope`, { cookie: manager.cookie, method: 'DELETE' })).status).toBe(400);
+  });
+});

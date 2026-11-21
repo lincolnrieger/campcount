@@ -400,3 +400,10 @@
   border-radius: var(--radius);
   background: var(--surface-sunken);
 }
+.intake-clear {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-3);
+}
