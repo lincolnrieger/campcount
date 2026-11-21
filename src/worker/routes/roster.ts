@@ -17,7 +17,7 @@ import { getEventRow } from './events';
 import { loadEventModel, whereabouts } from '../services/reports';
 import type { ImportRow } from '../../shared/schemas';
 import { isHealthExtra } from '../../shared/consent2go';
-import { addToRoster, guestNumber, rowStatements, toImportRow } from '../services/rosterWrites';
+import { addToRoster, guestNumber, rowStatements, syncKindsStatement, toImportRow } from '../services/rosterWrites';
 
 export const rosterRoutes = new Hono<AppEnv>();
 
@@ -244,6 +244,8 @@ rosterRoutes.patch('/registrations/:registrationId', async (c) => {
   if (input.extra !== undefined) {
     statements.push(c.env.DB.prepare(`UPDATE registrations SET extra_fields = ?, updated_at = ? WHERE id = ?`).bind(storeExtra(input.extra), now, id));
   }
+  // Youth or adult follows the section and the camp's setting.
+  if (rKeys.includes('section') || rKeys.includes('kind')) statements.push(syncKindsStatement(c.env.DB, eventId));
   statements.push(
     auditStatement(c.env.DB, {
       actor: { type: 'user', id: user.userId },
@@ -499,6 +501,7 @@ rosterRoutes.post('/import/commit', async (c) => {
       ),
     );
   }
+  statements.push(syncKindsStatement(c.env.DB, eventId));
   await runInBatches(c.env.DB, statements);
 
   const jobId = crypto.randomUUID();

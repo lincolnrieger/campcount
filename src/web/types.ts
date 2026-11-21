@@ -20,6 +20,8 @@ export interface EventSummary {
   /** How lanyards mark someone without photo consent. */
   lanyard: LanyardSettings;
   logoUrl: string | null;
+  /** Sections that count as youth at this camp; everyone else is an adult. */
+  youthSections: string[];
   permissions: Permission[];
 }
 

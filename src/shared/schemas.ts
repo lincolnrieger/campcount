@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SECTIONS } from './sections';
+import { SECTIONS, YOUTH_SECTION_OPTIONS } from './sections';
 import { BRAND_COLOR_PATTERN, subdomainProblem } from './site';
 
 export { SECTIONS };
@@ -94,6 +94,8 @@ export const updateEventSchema = z
     subdomain: eventFields.subdomain.unwrap(),
     brandColor: eventFields.brandColor.unwrap(),
     lanyard: lanyardSettingsSchema.partial(),
+    /** Sections that count as youth at this camp; everyone else (and Leaders always) is an adult. */
+    youthSections: z.array(z.enum(YOUTH_SECTION_OPTIONS)).max(YOUTH_SECTION_OPTIONS.length),
   })
   .partial();
 

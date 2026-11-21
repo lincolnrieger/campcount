@@ -199,7 +199,8 @@ function Page({ view, busy, actions }: { view: SignupView; busy: boolean; action
   const meals = programme.filter((i) => i.kind === 'meal');
   const teamEvents = view.teamEvents ?? [];
   // Leaders don't book activities, so they don't get the Book tab.
-  const isAdult = view.person.sectionWord === 'Leader' || view.person.sectionWord === 'Rover';
+  // Adults (per the camp's youth sections setting) don't book activities.
+  const isAdult = view.person.kind ? view.person.kind === 'adult' : view.person.sectionWord === 'Leader';
   const canBook = !isAdult && (view.sessions.length > 0 || view.bookings.length > 0);
   const quest = view.sideQuest && view.sideQuest.collected > 0 ? view.sideQuest : null;
 

@@ -230,7 +230,7 @@ async function personView(c: AppContext, p: Person, opts: { sideQuest?: boolean 
   ]);
   return {
     pass: await makePass(c, p),
-    person: { name: p.name, firstName: p.firstName, lastName: p.lastName, groupName: p.groupName, section: p.section, sectionWord: sectionWord(p.kind, p.section) },
+    person: { name: p.name, firstName: p.firstName, lastName: p.lastName, kind: p.kind, groupName: p.groupName, section: p.section, sectionWord: sectionWord(p.kind, p.section) },
     activitiesDone: done,
     // Only on someone's own link, and only once the camp has turned the game on.
     sideQuest: quest,

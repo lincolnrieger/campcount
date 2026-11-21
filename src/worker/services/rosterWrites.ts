@@ -94,6 +94,22 @@ export function rowStatements(
   return statements;
 }
 
+/**
+ * Youth or adult follows each person's section and the camp's "youth
+ * sections" setting (Leaders are always adults). Run after anything that
+ * changes sections, and when the setting changes.
+ */
+export function syncKindsStatement(db: D1Database, eventId: string): D1PreparedStatement {
+  return db
+    .prepare(
+      `UPDATE registrations
+          SET kind = CASE WHEN section <> 'Leaders' AND section IN (SELECT value FROM json_each((SELECT youth_sections FROM events WHERE id = ?1))) THEN 'youth' ELSE 'adult' END
+        WHERE event_id = ?1
+          AND kind <> CASE WHEN section <> 'Leaders' AND section IN (SELECT value FROM json_each((SELECT youth_sections FROM events WHERE id = ?1))) THEN 'youth' ELSE 'adult' END`,
+    )
+    .bind(eventId);
+}
+
 /** A guest number for people who aren't Scouts members. */
 export function guestNumber(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -125,7 +141,7 @@ export function toImportRow(p: PersonEntry & { memberNumber: string }): ImportRo
  */
 export async function addToRoster(env: Env, eventId: string, row: ImportRow, recordedBy: string, keepExistingNames: boolean): Promise<string> {
   const now = nowIso();
-  await env.DB.batch(rowStatements(env.DB, eventId, row, false, now, recordedBy, { keepExistingNames }));
+  await env.DB.batch([...rowStatements(env.DB, eventId, row, false, now, recordedBy, { keepExistingNames }), syncKindsStatement(env.DB, eventId)]);
   const reg = await env.DB.prepare(
     `SELECT r.id FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.event_id = ? AND p.member_number = ?`,
   )

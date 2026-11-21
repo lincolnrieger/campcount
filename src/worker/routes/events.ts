@@ -10,6 +10,8 @@ import { auditStatement } from '../services/audit';
 import { loadEventModel, openItems } from '../services/reports';
 import { can, eventPermissions } from '../services/principal';
 import { resolveSite } from '../services/site';
+import { syncKindsStatement } from '../services/rosterWrites';
+import { YOUTH_SECTION_OPTIONS, parseYouthSections } from '../../shared/sections';
 
 export interface EventRow {
   id: string;
@@ -38,6 +40,7 @@ export interface EventRow {
   photo_marker_colour: string;
   photo_marker_label: number;
   lanyard_print_band: number;
+  youth_sections: string;
   /** From event_logos, when the query includes it. */
   logo_updated_at?: string | null;
 }
@@ -76,6 +79,7 @@ export function eventDto(row: EventRow) {
       photoMarkerLabel: row.photo_marker_label !== 0,
       printBand: row.lanyard_print_band !== 0,
     } satisfies LanyardSettings,
+    youthSections: parseYouthSections(row.youth_sections),
     logoUrl: row.logo_updated_at ? `/api/events/${row.id}/logo?v=${encodeURIComponent(row.logo_updated_at)}` : null,
   };
 }
@@ -216,6 +220,7 @@ eventRoutes.patch('/:eventId', async (c) => {
   for (const [key, value] of Object.entries(input.features ?? {})) {
     if (value !== undefined) set(FEATURE_COLUMNS[key as keyof EventFeatures], value ? 1 : 0);
   }
+  if (input.youthSections !== undefined) set('youth_sections', JSON.stringify(YOUTH_SECTION_OPTIONS.filter((x) => input.youthSections!.includes(x))));
   if (sets.length === 0) return c.json({ event: eventDto(row) });
 
   const startsOn = input.startsOn ?? row.starts_on;
@@ -226,6 +231,8 @@ eventRoutes.patch('/:eventId', async (c) => {
   await c.env.DB.batch([
     // Column names come from the fixed map above, never from the client.
     c.env.DB.prepare(`UPDATE events SET ${sets.join(', ')} WHERE id = ?`).bind(...values, eventId),
+    // Everyone's youth or adult follows the new setting.
+    ...(input.youthSections !== undefined ? [syncKindsStatement(c.env.DB, eventId)] : []),
     auditStatement(c.env.DB, {
       actor: { type: 'user', id: (principal as { userId: string }).userId },
       action: 'event.update',
