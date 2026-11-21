@@ -2,13 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { SECTION_COLOURS, fillFields, sectionWord } from '../src/shared/lanyardDesign';
 
 describe('lanyard words', () => {
-  it('only says Scout, Venturer or Adult', () => {
-    expect(sectionWord('youth', 'Joeys')).toBe('Scout');
+  it('says Leader for adults, the section for Joeys to Rovers, and nothing for anyone else', () => {
+    expect(sectionWord('adult', 'Leaders')).toBe('Leader');
+    expect(sectionWord('adult', 'Scouts')).toBe('Leader');
+    expect(sectionWord('youth', 'Joeys')).toBe('Joey');
+    expect(sectionWord('youth', 'Cubs')).toBe('Cub');
     expect(sectionWord('youth', 'Scouts')).toBe('Scout');
     expect(sectionWord('youth', 'Venturers')).toBe('Venturer');
-    expect(sectionWord('youth', 'Rovers')).toBe('Adult');
-    expect(sectionWord('adult', 'Leaders')).toBe('Adult');
-    expect(SECTION_COLOURS.Adult!.bg).toBe('#262661');
+    expect(sectionWord('youth', 'Rovers')).toBe('Rover');
+    expect(sectionWord('adult', 'Rovers')).toBe('Rover');
+    expect(sectionWord('youth', 'Other')).toBe('');
+    expect(fillFields('{section}', { name: 'A B', kind: 'youth', section: 'Other', groupName: '', shortCode: '1', qr: 'x' }, 'Camp')).toBe('');
+    expect(SECTION_COLOURS.Leader!.bg).toBe('#262661');
   });
 
   it('prints the preferred name with the full surname, and no group', () => {

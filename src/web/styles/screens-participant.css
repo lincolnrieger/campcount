@@ -151,27 +151,6 @@
   color: var(--pp-ink);
   font-weight: var(--weight-heavy);
 }
-.pp-pass-loading {
-  display: grid;
-  gap: var(--space-3);
-  min-height: 15rem;
-  background: var(--pp-lagoon);
-}
-.pp-skel {
-  display: block;
-  border-radius: 8px;
-  background: rgb(255 255 255 / 0.25);
-}
-.pp-skel-name {
-  width: 60%;
-  height: 4rem;
-  margin-top: var(--space-6);
-}
-.pp-skel-line {
-  width: 45%;
-  height: 1.25rem;
-}
-
 /* ---------- Now / Next ---------- */
 /* ---------- Sections ---------- */
 .pp-section {

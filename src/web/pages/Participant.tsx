@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { SECTION_COLOURS } from '../../shared/lanyardDesign';
+import { sectionColours } from '../../shared/lanyardDesign';
 import { dayInZone, dayLabel, timeInZone, todayInZone } from '../../shared/time';
 import { api } from '../api';
 import type { CollectResult, ProgrammeItem, SideQuestStanding, SignupSession, SignupView } from '../components/SignupPanel';
@@ -28,6 +28,7 @@ export function Participant() {
   const [error, setError] = useState<string | null>(null);
   const person = usePerson(setError);
   const { setView } = person;
+  const ready = useFirstPaintReady(person.view);
 
   // Display faces for the pass and the big numbers.
   useEffect(() => {
@@ -81,13 +82,14 @@ export function Participant() {
         </div>
       </Shell>
     );
-  if (state === 'loading' || !person.view)
+  if (state === 'loading' || !person.view || !ready)
+    // A plain page while loading: no placeholder in the wrong colour, and the
+    // pass appears once, in the person's own colour with the banner in place.
     return (
       <Shell>
-        <div className="pp-pass pp-pass-loading" aria-busy="true" aria-label="Loading your camp page">
-          <span className="pp-skel pp-skel-name" />
-          <span className="pp-skel pp-skel-line" />
-        </div>
+        <p className="visually-hidden" role="status" aria-busy="true">
+          Loading your camp page
+        </p>
       </Shell>
     );
   return (
@@ -97,6 +99,38 @@ export function Participant() {
       <SignupStatus error={error} done={null} />
     </Shell>
   );
+}
+
+/**
+ * Hold the page back until the camp's banner and the display fonts are in
+ * (at most 2.5 seconds), so it appears once, complete, instead of shifting
+ * as the image and fonts arrive. Only the first time: later refreshes show
+ * straight away.
+ */
+function useFirstPaintReady(view: SignupView | null): boolean {
+  const [ready, setReady] = useState(false);
+  const banner = view?.event.banner?.url ?? null;
+  const hasView = view !== null;
+  useEffect(() => {
+    if (!hasView || ready) return;
+    let live = true;
+    const image = banner
+      ? new Promise<void>((resolve) => {
+          const img = new Image();
+          img.onload = () => void img.decode().then(resolve, resolve);
+          img.onerror = () => resolve();
+          img.src = banner;
+        })
+      : Promise.resolve();
+    const fonts = document.fonts?.ready ?? Promise.resolve();
+    void Promise.race([Promise.all([image, fonts]), new Promise((r) => setTimeout(r, 2500))]).then(() => {
+      if (live) setReady(true);
+    });
+    return () => {
+      live = false;
+    };
+  }, [hasView, banner, ready]);
+  return ready;
 }
 
 /**
@@ -165,7 +199,7 @@ function Page({ view, busy, actions }: { view: SignupView; busy: boolean; action
   const meals = programme.filter((i) => i.kind === 'meal');
   const teamEvents = view.teamEvents ?? [];
   // Leaders don't book activities, so they don't get the Book tab.
-  const isAdult = view.person.sectionWord === 'Adult';
+  const isAdult = view.person.sectionWord === 'Leader' || view.person.sectionWord === 'Rover';
   const canBook = !isAdult && (view.sessions.length > 0 || view.bookings.length > 0);
   const quest = view.sideQuest && view.sideQuest.collected > 0 ? view.sideQuest : null;
 
@@ -231,8 +265,8 @@ function Page({ view, busy, actions }: { view: SignupView; busy: boolean; action
 
 /** Who you are, at which camp. Coloured like your section's lanyard band. */
 function Pass({ view }: { view: SignupView }) {
-  const word = view.person.sectionWord ?? 'Scout';
-  const colour = SECTION_COLOURS[word]?.bg ?? '#00843D';
+  const word = view.person.sectionWord ?? '';
+  const colour = sectionColours(word).bg;
   const first = view.person.firstName ?? view.person.name.split(' ')[0];
   const last = view.person.lastName ?? '';
   const banner = view.event.banner;
@@ -251,7 +285,7 @@ function Pass({ view }: { view: SignupView }) {
         {first}
         {last && <span className="pp-surname">{last}</span>}
       </h1>
-      <span className="pp-section-pill">{word}</span>
+      {word && <span className="pp-section-pill">{word}</span>}
     </header>
   );
 }
@@ -560,7 +594,7 @@ function CollectScreen({ result, onDone, onMine }: { result: CollectResult; onDo
   const reduced = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const [shown, setShown] = useState(result.fresh && !reduced ? Math.max(0, s.collected - 1) : s.collected);
   const done = useRef<HTMLButtonElement>(null);
-  const questKey = result.friend.sectionWord === 'Adult' ? 'leaders' : (SECTION_QUEST[result.friend.section] ?? '');
+  const questKey = result.friend.sectionWord === 'Leader' ? 'leaders' : (SECTION_QUEST[result.friend.section] ?? '');
   const quest = s.quests.find((q) => q.key === questKey);
   const milestone = result.fresh && (s.collected === 1 || s.collected % 10 === 0 || (quest?.done && quest.collected === quest.total));
 

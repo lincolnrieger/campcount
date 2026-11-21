@@ -50,16 +50,18 @@ export function isHealthExtra(label: string): boolean {
   return HEALTH_EXTRA_FIELDS.includes(label) || /medic|paracetamol|histamine|inflammator|ibuprofen|allerg/i.test(label);
 }
 
-/** The section for a Consent2Go row: Joeys, Scouts or Venturers by name; everyone else is a leader. */
+/** The section for a Consent2Go row: Joeys, Cubs, Scouts, Venturers or Rovers by name; everyone else is a leader. */
 export function c2gSection(text: string): (typeof SECTIONS)[number] {
   const t = text.toLowerCase();
   if (/joey/.test(t)) return 'Joeys';
+  if (/\bcub/.test(t)) return 'Cubs';
   if (/venturer/.test(t)) return 'Venturers';
-  if (/scout/.test(t) && !/\bcub/.test(t)) return 'Scouts';
+  if (/rover/.test(t)) return 'Rovers';
+  if (/scout/.test(t)) return 'Scouts';
   return 'Leaders';
 }
 
-const hasSectionWord = (text: string) => /joey|venturer|scout|leader/i.test(text);
+const hasSectionWord = (text: string) => /joey|\bcub|venturer|rover|scout|leader/i.test(text);
 
 function findHeader(rows: string[][]): number {
   for (let i = 0; i < Math.min(rows.length, 10); i++) {
