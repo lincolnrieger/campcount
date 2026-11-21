@@ -821,3 +821,21 @@ button.pp-state.is-booked {
     border-radius: 24px 24px 0 0;
   }
 }
+
+/* Opened from a booking link: what just happened */
+.pp-link-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  font-weight: var(--weight-heavy);
+}
+.pp-link-notice.is-ok {
+  background: var(--pp-green-bg);
+  color: var(--pp-green);
+}
+.pp-link-notice.is-error {
+  background: var(--pp-amber-bg);
+  color: var(--pp-amber);
+}

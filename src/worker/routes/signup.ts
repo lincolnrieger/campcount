@@ -470,20 +470,34 @@ publicSignupRoutes.get('/link/:code/:activityId', async (c) => {
 });
 
 /**
- * Book from an emailed link by typing a membership number. Says only whether
- * it worked: never who the number belongs to.
+ * From an emailed link: type a membership number, get booked onto that
+ * activity, and land on your own page (the reduced one, since anyone could
+ * type a number) to see everything you're booked for and cancel. Says
+ * nothing about who a number belongs to until it's typed.
  */
 publicSignupRoutes.post('/link/:code/:activityId', async (c) => {
   const { memberNumber } = await parseBody(c, z.strictObject({ memberNumber: z.string().trim().regex(/^[A-Za-z0-9 -]{1,24}$/, 'Type your membership number') }));
   await limitPublicNetwork(c, 'signup-book');
   await limitPerKey(c, `link-book:${c.req.header('CF-Connecting-IP') ?? 'unknown'}`, 'Too many tries. Wait a minute and try again.');
   const e = await eventByBookingCode(c, c.req.param('code'));
-  if (!signupOpen(e)) throw conflict('Booking is closed right now.');
   const who = await findByMemberNumber(c.env.DB, e.id, memberNumber);
   if (!who) throw conflict('That membership number isn’t registered for this camp. Check the number on your Scouts card or in MyScout.');
-  if (who.kind === 'adult') throw conflict('Leaders don’t need to book activities.');
-  const r = await bookActivity(c, e.id, who.id, c.req.param('activityId'));
-  return c.json({ booked: true, already: r.already, activity: r.name });
+  const cred = await c.env.DB.prepare(`SELECT id FROM credentials WHERE registration_id = ? AND status = 'active'`).bind(who.id).first<{ id: string }>();
+  if (!cred) throw conflict('Your camp card isn’t ready yet. Try again closer to camp, or ask your leader.');
+  const person = await personFor(c, { registrationId: who.id, credentialId: cred.id, reduced: true });
+  // Book this activity (leaders don't book); a reason it couldn't is shown on their page.
+  let result: { booked: boolean; already: boolean; activity: string | null; problem: string | null } = { booked: false, already: false, activity: null, problem: null };
+  if (who.kind === 'adult') result.problem = 'Leaders don’t need to book activities.';
+  else if (!signupOpen(e)) result.problem = 'Booking is closed right now.';
+  else {
+    try {
+      const r = await bookActivity(c, e.id, who.id, c.req.param('activityId'));
+      result = { booked: true, already: r.already, activity: r.name, problem: null };
+    } catch (err) {
+      result.problem = err instanceof ApiError ? err.message : 'That couldn’t be booked.';
+    }
+  }
+  return c.json({ ...(await personView(c, person, { reduced: true })), linkResult: result });
 });
 
 publicSignupRoutes.post('/cancel', async (c) => {

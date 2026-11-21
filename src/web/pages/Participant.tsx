@@ -134,6 +134,28 @@ function useFirstPaintReady(view: SignupView | null): boolean {
 }
 
 /**
+ * Someone's page, opened another way than their own lanyard (a booking link):
+ * the same tabs, starting on Book, with a line saying what just happened.
+ */
+export function ParticipantPage({ view, busy, actions, error, notice }: { view: SignupView; busy: boolean; actions: Actions; error: string | null; notice: { ok: boolean; text: string } | null }) {
+  useEffect(() => {
+    void loadFont('bebas-neue', 400);
+  }, []);
+  return (
+    <Shell>
+      {notice && (
+        <p className={notice.ok ? 'pp-link-notice is-ok' : 'pp-link-notice is-error'} role="status">
+          <Icon name={notice.ok ? 'success' : 'warning'} size={20} />
+          {notice.text}
+        </p>
+      )}
+      <Page view={view} busy={busy} actions={actions} initialTab="book" />
+      <SignupStatus error={error} done={null} />
+    </Shell>
+  );
+}
+
+/**
  * Opening a card is done once per page load, even if the page starts twice:
  * a second request would turn "You collected Mia!" into "Already collected".
  */
@@ -191,7 +213,7 @@ type Tab = 'roster' | 'day' | 'book' | 'teams' | 'food' | 'quest';
  * long scroll. Buttons change in place (Book → Booked) rather than popping
  * anything up, so the screen never jumps.
  */
-function Page({ view, busy, actions }: { view: SignupView; busy: boolean; actions: Actions }) {
+function Page({ view, busy, actions, initialTab }: { view: SignupView; busy: boolean; actions: Actions; initialTab?: Tab }) {
   const tz = view.event.timezone;
   const now = useNow();
   const programme = view.programme ?? [];
@@ -215,6 +237,7 @@ function Page({ view, busy, actions }: { view: SignupView; busy: boolean; action
     ...(quest ? [{ id: 'quest' as const, label: 'Quest', icon: 'star' as const }] : []),
   ];
   const [tab, setTabState] = useState<Tab>(() => {
+    if (initialTab) return initialTab;
     const saved = sessionStorage.getItem('cc-pp-tab') as Tab | null;
     return saved ?? (duties.length ? 'roster' : 'day');
   });
