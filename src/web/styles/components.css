@@ -406,7 +406,21 @@ details.more-options > .form {
   background: var(--surface);
   border: var(--border-width) solid var(--divider);
   border-radius: var(--radius-lg);
-  overflow: hidden;
+  /* Not hidden: a row's ⋯ menu must float over what's below, not scroll the list. */
+  overflow: visible;
+}
+/* Keep the rounded corners when rows have their own background (hover, highlights). */
+.list > li:first-child,
+.list > li:first-child > .row,
+.list > li:first-child > .row-button {
+  border-top-left-radius: calc(var(--radius-lg) - var(--border-width));
+  border-top-right-radius: calc(var(--radius-lg) - var(--border-width));
+}
+.list > li:last-child,
+.list > li:last-child > .row,
+.list > li:last-child > .row-button {
+  border-bottom-left-radius: calc(var(--radius-lg) - var(--border-width));
+  border-bottom-right-radius: calc(var(--radius-lg) - var(--border-width));
 }
 .list > li + li {
   border-top: var(--border-width) solid var(--divider);

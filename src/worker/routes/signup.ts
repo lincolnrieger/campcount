@@ -4,7 +4,7 @@ import { normaliseShortCode } from '../../shared/credentials';
 import { displayName } from '../../shared/names';
 import type { AppContext, AppEnv } from '../context';
 import { parseBody, requirePermission, requirePrincipal, requireUser } from '../context';
-import { ApiError, badRequest, conflict, forbidden, notFound } from '../lib/errors';
+import { ApiError, badRequest, conflict, notFound } from '../lib/errors';
 import { hmacHex, randomToken, timingSafeEqualHex } from '../lib/crypto';
 import { nowIso } from '../lib/time';
 import { limitPerKey, limitPublicNetwork } from '../lib/rateLimit';
@@ -542,45 +542,25 @@ async function notAlreadyOnATeam(c: AppContext, activityId: string, registration
   if (mine) throw conflict(`You're already on ${mine.name}. Leave it first.`);
 }
 
-const memberNumber = z.string().trim().regex(/^[A-Za-z0-9 -]{1,24}$/, 'Type a membership number');
 const teamCreateSchema = z.strictObject({
   pass: z.string().max(200),
   activityId: z.uuid(),
   name: teamNameSchema.shape.name,
-  /** Locked: only people with the team's code, or added by someone on it, can join. */
+  /** Locked: only people with the team's code can join. */
   locked: z.boolean().default(false),
-  /** Friends to put on the team straight away, by the membership number on their lanyard. */
-  friends: z.array(memberNumber).max(10).default([]),
 });
 const teamJoinSchema = z.strictObject({ pass: z.string().max(200), teamId: z.uuid() });
 const teamCodeSchema = z.strictObject({ pass: z.string().max(200), activityId: z.uuid(), code: z.string().trim().max(12) });
-const teamAddSchema = z.strictObject({ pass: z.string().max(200), teamId: z.uuid(), memberNumber });
 
 /** Teams are for young people. */
 function youthOnly(person: Person) {
   if (person.kind === 'adult') throw conflict('Leaders can’t be on teams.');
 }
 
-/** Put a friend on your team by their membership number. Says why not, without saying who anyone is. */
-async function addFriend(c: AppContext, person: Person, team: { id: string; activity_id: string; name: string }, te: Awaited<ReturnType<typeof openTeamEvent>>, number: string): Promise<string | null> {
-  const friend = await findByMemberNumber(c.env.DB, person.event.id, number);
-  if (!friend) return `${number}: no one at camp has that membership number`;
-  if (friend.id === person.registrationId) return null;
-  if (friend.kind === 'adult') return `${number}: leaders can’t be on teams`;
-  const on = await c.env.DB.prepare(`SELECT team_id FROM team_members WHERE activity_id = ? AND registration_id = ?`).bind(team.activity_id, friend.id).first<{ team_id: string }>();
-  if (on) return on.team_id === team.id ? null : `${number}: already on another team`;
-  try {
-    await addMember(c.env.DB, person.event.id, team, te, friend.id, 'self_signup');
-  } catch (err) {
-    return `${number}: ${err instanceof Error ? err.message : 'couldn’t be added'}`;
-  }
-  await auditStatement(c.env.DB, { actor: { type: 'public' }, action: 'team.friend_add', eventId: person.event.id, targetType: 'registration', targetId: friend.id, detail: { teamId: team.id, by: person.registrationId } }).run();
-  return null;
-}
 
 /** Make a new team, with yourself on it. */
 publicSignupRoutes.post('/team/create', async (c) => {
-  const { pass, activityId, name, locked, friends } = await parseBody(c, teamCreateSchema);
+  const { pass, activityId, name, locked } = await parseBody(c, teamCreateSchema);
   await limitPublicNetwork(c, 'signup-book');
   const person = await personFor(c, await limitedPass(c, pass));
   youthOnly(person);
@@ -594,12 +574,7 @@ publicSignupRoutes.post('/team/create', async (c) => {
     throw err;
   }
   await auditStatement(c.env.DB, { actor: { type: 'public' }, action: 'team.self_create', eventId: person.event.id, targetType: 'team', targetId: teamId, detail: { activityId, locked } }).run();
-  const problems: string[] = [];
-  for (const f of [...new Set(friends)]) {
-    const why = await addFriend(c, person, { id: teamId, activity_id: activityId, name }, te, f);
-    if (why) problems.push(why);
-  }
-  return c.json({ ...(await personView(c, person)), teamNotice: problems.length ? `Couldn’t add: ${problems.join('; ')}.` : null });
+  return c.json(await personView(c, person));
 });
 
 publicSignupRoutes.post('/team/join', async (c) => {
@@ -640,22 +615,6 @@ publicSignupRoutes.post('/team/join-code', async (c) => {
   await addMember(c.env.DB, person.event.id, team, te, person.registrationId, 'self_signup');
   await auditStatement(c.env.DB, { actor: { type: 'public' }, action: 'team.self_join', eventId: person.event.id, targetType: 'registration', targetId: person.registrationId, detail: { teamId: team.id, code: true } }).run();
   return c.json(await personView(c, person));
-});
-
-/** Add a friend to your team by the membership number on their lanyard. */
-publicSignupRoutes.post('/team/add', async (c) => {
-  const { pass, teamId, memberNumber: number } = await parseBody(c, teamAddSchema);
-  await limitPublicNetwork(c, 'signup-book');
-  const person = await personFor(c, await limitedPass(c, pass));
-  youthOnly(person);
-  await limitPerKey(c, `team-add:${person.registrationId}`);
-  const team = await teamRow(c.env.DB, person.event.id, teamId);
-  if (!team) throw notFound();
-  const mine = await c.env.DB.prepare(`SELECT 1 FROM team_members WHERE team_id = ? AND registration_id = ?`).bind(team.id, person.registrationId).first();
-  if (!mine) throw forbidden();
-  const te = await openTeamEvent(c, person, team.activity_id);
-  const why = await addFriend(c, person, team, te, number);
-  return c.json({ ...(await personView(c, person)), teamNotice: why ? `Couldn’t add ${why}.` : null });
 });
 
 /** Leave your team. A team nobody is left on goes too. */

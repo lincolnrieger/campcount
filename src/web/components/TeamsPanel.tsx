@@ -18,39 +18,28 @@ export interface ParticipantTeamEvent {
 }
 
 export interface TeamActions {
-  onCreate: (activityId: string, name: string, locked: boolean, friends: string[]) => void;
+  onCreate: (activityId: string, name: string, locked: boolean) => void;
   onJoin: (teamId: string, name: string) => void;
   onJoinCode: (activityId: string, code: string) => void;
-  onAddFriend: (teamId: string, memberNumber: string) => void;
   onLeave: (teamId: string) => void;
 }
 
 const sizeText = (te: ParticipantTeamEvent) =>
   te.maxSize !== null ? (te.maxSize === te.minSize ? `Teams of ${te.minSize}` : `Teams of ${te.minSize} to ${te.maxSize}`) : te.minSize > 1 ? `Teams of ${te.minSize} or more` : null;
 
-/** Membership numbers typed in one box, separated by spaces, commas or new lines. */
-const numbers = (text: string) =>
-  text
-    .split(/[\s,;]+/)
-    .map((x) => x.trim())
-    .filter(Boolean)
-    .slice(0, 10);
-
 /**
  * For participants: each team event, their own team, and the teams they can
- * join or make. A team can be open (anyone joins) or locked (join with its
- * code, or be added by someone on it). Friends are added by the membership
- * number on their lanyard.
+ * join or make. A team is open (anyone joins) or locked (join with its code,
+ * which people on the team share). Nobody can add anyone else.
  */
-export function TeamsPanel({ teamEvents, tz, busy, notice, ...act }: { teamEvents: ParticipantTeamEvent[]; tz: string; busy: boolean; notice?: string | null } & TeamActions) {
-  const [forms, setForms] = useState<Record<string, { name: string; locked: boolean; friends: string; code: string; add: string }>>({});
+export function TeamsPanel({ teamEvents, tz, busy, ...act }: { teamEvents: ParticipantTeamEvent[]; tz: string; busy: boolean } & TeamActions) {
+  const [forms, setForms] = useState<Record<string, { name: string; locked: boolean; code: string }>>({});
   if (teamEvents.length === 0) return <p className="meta">No team events yet.</p>;
-  const formOf = (id: string) => forms[id] ?? { name: '', locked: false, friends: '', code: '', add: '' };
+  const formOf = (id: string) => forms[id] ?? { name: '', locked: false, code: '' };
   const setForm = (id: string, patch: Partial<ReturnType<typeof formOf>>) => setForms((f) => ({ ...f, [id]: { ...formOf(id), ...patch } }));
 
   return (
     <div className="sections">
-      {notice && <p className="team-notice">{notice}</p>}
       {teamEvents.map((te) => {
         const when = te.startsAt ? `${dayLabel(dayInZone(te.startsAt, tz))}, ${timeRange(te.startsAt, te.endsAt, tz)}` : null;
         const joinable = te.teams.filter((t) => !t.full && t.id !== te.myTeam?.id);
@@ -71,26 +60,11 @@ export function TeamsPanel({ teamEvents, tz, busy, notice, ...act }: { teamEvent
                 <p className="meta">{te.myTeam.members.join(', ')}</p>
                 {te.myTeam.locked && te.myTeam.joinCode && (
                   <p className="team-code">
-                    Locked team. Friends join with the code <strong className="num">{te.myTeam.joinCode}</strong>
+                    Locked. Share this code so friends can join: <strong className="num">{te.myTeam.joinCode}</strong>
                   </p>
                 )}
                 {te.open && (
                   <>
-                    <form
-                      className="team-add"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        if (f.add.trim()) act.onAddFriend(te.myTeam!.id, f.add.trim());
-                        setForm(te.id, { add: '' });
-                      }}
-                    >
-                      <Field id={`team-add-${te.id}`} label="Add a friend" hint="The membership number on their lanyard.">
-                        <input className="input" inputMode="numeric" maxLength={24} value={f.add} onChange={(e) => setForm(te.id, { add: e.target.value })} autoComplete="off" />
-                      </Field>
-                      <Button type="submit" small disabled={busy || !f.add.trim()}>
-                        Add
-                      </Button>
-                    </form>
                     <div>
                       <Button small kind="ghost" disabled={busy} onClick={() => act.onLeave(te.myTeam!.id)}>
                         Leave team
@@ -150,7 +124,7 @@ export function TeamsPanel({ teamEvents, tz, busy, notice, ...act }: { teamEvent
                     className="team-new"
                     onSubmit={(e) => {
                       e.preventDefault();
-                      if (f.name.trim()) act.onCreate(te.id, f.name.trim(), f.locked, numbers(f.friends));
+                      if (f.name.trim()) act.onCreate(te.id, f.name.trim(), f.locked);
                     }}
                   >
                     <Field id={`new-team-${te.id}`} label="Or make a new team">
@@ -166,13 +140,10 @@ export function TeamsPanel({ teamEvents, tz, busy, notice, ...act }: { teamEvent
                         <input type="radio" name={`lock-${te.id}`} checked={f.locked} onChange={() => setForm(te.id, { locked: true })} />
                         <span className="choice-text">
                           Locked
-                          <span className="meta">Only people with your team’s code, or friends you add.</span>
+                          <span className="meta">Only people you give your team’s code to.</span>
                         </span>
                       </label>
                     </fieldset>
-                    <Field id={`new-friends-${te.id}`} label="Add friends" optional hint="Their membership numbers, from their lanyards. Separate them with spaces.">
-                      <input className="input" inputMode="numeric" value={f.friends} onChange={(e) => setForm(te.id, { friends: e.target.value })} autoComplete="off" />
-                    </Field>
                     <Button type="submit" kind="primary" disabled={busy || !f.name.trim()}>
                       Make team
                     </Button>

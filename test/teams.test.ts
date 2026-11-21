@@ -108,7 +108,7 @@ describe('team events', () => {
     expect(bookings!.n).toBe(0);
   });
 
-  it('keeps leaders off teams, and lets players lock a team and add friends', async () => {
+  it('keeps leaders off teams, and lets players lock a team with a code', async () => {
     const c = await camp();
     const { id: soccer } = await json(
       await api(`/events/${c.eventId}/team-events`, { cookie: c.manager.cookie, body: { name: 'Soccer', minSize: 1, maxSize: 4, registrationOpen: true } }),
@@ -122,13 +122,14 @@ describe('team events', () => {
     expect(leaderView.teamEvents).toEqual([]);
     expect((await api('/public/signup/team/create', { body: { pass: leaderView.pass, activityId: soccer, name: 'Coaches' } })).status).toBe(409);
 
-    // A locked team, made with a friend (and a leader, who can't be added).
+    // A locked team: its code is shown to the team only.
     const a = await passFor(c.card('100').token);
-    const made = await json(await api('/public/signup/team/create', { body: { pass: a, activityId: soccer, name: 'Owls', locked: true, friends: ['200', '900', '999999'] } }));
+    const made = await json(await api('/public/signup/team/create', { body: { pass: a, activityId: soccer, name: 'Owls', locked: true } }));
     const owls = made.teamEvents[0].myTeam;
-    expect(owls).toMatchObject({ name: 'Owls', locked: true, members: ['First100 P.', 'First200 P.'] });
+    expect(owls).toMatchObject({ name: 'Owls', locked: true, members: ['First100 P.'] });
     expect(owls.joinCode).toMatch(/^[A-Z0-9]{6}$/);
-    expect(made.teamNotice).toMatch(/900: leaders can’t be on teams; 999999: no one at camp/);
+    // Nobody can add anyone else.
+    expect((await api('/public/signup/team/create', { body: { pass: a, activityId: soccer, name: 'X', friends: ['200'] } })).status).toBe(400);
 
     // Others see it locked and without its code; they need the code to join.
     const d = await json(await api('/public/signup/identify', { body: { token: c.card('300').token } }));
@@ -137,13 +138,7 @@ describe('team events', () => {
     expect((await api('/public/signup/team/join', { body: { pass: d.pass, teamId: owls.id } })).status).toBe(409);
     expect((await api('/public/signup/team/join-code', { body: { pass: d.pass, activityId: soccer, code: 'WRONG1' } })).status).toBe(409);
     const joined = await json(await api('/public/signup/team/join-code', { body: { pass: d.pass, activityId: soccer, code: owls.joinCode.toLowerCase() } }));
-    expect(joined.teamEvents[0].myTeam.members).toHaveLength(3);
-
-    // Someone on the team adds another friend; someone not on it can't.
-    const e = await passFor(c.card('400').token);
-    expect((await api('/public/signup/team/add', { body: { pass: e, teamId: owls.id, memberNumber: '100' } })).status).toBe(403);
-    const added = await json(await api('/public/signup/team/add', { body: { pass: a, teamId: owls.id, memberNumber: '400' } }));
-    expect(added.teamEvents[0].myTeam.members).toHaveLength(4);
+    expect(joined.teamEvents[0].myTeam.members).toHaveLength(2);
     // Staff can't put a leader on a team either.
     expect((await api(`/events/${c.eventId}/teams/${owls.id}/members`, { cookie: c.manager.cookie, body: { registrationId: leader.registrationId } })).status).toBe(409);
   });

@@ -839,3 +839,106 @@ button.pp-state.is-booked {
   background: var(--pp-amber-bg);
   color: var(--pp-amber);
 }
+
+/* ---------- Bigger screens ---------- */
+/* Tablets: the bottom bar lines up with the page instead of spanning the window. */
+@media (min-width: 600px) {
+  .pp-tabbar {
+    left: 50%;
+    right: auto;
+    width: min(100%, 34rem);
+    transform: translateX(-50%);
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -1px 0 var(--pp-line), 0 -8px 24px rgb(14 27 44 / 0.06);
+  }
+}
+
+/* Computers: a wider page, with the tabs under the pass (and staying at the top) instead of at the bottom. */
+@media (min-width: 900px) and (min-height: 500px) {
+  .pp-main {
+    display: flex;
+    flex-direction: column;
+    max-width: 52rem;
+    padding: var(--space-6) var(--space-5) var(--space-7);
+  }
+  .pp-link-notice {
+    order: -1;
+    margin-bottom: var(--space-3);
+    border-radius: 14px;
+  }
+  .pp-pass {
+    order: 0;
+    padding: var(--space-5) var(--space-6) var(--space-6);
+    border-radius: 24px 24px 0 0;
+  }
+  .pp-banner {
+    width: calc(100% + 2 * var(--space-6));
+    max-height: 18rem;
+    margin: calc(-1 * var(--space-5)) calc(-1 * var(--space-6)) 0;
+    border-radius: 24px 24px 0 0;
+  }
+  .pp-name {
+    font-size: clamp(3.5rem, 6vw, 5rem);
+  }
+  .pp-tabbar {
+    order: 1;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    width: auto;
+    transform: none;
+    justify-content: flex-start;
+    gap: var(--space-1);
+    padding: var(--space-2) var(--space-4);
+    border-radius: 0 0 24px 24px;
+    box-shadow: 0 1px 0 var(--pp-line), 0 8px 24px rgb(14 27 44 / 0.06);
+  }
+  .pp-tabbar button {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    max-width: none;
+    min-height: 2.75rem;
+    gap: var(--space-2);
+    padding: 0 var(--space-4);
+    border-radius: 999px;
+    font-size: var(--text-md);
+  }
+  .pp-tabbar button[aria-current='page'] {
+    background: var(--pp-pool);
+  }
+  .pp-tabbar button:hover {
+    background: var(--pp-bg);
+  }
+  .pp-panel {
+    order: 2;
+    padding: var(--space-3) var(--space-2) 0;
+  }
+  .pp-section {
+    padding: var(--space-5) 0 var(--space-2);
+  }
+  .pp-section h2 {
+    font-size: 1.75rem;
+  }
+  .pp-row {
+    grid-template-columns: 6rem 1fr 9rem;
+    padding: var(--space-4) var(--space-5);
+  }
+  .pp-tl {
+    grid-template-columns: 6rem 1fr auto;
+    padding: var(--space-4) var(--space-5);
+  }
+  .pp-food li {
+    grid-template-columns: 6rem 1fr;
+    padding: var(--space-4) var(--space-5);
+  }
+  .pp-state {
+    cursor: pointer;
+  }
+  .pp-state.is-book:hover:not(:disabled) {
+    background: var(--pp-lagoon-2);
+  }
+}
