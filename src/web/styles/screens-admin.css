@@ -411,3 +411,6 @@ label.btn:has(input:focus-visible) {
   background: var(--error-bg, #FCE8E6);
   color: var(--error-fg, #B3261E);
 }
+.book-link-result svg {
+  flex: none;
+}

@@ -58,11 +58,18 @@ describe('booking links and typed numbers', () => {
     const res = await api(`/public/signup/link/${links.code}/${c.kayak9}`, { body: { memberNumber: '100' } });
     expect(res.status).toBe(200);
     const body = await json(res);
-    expect(body).toEqual({ booked: true, already: false, activity: 'Kayaking' });
-    expect(JSON.stringify(body)).not.toContain('First100');
-    expect(await json(await api(`/public/signup/link/${links.code}/${c.kayak9}`, { body: { memberNumber: '100' } }))).toMatchObject({ already: true });
-    // A clash, an unknown number, the kiosk's code, and a staff-only activity.
-    expect((await api(`/public/signup/link/${links.code}/${c.archery10}`, { body: { memberNumber: '100' } })).status).toBe(409);
+    expect(body.linkResult).toEqual({ booked: true, already: false, activity: 'Kayaking', problem: null });
+    // Then their own page, reduced: their bookings (to cancel), first name only.
+    expect(body.person).toMatchObject({ firstName: 'First100', lastName: '', groupName: '' });
+    expect(body.bookings.map((b: { name: string; canCancel: boolean }) => [b.name, b.canCancel])).toEqual([['Kayaking', true]]);
+    const cancelled = await json(await api('/public/signup/cancel', { body: { pass: body.pass, activityId: c.kayak9 } }));
+    expect(cancelled.bookings).toEqual([]);
+    expect(cancelled.person.lastName).toBe('');
+    await api(`/public/signup/link/${links.code}/${c.kayak9}`, { body: { memberNumber: '100' } });
+    expect((await json(await api(`/public/signup/link/${links.code}/${c.kayak9}`, { body: { memberNumber: '100' } }))).linkResult).toMatchObject({ already: true });
+    // A clash still opens their page, with the reason; an unknown number doesn't.
+    const clash = await json(await api(`/public/signup/link/${links.code}/${c.archery10}`, { body: { memberNumber: '100' } }));
+    expect(clash.linkResult).toMatchObject({ booked: false, problem: expect.stringMatching(/clashes with Kayaking/) });
     expect((await api(`/public/signup/link/${links.code}/${c.kayak9}`, { body: { memberNumber: '999999' } })).status).toBe(409);
     expect((await api(`/public/signup/link/${c.code}/${c.kayak9}`)).status).toBe(404);
     // New links: the old ones stop working.

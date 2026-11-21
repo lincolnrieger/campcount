@@ -5,6 +5,9 @@ import { dayInZone, dayLabel, timeRange } from '../../shared/time';
 import { ApiFailure, api } from '../api';
 import { useTitle } from '../shell';
 import { Button, Field, Icon, formatDateRange, plural } from '../ui';
+import type { SignupView } from '../components/SignupPanel';
+import { ParticipantPage } from './Participant';
+import { usePerson } from './Signup';
 
 interface LinkInfo {
   event: { name: string; timezone: string; startsOn: string; endsOn: string };
@@ -24,6 +27,9 @@ export function BookLink() {
   const [number, setNumber] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const person = usePerson(setError);
+  const { setView } = person;
   useTitle(info ? `Book ${info.session.name}` : 'Book an activity');
 
   useEffect(() => {
@@ -38,8 +44,13 @@ export function BookLink() {
     setBusy(true);
     setResult(null);
     try {
-      const res = await api<{ already: boolean; activity: string }>(`/public/signup/link/${code}/${activityId}`, { body: { memberNumber: number.trim() } });
-      setResult({ ok: true, text: res.already ? `Already booked for ${res.activity}.` : `Booked for ${res.activity}. See you there!` });
+      const res = await api<SignupView & { linkResult: { booked: boolean; already: boolean; activity: string | null; problem: string | null } }>(`/public/signup/link/${code}/${activityId}`, {
+        body: { memberNumber: number.trim() },
+      });
+      const r = res.linkResult;
+      // Their own page from here: everything they're booked for, and cancel.
+      setView(res);
+      setResult(r.booked ? { ok: true, text: r.already ? `You were already booked for ${r.activity}.` : `Booked for ${r.activity}. See you there!` } : { ok: false, text: r.problem ?? 'That couldn’t be booked.' });
       setNumber('');
     } catch (err) {
       setResult({ ok: false, text: err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.' });
@@ -49,6 +60,7 @@ export function BookLink() {
   }
 
   const s = info?.session;
+  if (person.view) return <ParticipantPage view={person.view} busy={person.busy} actions={person} error={error} notice={result} />;
   return (
     <main className="public" id="main">
       <div className="public-card book-link">
@@ -70,21 +82,17 @@ export function BookLink() {
                 .filter(Boolean)
                 .join(' · ')}
             </p>
-            {!info.open ? (
-              <p className="book-link-msg">Booking is closed right now.</p>
-            ) : s.full ? (
-              <p className="book-link-msg">This activity is full.</p>
-            ) : (
-              <form onSubmit={book} className="form" noValidate>
-                <Field id="book-number" label="Membership number" hint="On your Scouts card or in MyScout. Book for one person at a time.">
-                  <input className="input book-link-input" inputMode="numeric" autoComplete="off" maxLength={24} value={number} onChange={(e) => setNumber(e.target.value)} />
-                </Field>
-                <Button type="submit" kind="primary" busy={busy} busyLabel="Booking…" disabled={!number.trim()}>
-                  Book {s.name}
-                </Button>
-                {s.capacity !== null && <p className="meta">{plural(Math.max(0, s.capacity - s.booked), 'place')} left</p>}
-              </form>
-            )}
+            {!info.open ? <p className="book-link-msg">Booking is closed right now.</p> : s.full ? <p className="book-link-msg">This activity is full.</p> : null}
+            <form onSubmit={book} className="form" noValidate>
+              <Field id="book-number" label="Membership number" hint="On your Scouts card or in MyScout. One person at a time.">
+                <input className="input book-link-input" inputMode="numeric" autoComplete="off" maxLength={24} value={number} onChange={(e) => setNumber(e.target.value)} />
+              </Field>
+              <Button type="submit" kind="primary" busy={busy} busyLabel="Opening…" disabled={!number.trim()}>
+                {info.open && !s.full ? `Book ${s.name}` : 'See my bookings'}
+              </Button>
+              {info.open && !s.full && s.capacity !== null && <p className="meta">{plural(Math.max(0, s.capacity - s.booked), 'place')} left</p>}
+              <p className="meta">You’ll then see everything you’re booked for, and can cancel or book more.</p>
+            </form>
             {result && (
               <p className={result.ok ? 'book-link-result is-ok' : 'book-link-result is-error'} role="status">
                 <Icon name={result.ok ? 'success' : 'error'} size={20} />
