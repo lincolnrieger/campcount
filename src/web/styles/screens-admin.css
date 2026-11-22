@@ -528,3 +528,38 @@ label.btn:has(input:focus-visible) {
 .share-toggle:disabled {
   cursor: not-allowed;
 }
+.join-logo {
+  display: block;
+  max-width: 12rem;
+  max-height: 10rem;
+  margin: 0 auto var(--space-2);
+  object-fit: contain;
+}
+.join-link form {
+  display: grid;
+  gap: var(--space-2);
+}
+.join-row {
+  display: flex;
+  gap: var(--space-2);
+}
+.join-row .input {
+  flex: 1;
+  min-width: 0;
+}
+.join-go {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 3.25rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--brand);
+  color: #FFFFFF;
+  cursor: pointer;
+}
+.join-go:disabled {
+  background: var(--surface-sunken);
+  color: var(--ink-3);
+  cursor: not-allowed;
+}

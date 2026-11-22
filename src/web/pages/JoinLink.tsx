@@ -4,27 +4,14 @@ import { useParams } from 'react-router';
 import type { LinkFeature } from '../../shared/participantLinks';
 import { ApiFailure, api } from '../api';
 import { useTitle } from '../shell';
-import { Button, Field, Icon, formatDateRange } from '../ui';
+import { Icon } from '../ui';
 import type { SignupView } from '../components/SignupPanel';
 import { ParticipantPage } from './Participant';
 import { usePerson } from './Signup';
 
 interface LinkInfo {
-  event: { name: string; timezone: string; startsOn: string; endsOn: string; contactEmail: string; banner: { url: string; width: number; height: number } | null };
+  event: { name: string; timezone: string; startsOn: string; endsOn: string; contactEmail: string; banner: { url: string; width: number; height: number } | null; logoUrl: string | null };
   features: LinkFeature[];
-}
-
-const WHAT: Record<LinkFeature, string> = {
-  programme: 'see the camp programme',
-  book: 'book your activities',
-  teams: 'make or join a team',
-  food: 'see what’s on the menu',
-};
-
-/** "book your activities, see the programme and see what's on the menu" */
-function sentence(features: LinkFeature[]) {
-  const parts = features.map((f) => WHAT[f]);
-  return parts.length < 2 ? (parts[0] ?? '') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }
 
 /**
@@ -98,6 +85,7 @@ export function JoinLink() {
   }
 
   const banner = info?.event.banner;
+  const logo = info?.event.logoUrl;
   return (
     <main className="public" id="main">
       <div className="public-card book-link join-link">
@@ -112,39 +100,39 @@ export function JoinLink() {
           </p>
         ) : (
           <>
-            {banner ? (
+            {/* Just the camp's logo (or banner) and the number. */}
+            {logo ? (
+              <img className="join-logo" src={logo} alt={info.event.name} />
+            ) : banner ? (
               <img className="join-banner" src={banner.url} width={banner.width} height={banner.height} alt={info.event.name} />
             ) : (
               <h1>{info.event.name}</h1>
             )}
-            <p className="meta">{formatDateRange(info.event.startsOn, info.event.endsOn)}</p>
-            <p className="join-lead">Type your membership number to {sentence(info.features)}.</p>
-            <form onSubmit={open} className="form" noValidate>
-              <Field id="join-number" label="Scouts SA Membership Number">
+            <form onSubmit={open} noValidate>
+              <label htmlFor="join-number" className="field-label">
+                Scouts SA Membership Number
+              </label>
+              <div className="join-row">
                 <input
+                  id="join-number"
                   className="input book-link-input"
                   inputMode="numeric"
+                  enterKeyHint="go"
                   autoComplete="off"
                   maxLength={24}
                   value={number}
                   onChange={(e) => setNumber(e.target.value)}
                   aria-describedby={problem ? 'join-problem' : undefined}
                 />
-              </Field>
-              <Button type="submit" kind="primary" busy={opening} busyLabel="Opening…" disabled={!number.trim()}>
-                Open my camp page
-              </Button>
+                <button type="submit" className="join-go" disabled={!number.trim() || opening} aria-label={opening ? 'Opening' : 'Open my camp page'}>
+                  <Icon name={opening ? 'sync' : 'chevron'} size={24} />
+                </button>
+              </div>
             </form>
             {problem && (
               <p id="join-problem" className="book-link-result is-error" role="alert">
                 <Icon name="error" size={20} />
                 {problem}
-              </p>
-            )}
-            <p className="meta">Doing this for more than one person? Open each one, then tap “Not you?” at the bottom of the page.</p>
-            {info.event.contactEmail && (
-              <p className="meta">
-                Questions or changes? Email <a href={`mailto:${info.event.contactEmail}`}>{info.event.contactEmail}</a>.
               </p>
             )}
           </>

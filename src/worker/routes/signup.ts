@@ -21,6 +21,7 @@ import { ALLERGENS, dietProfile, participantItems } from '../../shared/mealItems
 import { itemFromRow, loadItems } from './mealItems';
 import { parseSectionSettings, sectionStyle } from '../../shared/sections';
 import { bannerUrl } from './banner';
+import { sendLogo } from './site';
 import { dutiesFor } from './duties';
 import { activitiesDone, collect, meIsValid, readMe, standing, writeMe } from '../services/sideQuest';
 
@@ -724,10 +725,25 @@ async function linkByCode(c: AppContext, code: string): Promise<{ link: LinkRow;
 /** The page before a number is typed: the camp, and what the link lets people do. Nothing about anyone. */
 publicSignupRoutes.get('/p/:code', async (c) => {
   const { link, event: e } = await linkByCode(c, c.req.param('code'));
+  const logo = await c.env.DB.prepare(`SELECT updated_at FROM event_logos WHERE event_id = ?`).bind(e.id).first<{ updated_at: string }>();
   return c.json({
-    event: { name: e.name, timezone: e.timezone, startsOn: e.starts_on, endsOn: e.ends_on, contactEmail: e.contact_email ?? '', banner: await bannerUrl(c.env.DB, e.id) },
+    event: {
+      name: e.name,
+      timezone: e.timezone,
+      startsOn: e.starts_on,
+      endsOn: e.ends_on,
+      contactEmail: e.contact_email ?? '',
+      banner: await bannerUrl(c.env.DB, e.id),
+      logoUrl: logo ? `/api/public/signup/p/${encodeURIComponent(c.req.param('code'))}/logo?v=${encodeURIComponent(logo.updated_at)}` : null,
+    },
     features: featuresOf(link.features),
   });
+});
+
+/** The camp's logo (Settings), for the top of the link's page. */
+publicSignupRoutes.get('/p/:code/logo', async (c) => {
+  const { event: e } = await linkByCode(c, c.req.param('code'));
+  return sendLogo(c, e.id);
 });
 
 /**
