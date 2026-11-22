@@ -585,3 +585,49 @@ label.btn:has(input:focus-visible) {
 .join-link .field-label {
   font-weight: var(--weight-bold);
 }
+
+/* ---------- A camp's own address: Participant or Event team ---------- */
+.door {
+  gap: var(--space-5);
+}
+.door-choices {
+  display: grid;
+  gap: var(--space-3);
+}
+.door-choice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 4.5rem;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+  transition: border-color var(--duration) var(--ease), background-color var(--duration) var(--ease);
+}
+.door-choice:hover {
+  border-color: var(--brand);
+  background: var(--surface-sunken);
+}
+.door-choice > svg {
+  flex: none;
+  color: var(--ink-3);
+}
+.door-text {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+}
+.door-text strong {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-heavy);
+}
+.door-text span {
+  color: var(--ink-3);
+  font-size: var(--text-md);
+}
+.signin-back {
+  justify-self: center;
+}

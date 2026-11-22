@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { ApiFailure, api } from '../api';
 import { Button, Choice, Field, Loading, Notice, Segmented, Skeleton } from '../ui';
 import { useSession } from '../session';
 import type { Me } from '../types';
 import { useTitle } from '../shell';
+import { useSiteEvent } from '../site';
 
 /** The public card for sign-in pages: one task, no branding. */
 export function PublicFrame({ children }: { children: ReactNode }) {
@@ -68,6 +69,7 @@ async function afterSignIn(refresh: () => Promise<void>, navigate: ReturnType<ty
 
 export function SignIn() {
   useTitle('Sign in');
+  const siteEvent = useSiteEvent();
   const { refresh } = useSession();
   const navigate = useNavigate();
   const [pending] = useState(loadPending);
@@ -238,6 +240,11 @@ export function SignIn() {
               Email me a code
             </Button>
           </div>
+          {siteEvent?.participantCode && (
+            <Link className="signin-back meta" to="/welcome">
+              Not on the event team? Go back
+            </Link>
+          )}
         </>
       ) : (
         <form className="form" onSubmit={verifyCode} noValidate>

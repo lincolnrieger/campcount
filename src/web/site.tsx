@@ -10,6 +10,8 @@ export interface SiteEvent {
   subdomain: string;
   brandColor: string | null;
   logoUrl: string | null;
+  /** The link participants get from this address's front door (People › Links for everyone). */
+  participantCode?: string | null;
 }
 
 /**

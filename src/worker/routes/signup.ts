@@ -704,6 +704,7 @@ interface LinkRow {
   name: string;
   features: number;
   active: number;
+  is_home?: number;
   created_at: string;
 }
 
@@ -833,6 +834,7 @@ const linkDto = (c: AppContext, l: LinkRow) => ({
   name: l.name,
   features: featuresOf(l.features),
   active: l.active === 1,
+  home: l.is_home === 1,
   url: `${new URL(c.req.url).origin}/p/${l.code}`,
   createdAt: l.created_at,
 });
@@ -885,10 +887,20 @@ signupRoutes.patch('/participant-links/:linkId', async (c) => {
     name: input.name ?? l.name,
     features: input.features ? maskOf(input.features) : l.features,
     active: input.active === undefined ? l.active : input.active ? 1 : 0,
+    is_home: input.home === undefined ? (l.is_home ?? 0) : input.home ? 1 : 0,
   };
   await c.env.DB.batch([
-    c.env.DB.prepare(`UPDATE participant_links SET name = ?, features = ?, active = ?, updated_at = ? WHERE id = ?`).bind(next.name, next.features, next.active, nowIso(), l.id),
-    auditStatement(c.env.DB, { actor: { type: 'user', id: user.userId }, action: 'participant_link.update', eventId, targetType: 'participant_link', targetId: l.id, detail: { name: next.name, features: featuresOf(next.features).join(','), active: next.active === 1 } }),
+    // One link for the camp's own address: choosing this one unmarks the last.
+    ...(next.is_home === 1 ? [c.env.DB.prepare(`UPDATE participant_links SET is_home = 0 WHERE event_id = ? AND id <> ?`).bind(eventId, l.id)] : []),
+    c.env.DB.prepare(`UPDATE participant_links SET name = ?, features = ?, active = ?, is_home = ?, updated_at = ? WHERE id = ?`).bind(
+      next.name,
+      next.features,
+      next.active,
+      next.is_home,
+      nowIso(),
+      l.id,
+    ),
+    auditStatement(c.env.DB, { actor: { type: 'user', id: user.userId }, action: 'participant_link.update', eventId, targetType: 'participant_link', targetId: l.id, detail: { name: next.name, features: featuresOf(next.features).join(','), active: next.active === 1, home: next.is_home === 1 } }),
   ]);
   return c.json({ link: linkDto(c, next) });
 });

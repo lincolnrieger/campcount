@@ -33,6 +33,7 @@ import { Intake } from './pages/Intake';
 import { BookingLinks } from './pages/BookingLinks';
 const BookLink = lazy(() => import('./pages/BookLink').then((m) => ({ default: m.BookLink })));
 const ShareLinks = lazy(() => import('./pages/ShareLinks').then((m) => ({ default: m.ShareLinks })));
+const FrontDoor = lazy(() => import('./pages/FrontDoor').then((m) => ({ default: m.FrontDoor })));
 const JoinLink = lazy(() => import('./pages/JoinLink').then((m) => ({ default: m.JoinLink })));
 import { Pair } from './pages/Pair';
 import { ScanHub } from './pages/ScanHub';
@@ -72,10 +73,12 @@ function PageLoading() {
   );
 }
 
-function RequireSignIn({ children }: { children: ReactNode }) {
+function RequireSignIn({ children, frontDoor }: { children: ReactNode; frontDoor?: string }) {
   const { me, loading } = useSession();
   const location = useLocation();
   if (loading) return <PageLoading />;
+  // An event's own address, opened at its front: choose Participant or Event team first.
+  if (!me && frontDoor && location.pathname === '/') return <Navigate to={frontDoor} replace />;
   if (!me) return <Navigate to="/sign-in" replace state={{ from: location.pathname }} />;
   return <>{children}</>;
 }
@@ -179,6 +182,7 @@ function EventSiteApp({ site }: { site: Extract<SiteInfo, { kind: 'event' }> }) 
         <Route path="/c" element={<Participant />} />
         <Route path="/book/:code/:activityId" element={<BookLink />} />
         <Route path="/p/:code" element={<JoinLink />} />
+        <Route path="/welcome" element={<FrontDoor />} />
         <Route
           path="/events/:eventId/scan/:type/:contextId?"
           element={
@@ -190,7 +194,7 @@ function EventSiteApp({ site }: { site: Extract<SiteInfo, { kind: 'event' }> }) 
         <Route path="/events/:eventId/*" element={<StripEventPrefix />} />
         <Route
           element={
-            <RequireSignIn>
+            <RequireSignIn frontDoor={site.event.participantCode ? '/welcome' : undefined}>
               <SiteShell />
             </RequireSignIn>
           }

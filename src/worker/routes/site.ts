@@ -22,6 +22,11 @@ siteRoutes.get('/', async (c) => {
   if (site.kind === 'event') {
     const e = site.event;
     const logo = await c.env.DB.prepare(`SELECT updated_at FROM event_logos WHERE event_id = ?`).bind(e.id).first<{ updated_at: string }>();
+    // Participants at the camp's address: the link marked for it (while the camp is on).
+    const home =
+      e.status === 'open' || e.status === 'draft'
+        ? await c.env.DB.prepare(`SELECT code FROM participant_links WHERE event_id = ? AND is_home = 1 AND active = 1`).bind(e.id).first<{ code: string }>()
+        : null;
     return c.json({
       kind: 'event',
       rootDomain: root,
@@ -31,6 +36,7 @@ siteRoutes.get('/', async (c) => {
         subdomain: e.subdomain,
         brandColor: e.brand_color,
         logoUrl: logo ? `/api/site/logo?v=${encodeURIComponent(logo.updated_at)}` : null,
+        participantCode: home?.code ?? null,
       },
     });
   }
