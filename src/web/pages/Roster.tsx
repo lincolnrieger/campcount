@@ -102,6 +102,7 @@ export function Roster() {
         )
       }
       menu={[
+        can('activities.manage') && { label: 'Links for everyone (type a membership number)', to: 'share' },
         can('roster.import') && { label: 'Import & check (MyScout and Consent2Go)', to: 'import' },
         { label: 'Leader roster', to: 'leader-roster' },
         can('event.configure') && { label: 'Design lanyards', to: 'lanyards' },

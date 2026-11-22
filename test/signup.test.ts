@@ -280,3 +280,69 @@ describe('a lost lanyard', () => {
     expect((await api('/public/signup/cancel', { body: { pass: me.pass, activityId: c.kayak9 } })).status).toBe(401);
   });
 });
+
+describe('links for everyone', () => {
+  it('opens a typed-number page with only the parts the link switches on, and refuses the rest', async () => {
+    const c = await camp();
+    const make = async (name: string, features: string[]) =>
+      (await json(await api(`/events/${c.eventId}/participant-links`, { cookie: c.manager.cookie, body: { name, features } }))).link as {
+        id: string;
+        url: string;
+        features: string[];
+      };
+    const bookOnly = await make('Book only', ['book']);
+    const lookOnly = await make('Look only', ['programme', 'food']);
+    expect(bookOnly.url).toMatch(/\/p\/[A-Za-z0-9_-]{10,}$/);
+    const code = (l: { url: string }) => l.url.split('/p/')[1];
+
+    // Before a number: the camp and what the link does, nothing about anyone.
+    const info = await json(await api(`/public/signup/p/${code(bookOnly)}`));
+    expect(info.features).toEqual(['book']);
+    expect(JSON.stringify(info)).not.toContain('First100');
+
+    // A booking-only page: sessions to book, no programme or teams; a reduced page (no surname or group).
+    const view = await json(await api(`/public/signup/p/${code(bookOnly)}`, { body: { memberNumber: '100' } }));
+    expect(view.features).toEqual(['book']);
+    expect(view.sessions.length).toBe(3);
+    expect(view.programme).toEqual([]);
+    expect(view.person).toMatchObject({ firstName: 'First100', lastName: '', groupName: '' });
+    const booked = await api('/public/signup/book', { body: { pass: view.pass, activityId: c.kayak9 } });
+    expect(booked.status).toBe(200);
+    expect((await json(booked)).bookings[0]).toMatchObject({ name: 'Kayaking', canCancel: true });
+    expect((await api('/public/signup/meals', { body: { pass: view.pass } })).status).toBe(403);
+
+    // A look-only page can't book or cancel, even with a hand-made request.
+    const look = await json(await api(`/public/signup/p/${code(lookOnly)}`, { body: { memberNumber: '100' } }));
+    expect(look.sessions).toEqual([]);
+    expect(look.bookings[0]).toMatchObject({ name: 'Kayaking', canCancel: false });
+    expect((await api('/public/signup/book', { body: { pass: look.pass, activityId: c.archery10 } })).status).toBe(403);
+    expect((await api('/public/signup/cancel', { body: { pass: look.pass, activityId: c.kayak9 } })).status).toBe(403);
+    // The pass can't be edited to switch more on.
+    const forged = look.pass.replace(/\.r\d+\./, '.r15.');
+    expect((await api('/public/signup/book', { body: { pass: forged, activityId: c.archery10 } })).status).toBe(401);
+
+    // Refreshing reopens the same page from its pass; a lanyard's own pass can't be used this way.
+    const again = await json(await api('/public/signup/view', { body: { pass: look.pass } }));
+    expect(again.features).toEqual(['programme', 'food']);
+    const own = await json(await api('/public/signup/identify', { body: { token: c.card('200').token } }));
+    expect(own.features).toEqual(['programme', 'book', 'teams', 'food']);
+    expect((await api('/public/signup/view', { body: { pass: own.pass } })).status).toBe(401);
+
+    // Unknown numbers, switched-off and deleted links.
+    expect((await api(`/public/signup/p/${code(bookOnly)}`, { body: { memberNumber: '999' } })).status).toBe(409);
+    await api(`/events/${c.eventId}/participant-links/${bookOnly.id}`, { method: 'PATCH', cookie: c.manager.cookie, body: { active: false } });
+    expect((await api(`/public/signup/p/${code(bookOnly)}`)).status).toBe(404);
+    const fresh = await json(await api(`/events/${c.eventId}/participant-links/${lookOnly.id}/new-code`, { cookie: c.manager.cookie, body: {} }));
+    expect((await api(`/public/signup/p/${code(lookOnly)}`)).status).toBe(404);
+    expect((await api(`/public/signup/p/${code(fresh.link)}`)).status).toBe(200);
+    await api(`/events/${c.eventId}/participant-links/${lookOnly.id}`, { method: 'DELETE', cookie: c.manager.cookie });
+    expect((await json(await api(`/events/${c.eventId}/participant-links`, { cookie: c.manager.cookie }))).links.length).toBe(1);
+  });
+
+  it('is for event managers only', async () => {
+    const c = await camp();
+    const other = await createUser();
+    expect([403, 404]).toContain((await api(`/events/${c.eventId}/participant-links`, { cookie: other.cookie })).status);
+    expect((await api(`/events/${c.eventId}/participant-links`, { cookie: c.manager.cookie, body: { name: 'X', features: [] } })).status).toBe(400);
+  });
+});

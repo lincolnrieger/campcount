@@ -5,6 +5,7 @@ import { dayInZone, dayLabel, timeInZone, todayInZone } from '../../shared/time'
 import { api } from '../api';
 import type { ParticipantItem } from '../../shared/mealItems';
 import { MEAL_CATEGORIES } from '../../shared/mealItems';
+import type { LinkFeature } from '../../shared/participantLinks';
 import type { CollectResult, ProgrammeItem, SideQuestStanding, SignupSession, SignupView } from '../components/SignupPanel';
 import { TeamsPanel } from '../components/TeamsPanel';
 import { loadFont } from '../lanyards/fonts';
@@ -139,7 +140,24 @@ function useFirstPaintReady(view: SignupView | null): boolean {
  * Someone's page, opened another way than their own lanyard (a booking link):
  * the same tabs, starting on Book, with a line saying what just happened.
  */
-export function ParticipantPage({ view, busy, actions, error, notice }: { view: SignupView; busy: boolean; actions: Actions; error: string | null; notice: { ok: boolean; text: string } | null }) {
+export function ParticipantPage({
+  view,
+  busy,
+  actions,
+  error,
+  notice,
+  initialTab = 'book',
+  onNotMe,
+}: {
+  view: SignupView;
+  busy: boolean;
+  actions: Actions;
+  error: string | null;
+  notice: { ok: boolean; text: string } | null;
+  initialTab?: Tab;
+  /** Typed-number pages: close this page and type another number. */
+  onNotMe?: () => void;
+}) {
   useEffect(() => {
     void loadFont('bebas-neue', 400);
   }, []);
@@ -151,7 +169,7 @@ export function ParticipantPage({ view, busy, actions, error, notice }: { view: 
           {notice.text}
         </p>
       )}
-      <Page view={view} busy={busy} actions={actions} initialTab="book" />
+      <Page view={view} busy={busy} actions={actions} initialTab={initialTab} onNotMe={onNotMe} />
       <SignupStatus error={error} done={null} />
     </Shell>
   );
@@ -208,14 +226,14 @@ const ordinal = (n: number) => {
 // ---------------------------------------------------------------- the page
 
 type Actions = ReturnType<typeof usePerson>;
-type Tab = 'roster' | 'day' | 'book' | 'teams' | 'food' | 'quest';
+export type Tab = 'roster' | 'day' | 'book' | 'teams' | 'food' | 'quest';
 
 /**
  * One tab at a time, picked from the bar at the bottom, so nothing is a
  * long scroll. Buttons change in place (Book → Booked) rather than popping
  * anything up, so the screen never jumps.
  */
-function Page({ view, busy, actions, initialTab }: { view: SignupView; busy: boolean; actions: Actions; initialTab?: Tab }) {
+function Page({ view, busy, actions, initialTab, onNotMe }: { view: SignupView; busy: boolean; actions: Actions; initialTab?: Tab; onNotMe?: () => void }) {
   const tz = view.event.timezone;
   const now = useNow();
   const programme = view.programme ?? [];
@@ -225,14 +243,16 @@ function Page({ view, busy, actions, initialTab }: { view: SignupView; busy: boo
   // Leaders don't book activities, so they don't get the Book tab.
   // Adults (per the camp's youth sections setting) don't book activities.
   const isAdult = view.person.kind ? view.person.kind === 'adult' : view.person.sectionWord === 'Leader';
-  const canBook = !isAdult && (view.sessions.length > 0 || view.bookings.length > 0);
+  // A link for everyone can switch parts off (the server leaves their data out too).
+  const has = (f: LinkFeature) => !view.features || view.features.includes(f);
+  const canBook = has('book') && !isAdult && (view.sessions.length > 0 || view.bookings.length > 0);
   const quest = view.sideQuest && view.sideQuest.collected > 0 ? view.sideQuest : null;
 
   const duties = view.duties ?? [];
   const tabs: { id: Tab; label: string; icon: IconName }[] = [
     // Leaders on the roster see their duties first.
     ...(duties.length ? [{ id: 'roster' as const, label: 'Roster', icon: 'clipboard' as const }] : []),
-    { id: 'day', label: 'My day', icon: 'events' },
+    ...(has('programme') ? [{ id: 'day' as const, label: 'My day', icon: 'events' as const }] : []),
     ...(canBook ? [{ id: 'book' as const, label: 'Book', icon: 'ticket' as const }] : []),
     ...(teamEvents.length ? [{ id: 'teams' as const, label: 'Teams', icon: 'team' as const }] : []),
     ...(meals.length ? [{ id: 'food' as const, label: 'Food', icon: 'meal' as const }] : []),
@@ -243,7 +263,7 @@ function Page({ view, busy, actions, initialTab }: { view: SignupView; busy: boo
     const saved = sessionStorage.getItem('cc-pp-tab') as Tab | null;
     return saved ?? (duties.length ? 'roster' : 'day');
   });
-  const current = tabs.some((t) => t.id === tab) ? tab : (tabs[0]?.id ?? 'day');
+  const current = tabs.some((t) => t.id === tab) ? tab : (tabs[0]?.id ?? null);
   const setTab = (t: Tab) => {
     setTabState(t);
     sessionStorage.setItem('cc-pp-tab', t);
@@ -275,6 +295,12 @@ function Page({ view, busy, actions, initialTab }: { view: SignupView; busy: boo
         )}
         {current === 'food' && <Food meals={meals} tz={tz} pass={view.pass} />}
         {current === 'quest' && quest && <QuestCard quest={quest} />}
+        {current === null && (
+          <section className="pp-section">
+            <p className="pp-muted">Nothing to show here yet. Check back closer to camp.</p>
+          </section>
+        )}
+        <PageFoot email={view.event.contactEmail} onNotMe={onNotMe} />
       </div>
       {tabs.length > 1 && (
         <nav className="pp-tabbar" aria-label="My camp">
@@ -287,6 +313,25 @@ function Page({ view, busy, actions, initialTab }: { view: SignupView; busy: boo
         </nav>
       )}
     </>
+  );
+}
+
+/** Questions go to the camp's email; typed-number pages can be closed for the next person. */
+function PageFoot({ email, onNotMe }: { email?: string; onNotMe?: () => void }) {
+  if (!email && !onNotMe) return null;
+  return (
+    <footer className="pp-foot">
+      {email && (
+        <p>
+          Questions or changes? Email <a href={`mailto:${email}`}>{email}</a>
+        </p>
+      )}
+      {onNotMe && (
+        <button type="button" className="pp-link" onClick={onNotMe}>
+          Not you? Use a different membership number
+        </button>
+      )}
+    </footer>
   );
 }
 
@@ -417,6 +462,73 @@ function DayChips({ days, value, today, onChange, labels }: { days: string[]; va
   );
 }
 
+/** "3 places left", once few are left (not on your own bookings). */
+function placesLeft(s: SignupSession, booked: boolean) {
+  if (booked || s.full || s.capacity === null) return null;
+  const left = s.capacity - s.booked;
+  return left <= 5 ? `${left} ${left === 1 ? 'place' : 'places'} left` : null;
+}
+
+/** Everything you're booked for, across every day, and a calendar file of it. */
+function MyBookings({ view }: { view: SignupView }) {
+  const tz = view.event.timezone;
+  const list = [...view.bookings].sort((a, b) => (a.startsAt ?? '9').localeCompare(b.startsAt ?? '9'));
+  const timed = list.filter((b) => b.startsAt);
+  return (
+    <details className="pp-mybook">
+      <summary>
+        <Icon name="check" size={18} />
+        <span>
+          You’re booked for <strong>{list.length}</strong> {list.length === 1 ? 'activity' : 'activities'}
+        </span>
+      </summary>
+      <ul>
+        {list.map((b) => (
+          <li key={b.activityId}>
+            <span className="pp-num">{b.startsAt ? `${dayLabel(dayInZone(b.startsAt, tz))} ${timeInZone(b.startsAt, tz)}` : 'Any time'}</span>
+            <strong>{b.name}</strong>
+          </li>
+        ))}
+      </ul>
+      {timed.length > 0 && (
+        <button type="button" className="pp-link" onClick={() => downloadCalendar(view.event.name, timed)}>
+          <Icon name="download" size={18} /> Add to my calendar
+        </button>
+      )}
+    </details>
+  );
+}
+
+/** An .ics file of someone's bookings, for their phone's calendar. */
+function downloadCalendar(camp: string, items: { activityId: string; name: string; location: string; startsAt: string | null; endsAt: string | null }[]) {
+  const stamp = (iso: string) => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const esc = (t: string) => t.replace(/[\\;,]/g, (m) => `\\${m}`).replace(/\n/g, '\\n');
+  const now = stamp(new Date().toISOString());
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//CampCount//Bookings//EN', 'CALSCALE:GREGORIAN'];
+  for (const b of items) {
+    const start = b.startsAt!;
+    const end = b.endsAt ?? new Date(Date.parse(start) + 3_600_000).toISOString();
+    lines.push(
+      'BEGIN:VEVENT',
+      `UID:${b.activityId}@campcount`,
+      `DTSTAMP:${now}`,
+      `DTSTART:${stamp(start)}`,
+      `DTEND:${stamp(end)}`,
+      `SUMMARY:${esc(b.name)}`,
+      ...(b.location ? [`LOCATION:${esc(b.location)}`] : []),
+      `DESCRIPTION:${esc(camp)}`,
+      'END:VEVENT',
+    );
+  }
+  lines.push('END:VCALENDAR');
+  const url = URL.createObjectURL(new Blob([lines.join('\r\n')], { type: 'text/calendar' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${camp} bookings.ics`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 /**
  * Every activity for the day in a fixed order. Each one is either Booked or
  * has a Book button; booking or cancelling changes that row and nothing else.
@@ -447,6 +559,7 @@ function Book({ view, busy, onBook, onCancel }: { view: SignupView; busy: boolea
     <section className="pp-section" aria-labelledby="book-h">
       <h2 id="book-h">Book activities</h2>
       {!view.open && <p className="pp-muted">Booking is closed right now.</p>}
+      {view.bookings.length > 0 && <MyBookings view={view} />}
       {days.length > 1 && <DayChips days={days} value={day} today={today} onChange={setDay} labels={{ any: 'Any time' }} />}
       {list.length === 0 ? (
         <p className="pp-muted">Nothing to book on this day.</p>
@@ -461,7 +574,11 @@ function Book({ view, busy, onBook, onCancel }: { view: SignupView; busy: boolea
                 <span className="pp-row-time pp-num">{s.startsAt ? timeInZone(s.startsAt, tz) : 'Any'}</span>
                 <span className="pp-row-main">
                   <strong>{s.name}</strong>
-                  <span>{clash ? `Clashes with ${clash.name}` : [s.startsAt && s.endsAt ? `until ${timeInZone(s.endsAt, tz)}` : null, s.location].filter(Boolean).join(' · ')}</span>
+                  <span>
+                    {clash
+                      ? `Clashes with ${clash.name}`
+                      : [s.startsAt && s.endsAt ? `until ${timeInZone(s.endsAt, tz)}` : null, s.location, placesLeft(s, !!b)].filter(Boolean).join(' · ')}
+                  </span>
                 </span>
                 <span className="pp-row-action">
                   {b ? (
