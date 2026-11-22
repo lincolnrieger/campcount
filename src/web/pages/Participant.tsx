@@ -3,6 +3,8 @@ import type { ReactNode } from 'react';
 import { sectionColours } from '../../shared/lanyardDesign';
 import { dayInZone, dayLabel, timeInZone, todayInZone } from '../../shared/time';
 import { api } from '../api';
+import type { ParticipantItem } from '../../shared/mealItems';
+import { MEAL_CATEGORIES } from '../../shared/mealItems';
 import type { CollectResult, ProgrammeItem, SideQuestStanding, SignupSession, SignupView } from '../components/SignupPanel';
 import { TeamsPanel } from '../components/TeamsPanel';
 import { loadFont } from '../lanyards/fonts';
@@ -271,7 +273,7 @@ function Page({ view, busy, actions, initialTab }: { view: SignupView; busy: boo
             </div>
           </section>
         )}
-        {current === 'food' && <Food meals={meals} tz={tz} />}
+        {current === 'food' && <Food meals={meals} tz={tz} pass={view.pass} />}
         {current === 'quest' && quest && <QuestCard quest={quest} />}
       </div>
       {tabs.length > 1 && (
@@ -511,29 +513,122 @@ function Book({ view, busy, onBook, onCancel }: { view: SignupView; busy: boolea
   );
 }
 
-/** Meals one day at a time, with what's in them shown straight away. */
-function Food({ meals, tz }: { meals: ProgrammeItem[]; tz: string }) {
+/**
+ * Meals one day at a time. Each meal opens to its items by category; if
+ * they have dietary needs recorded, items that conflict are marked (red:
+ * contains, amber: may contain) with their alternative, and they can show
+ * only what they can eat. Items load when Food is opened.
+ */
+function Food({ meals, tz, pass }: { meals: ProgrammeItem[]; tz: string; pass: string }) {
   const today = todayInZone(tz);
   const timed = meals.filter((m) => m.startsAt).sort((a, b) => startOf(a) - startOf(b));
   const days = [...new Set(timed.map((m) => dayInZone(m.startsAt!, tz)))];
   const [day, setDay] = useState(() => (days.includes(today) ? today : (days.find((d) => d > today) ?? days[0] ?? today)));
+  const [data, setData] = useState<{ hasNeeds: boolean; meals: Record<string, ParticipantItem[]> } | null>(null);
+  const [onlyMine, setOnlyMine] = useState(false);
+  const [open, setOpen] = useState<string | null>(null);
+  const anyItems = meals.some((m) => (m.itemCount ?? 0) > 0);
+  useEffect(() => {
+    if (!anyItems) return;
+    let live = true;
+    api<{ hasNeeds: boolean; meals: Record<string, ParticipantItem[]> }>('/public/signup/meals', { body: { pass } })
+      .then((d) => live && setData(d))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+    // Load once per visit to Food; the pass refreshes after every booking, which needn't reload this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anyItems]);
+
+  const itemRow = (it: ParticipantItem) => {
+    const isOpen = open === it.id;
+    const avoid = it.conflict === 'contains' ? it.contains : it.conflict === 'may_contain' ? it.mayContain : [];
+    return (
+      <li key={it.id} className={['pp-mi', it.conflict === 'contains' && 'is-no', it.conflict === 'may_contain' && 'is-maybe', it.forYou && 'is-yours'].filter(Boolean).join(' ')}>
+        <button type="button" className="pp-mi-head" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : it.id)}>
+          <span className="pp-mi-name">{it.name}</span>
+          {it.conflict === 'contains' && <span className="pp-mi-flag is-no">Contains {avoid.join(', ')}</span>}
+          {it.conflict === 'may_contain' && <span className="pp-mi-flag is-maybe">May contain {avoid.join(', ')}</span>}
+          {it.forYou && <span className="pp-mi-flag is-yours">For you</span>}
+          {it.tbc && <span className="pp-mi-flag">Ingredients TBC</span>}
+        </button>
+        {it.yourAlternative && <p className="pp-mi-alt">Your alternative: {it.yourAlternative}</p>}
+        {it.isAlternative && (it.replaces || it.alternativeFor.length > 0) && (
+          <p className="pp-mi-sub">{[it.replaces ? `Instead of ${it.replaces}` : null, it.alternativeFor.length ? `For ${it.alternativeFor.join(', ')}` : null].filter(Boolean).join(' · ')}</p>
+        )}
+        {isOpen && (
+          <div className="pp-mi-detail">
+            {it.ingredients ? <p>{it.ingredients}</p> : <p className="pp-muted">No ingredients listed.</p>}
+            {(it.contains.length > 0 || it.mayContain.length > 0 || it.dietary.length > 0) && (
+              <p className="pp-mi-labels">
+                {[it.contains.length ? `Contains: ${it.contains.join(', ')}` : null, it.mayContain.length ? `May contain: ${it.mayContain.join(', ')}` : null, it.dietary.length ? `Suits: ${it.dietary.join(', ')}` : null]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+            )}
+          </div>
+        )}
+      </li>
+    );
+  };
+
+  const groups = (list: ParticipantItem[]) =>
+    MEAL_CATEGORIES.map((c) => [c, list.filter((i) => i.category === c)] as const)
+      .filter(([, l]) => l.length > 0)
+      .map(([c, l]) => {
+        const flagged = l.filter((i) => i.conflict).length;
+        return (
+          <details key={c} className="pp-mi-cat">
+            <summary>
+              <span>{c}</span>
+              <span className="pp-num pp-muted">{l.length}</span>
+              {flagged > 0 && <span className="pp-mi-flag is-no">{flagged} to check</span>}
+            </summary>
+            <ul>{l.map(itemRow)}</ul>
+          </details>
+        );
+      });
+
   return (
     <section className="pp-section" aria-labelledby="food-h">
       <h2 id="food-h">Food</h2>
       {days.length > 1 && <DayChips days={days} value={day} today={today} onChange={setDay} />}
+      {data?.hasNeeds && (
+        <label className="pp-only-mine">
+          <input type="checkbox" checked={onlyMine} onChange={(e) => setOnlyMine(e.target.checked)} />
+          Show only what I can eat
+        </label>
+      )}
       <ul className="pp-food">
         {timed
           .filter((m) => dayInZone(m.startsAt!, tz) === day)
-          .map((m, i) => (
-            <li key={i}>
-              <span className="pp-tl-time pp-num">{timeInZone(m.startsAt!, tz)}</span>
-              <span className="pp-food-main">
-                <strong>{m.name}</strong>
-                <span>{m.menu || 'Menu to come'}</span>
-                {m.ingredients && <small>{m.ingredients}</small>}
-              </span>
-            </li>
-          ))}
+          .map((m, i) => {
+            const items = (m.mealId && data?.meals[m.mealId]) || [];
+            const main = items.filter((it) => !it.isAlternative && !(onlyMine && it.conflict === 'contains'));
+            const alts = items.filter((it) => it.isAlternative && (!data?.hasNeeds || !onlyMine || it.forYou));
+            return (
+              <li key={i}>
+                <span className="pp-tl-time pp-num">{timeInZone(m.startsAt!, tz)}</span>
+                <span className="pp-food-main">
+                  <strong>{m.name}</strong>
+                  <span>{m.menu || 'Menu to come'}</span>
+                  {m.ingredients && <small>{m.ingredients}</small>}
+                  {(m.itemCount ?? 0) > 0 && !data && <small className="pp-muted">Loading what’s in it…</small>}
+                  {main.length > 0 && <div className="pp-mi-groups">{groups(main)}</div>}
+                  {alts.length > 0 && (
+                    <details className="pp-mi-cat pp-mi-alts" open={!!data?.hasNeeds && alts.some((a) => a.forYou)}>
+                      <summary>
+                        <span>Dietary alternatives</span>
+                        <span className="pp-num pp-muted">{alts.length}</span>
+                      </summary>
+                      <ul>{alts.map(itemRow)}</ul>
+                    </details>
+                  )}
+                </span>
+              </li>
+            );
+          })}
       </ul>
     </section>
   );

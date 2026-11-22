@@ -14,6 +14,9 @@ import { contextState, loadContext } from '../services/contexts';
 import { can } from '../services/principal';
 import { addMember, createTeam, findByMemberNumber, participantTeams, removeMember, teamEventRow, teamRow } from '../services/teams';
 import { teamNameSchema } from '../../shared/schemas';
+import type { MealItem } from '../../shared/mealItems';
+import { ALLERGENS, dietProfile, participantItems } from '../../shared/mealItems';
+import { itemFromRow, loadItems } from './mealItems';
 import { parseSectionSettings, sectionStyle } from '../../shared/sections';
 import { bannerUrl } from './banner';
 import { dutiesFor } from './duties';
@@ -43,6 +46,7 @@ interface SignupEvent {
   signup_code: string | null;
   section_settings: string | null;
   youth_sections: string;
+  contact_email?: string;
 }
 
 export interface SignupSession {
@@ -197,9 +201,12 @@ async function programme(db: D1Database, eventId: string) {
       .bind(eventId)
       .all<{ name: string; location: string; starts_at: string | null; ends_at: string | null; kind: string; capacity: number | null; booked: number }>(),
     db
-      .prepare(`SELECT name, location, starts_at, ends_at, menu, ingredients FROM meal_services WHERE event_id = ? AND status = 'active'`)
+      .prepare(
+        `SELECT id, name, location, starts_at, ends_at, menu, ingredients, (SELECT count(*) FROM meal_items i WHERE i.meal_id = meal_services.id) AS item_count
+           FROM meal_services WHERE event_id = ? AND status = 'active'`,
+      )
       .bind(eventId)
-      .all<{ name: string; location: string; starts_at: string | null; ends_at: string | null; menu: string; ingredients: string }>(),
+      .all<{ id: string; name: string; location: string; starts_at: string | null; ends_at: string | null; menu: string; ingredients: string; item_count: number }>(),
   ]);
   return [
     ...acts.results.map((a) => {
@@ -215,6 +222,8 @@ async function programme(db: D1Database, eventId: string) {
       };
     }),
     ...meals.results.map((m) => ({
+      mealId: m.id,
+      itemCount: m.item_count,
       name: m.name,
       location: m.location,
       startsAt: m.starts_at,
@@ -453,7 +462,7 @@ publicSignupRoutes.post('/book', async (c) => {
 async function eventByBookingCode(c: AppContext, code: string): Promise<SignupEvent> {
   if (!/^[A-Za-z0-9_-]{10,64}$/.test(code)) throw notFound();
   const e = await c.env.DB.prepare(
-    `SELECT id, name, status, timezone, starts_on, ends_on, feature_self_signup, feature_side_quest, signup_code, section_settings, youth_sections FROM events WHERE booking_code = ?`,
+    `SELECT id, name, status, timezone, starts_on, ends_on, feature_self_signup, feature_side_quest, signup_code, section_settings, youth_sections, contact_email FROM events WHERE booking_code = ?`,
   )
     .bind(code)
     .first<SignupEvent>();
@@ -466,7 +475,7 @@ publicSignupRoutes.get('/link/:code/:activityId', async (c) => {
   const e = await eventByBookingCode(c, c.req.param('code'));
   const session = (await sessions(c.env.DB, e.id)).find((s) => s.id === c.req.param('activityId'));
   if (!session) throw notFound();
-  return c.json({ event: { name: e.name, timezone: e.timezone, startsOn: e.starts_on, endsOn: e.ends_on }, open: signupOpen(e), session });
+  return c.json({ event: { name: e.name, timezone: e.timezone, startsOn: e.starts_on, endsOn: e.ends_on, contactEmail: e.contact_email ?? '' }, open: signupOpen(e), session });
 });
 
 /**
@@ -498,6 +507,33 @@ publicSignupRoutes.post('/link/:code/:activityId', async (c) => {
     }
   }
   return c.json({ ...(await personView(c, person, { reduced: true })), linkResult: result });
+});
+
+/**
+ * Every meal's items for this person: what's in them (never staff notes),
+ * and, if they have dietary needs recorded, what conflicts and their
+ * alternative. Loaded when they open Food. A page opened by typing a
+ * membership number gets the items without anything about their needs.
+ */
+publicSignupRoutes.post('/meals', async (c) => {
+  const { pass } = await parseBody(c, z.strictObject({ pass: z.string().max(200) }));
+  await limitPublicNetwork(c, 'signup-identify');
+  const person = await personFor(c, await readPass(c, pass));
+  const [items, entries] = await Promise.all([
+    loadItems(c.env.DB, person.event.id),
+    person.reduced
+      ? Promise.resolve({ results: [] as { category: string; item: string; note: string }[] })
+      : c.env.DB.prepare(`SELECT category, item, note FROM dietary_entries WHERE registration_id = ?`).bind(person.registrationId).all<{ category: string; item: string; note: string }>(),
+  ]);
+  const all = items.map((r) => itemFromRow(r, false));
+  const customs = [...new Set(all.flatMap((i) => [...i.contains, ...i.mayContain]))].filter((a) => !(ALLERGENS as readonly string[]).includes(a));
+  const profile = entries.results.length ? dietProfile(entries.results, customs) : null;
+  const byMeal = new Map<string, MealItem[]>();
+  for (const i of all) byMeal.set(i.mealId, [...(byMeal.get(i.mealId) ?? []), i]);
+  return c.json({
+    hasNeeds: !!profile && (profile.avoid.size > 0 || profile.suits.size > 0),
+    meals: Object.fromEntries([...byMeal].map(([mealId, list]) => [mealId, participantItems(list, profile)])),
+  });
 });
 
 publicSignupRoutes.post('/cancel', async (c) => {

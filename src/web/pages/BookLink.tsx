@@ -10,7 +10,7 @@ import { ParticipantPage } from './Participant';
 import { usePerson } from './Signup';
 
 interface LinkInfo {
-  event: { name: string; timezone: string; startsOn: string; endsOn: string };
+  event: { name: string; timezone: string; startsOn: string; endsOn: string; contactEmail?: string };
   open: boolean;
   session: { id: string; name: string; location: string; startsAt: string | null; endsAt: string | null; capacity: number | null; booked: number; full: boolean };
 }
@@ -84,14 +84,18 @@ export function BookLink() {
             </p>
             {!info.open ? <p className="book-link-msg">Booking is closed right now.</p> : s.full ? <p className="book-link-msg">This activity is full.</p> : null}
             <form onSubmit={book} className="form" noValidate>
-              <Field id="book-number" label="Membership number" hint="On your Scouts card or in MyScout. One person at a time.">
+              <Field id="book-number" label="Scouts SA Membership Number">
                 <input className="input book-link-input" inputMode="numeric" autoComplete="off" maxLength={24} value={number} onChange={(e) => setNumber(e.target.value)} />
               </Field>
               <Button type="submit" kind="primary" busy={busy} busyLabel="Opening…" disabled={!number.trim()}>
                 {info.open && !s.full ? `Book ${s.name}` : 'See my bookings'}
               </Button>
               {info.open && !s.full && s.capacity !== null && <p className="meta">{plural(Math.max(0, s.capacity - s.booked), 'place')} left</p>}
-              <p className="meta">You’ll then see everything you’re booked for, and can cancel or book more.</p>
+              {info.event.contactEmail && (
+                <p className="meta">
+                  If you would like to change a booking, please email <a href={`mailto:${info.event.contactEmail}`}>{info.event.contactEmail}</a>.
+                </p>
+              )}
             </form>
             {result && (
               <p className={result.ok ? 'book-link-result is-ok' : 'book-link-result is-error'} role="status">
