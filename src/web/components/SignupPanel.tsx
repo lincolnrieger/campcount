@@ -59,9 +59,11 @@ export interface ProgrammeItem {
   /** Activities: the place limit (null when there isn't one) and how many are booked. */
   capacity: number | null;
   booked: number;
-  /** Meals: what's served and what goes into it. */
+  /** Meals: what's served, additional notes, and how many items (loaded on Food). */
   menu?: string;
   ingredients?: string;
+  mealId?: string;
+  itemCount?: number;
 }
 
 export function placesLeft(s: SignupSession): string {

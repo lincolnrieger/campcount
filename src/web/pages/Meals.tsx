@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import type { MealItem } from '../../shared/mealItems';
+import { mealSummary } from '../../shared/mealItems';
+import { MealItemsPanel } from './MealItemsPanel';
 import type { FormEvent } from 'react';
 import { ApiFailure, api } from '../api';
 import { deleteContext } from '../confirmDelete';
@@ -56,6 +59,14 @@ export function Meals() {
   const [day, setDay] = useState<string | null>(null);
   const [sheet, setSheet] = useState<'day' | 'one' | null>(null);
   const [editing, setEditing] = useState<Meal | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [duplicating, setDuplicating] = useState<Meal | null>(null);
+  const [importing, setImporting] = useState(false);
+  const itemsApi = useApi<{ items: MealItem[] }>(`/events/${event.id}/meal-items`);
+  const allItems = itemsApi.data?.items ?? [];
+  const refresh = async () => {
+    await Promise.all([reload(), itemsApi.reload()]);
+  };
   const manage = can('meals.manage') && (event.status === 'draft' || event.status === 'open');
 
   const fail = (err: unknown) => toast(err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.', { tone: 'error' });
@@ -110,7 +121,14 @@ export function Meals() {
             </Button>
           )
         }
-        menu={manage ? [{ label: 'Add a single meal', onSelect: () => setSheet('one') }] : undefined}
+        menu={
+          manage
+            ? [
+                { label: 'Add a single meal', onSelect: () => setSheet('one') },
+                { label: 'Import meals (JSON)', onSelect: () => setImporting(true) },
+              ]
+            : undefined
+        }
       />
       <div className="sections">
         {meals.length === 0 ? (
@@ -129,6 +147,16 @@ export function Meals() {
         ) : (
           <>
             {tabs.length > 1 && <FilterTabs label="Day" value={shownDay} onChange={setDay} options={tabs} />}
+            {shown.length > 0 && (
+              <div className="btn-row meal-expand">
+                <Button small kind="ghost" onClick={() => setExpanded(new Set(shown.map((m) => m.id)))}>
+                  Expand all
+                </Button>
+                <Button small kind="ghost" onClick={() => setExpanded(new Set())}>
+                  Collapse all
+                </Button>
+              </div>
+            )}
             {shown.length === 0 ? (
               <EmptyState
                 title={`No meals on ${shownDay === 'none' ? 'no day' : dayLabel(shownDay, 'long')}`}
@@ -145,70 +173,90 @@ export function Meals() {
                 }
               />
             ) : (
-              <ul className="list">
+              <ul className="list meal-cards">
                 {shown.map((m) => {
                   const s = served(m);
+                  const items = allItems.filter((i) => i.mealId === m.id);
+                  const sum = mealSummary(items);
+                  const isOpen = expanded.has(m.id);
+                  const toggle = () =>
+                    setExpanded((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(m.id)) next.delete(m.id);
+                      else next.add(m.id);
+                      return next;
+                    });
                   return (
-                    <li key={m.id} className={m.status === 'cancelled' ? 'row is-muted' : 'row'}>
-                      <span className="meal-time num">{m.startsAt ? timeInZone(m.startsAt, tz) : 'No time'}</span>
-                      <span className="row-main">
-                        <span className="row-title">{m.name}</span>
-                        <span className="row-meta">
-                          {[m.location || null, s && s.expected ? `${s.people} of ${s.expected} served` : s ? `${s.people} served` : null].filter(Boolean).join(' · ') ||
-                            (!m.startsAt && !mealDay(m) ? 'Give it a day so scanners can find it' : '')}
+                    <li key={m.id} className={m.status === 'cancelled' ? 'meal-card is-muted' : 'meal-card'}>
+                      <div className="row meal-card-head">
+                        <button type="button" className="meal-chevron" aria-expanded={isOpen} aria-label={`${isOpen ? 'Hide' : 'Show'} what’s in ${m.name}`} onClick={toggle}>
+                          <Icon name="chevron" size={18} />
+                        </button>
+                        <span className="meal-time num">{m.startsAt ? timeInZone(m.startsAt, tz) : 'No time'}</span>
+                        <span className="row-main">
+                          <button type="button" className="row-title meal-name" onClick={toggle}>
+                            {m.name}
+                          </button>
+                          <span className="row-meta">
+                            {[m.location || null, s && s.expected ? `${s.people} of ${s.expected} served` : s ? `${s.people} served` : null].filter(Boolean).join(' · ') ||
+                              (!m.startsAt && !mealDay(m) ? 'Give it a day so scanners can find it' : '')}
+                          </span>
+                          {m.menu && <span className="meal-menu-text">{m.menu}</span>}
+                          <span className="meal-summary">
+                            {sum.items === 0
+                              ? manage && m.status === 'active'
+                                ? 'No items yet'
+                                : ''
+                              : [`${sum.items} ${sum.items === 1 ? 'item' : 'items'}`, sum.alternatives ? `${sum.alternatives} ${sum.alternatives === 1 ? 'alternative' : 'alternatives'}` : null, sum.contains.length ? `Contains: ${sum.contains.slice(0, 6).join(', ')}${sum.contains.length > 6 ? '…' : ''}` : null]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                          </span>
+                          {m.status === 'cancelled' && (
+                            <span>
+                              <Badge>Cancelled</Badge>
+                            </span>
+                          )}
                         </span>
-                        {m.menu && <span className="meal-menu-text">{m.menu}</span>}
-                        {m.ingredients ? (
-                          <span className="meal-ingredients">
-                            <strong>Ingredients: </strong>
-                            {m.ingredients}
-                          </span>
-                        ) : (
-                          manage && m.status === 'active' && <span className="row-meta">No ingredients listed yet</span>
-                        )}
-                        {m.status === 'cancelled' && (
-                          <span>
-                            <Badge>Cancelled</Badge>
-                          </span>
-                        )}
-                      </span>
-                      {manage && (
-                        <span className="row-side">
-                          <Menu
-                            label={`More actions for ${m.name}`}
-                            items={[
-                              { label: 'Edit meal', onSelect: () => setEditing(m) },
-                              m.status === 'active'
-                                ? {
-                                    label: 'Cancel meal',
-                                    onSelect: async () => {
-                                      if (await patch(m.id, { status: 'cancelled' })) toast(`${m.name} cancelled`, { undo: () => patch(m.id, { status: 'active' }) });
-                                    },
-                                  }
-                                : {
-                                    label: 'Restore meal',
-                                    onSelect: async () => {
-                                      if (await patch(m.id, { status: 'active' })) toast(`${m.name} restored`);
-                                    },
-                                  },
-                              {
-                                label: 'Delete meal…',
-                                danger: true,
-                                onSelect: async () => {
-                                  try {
-                                    if (await deleteContext(confirm, event.id, 'meals', m.id, m.name)) {
-                                      toast(`Deleted ${m.name}`);
-                                      await reload();
+                        {manage && (
+                          <span className="row-side">
+                            <Menu
+                              label={`More actions for ${m.name}`}
+                              items={[
+                                { label: 'Edit meal', onSelect: () => setEditing(m) },
+                                { label: 'Duplicate to another day…', onSelect: () => setDuplicating(m) },
+                                m.status === 'active'
+                                  ? {
+                                      label: 'Cancel meal',
+                                      onSelect: async () => {
+                                        if (await patch(m.id, { status: 'cancelled' })) toast(`${m.name} cancelled`, { undo: () => patch(m.id, { status: 'active' }) });
+                                      },
                                     }
-                                  } catch (err) {
-                                    fail(err);
-                                  }
+                                  : {
+                                      label: 'Restore meal',
+                                      onSelect: async () => {
+                                        if (await patch(m.id, { status: 'active' })) toast(`${m.name} restored`);
+                                      },
+                                    },
+                                {
+                                  label: 'Delete meal…',
+                                  danger: true,
+                                  onSelect: async () => {
+                                    try {
+                                      if (await deleteContext(confirm, event.id, 'meals', m.id, m.name)) {
+                                        toast(`Deleted ${m.name}`);
+                                        await refresh();
+                                      }
+                                    } catch (err) {
+                                      fail(err);
+                                    }
+                                  },
                                 },
-                              },
-                            ]}
-                          />
-                        </span>
-                      )}
+                              ]}
+                            />
+                          </span>
+                        )}
+                      </div>
+                      {isOpen && <MealItemsPanel eventId={event.id} meal={m} items={items} meals={meals} allItems={allItems} manage={manage} onChanged={refresh} />}
                     </li>
                   );
                 })}
@@ -246,6 +294,32 @@ export function Meals() {
               setSheet(null);
               await reload();
               toast(`Added ${body.name}`);
+            }}
+          />
+        )}
+      </Sheet>
+      <Sheet open={duplicating !== null} title={duplicating ? `Duplicate ${duplicating.name}` : 'Duplicate meal'} onClose={() => setDuplicating(null)}>
+        {duplicating && (
+          <DuplicateMeal
+            meal={duplicating}
+            onCancel={() => setDuplicating(null)}
+            onDone={async (newDay) => {
+              setDuplicating(null);
+              setDay(newDay);
+              await refresh();
+              toast('Meal duplicated, with its items');
+            }}
+          />
+        )}
+      </Sheet>
+      <Sheet open={importing} title="Import meals (JSON)" onClose={() => setImporting(false)}>
+        {importing && (
+          <ImportMeals
+            onCancel={() => setImporting(false)}
+            onDone={async (n) => {
+              setImporting(false);
+              await refresh();
+              toast(`Imported ${n} ${n === 1 ? 'meal' : 'meals'}`);
             }}
           />
         )}
@@ -426,12 +500,12 @@ function MealForm({
       </Field>
       <Field
         id="meal-ingredients"
-        label="Ingredients"
+        label="Additional notes"
         optional
-        hint="Everything that goes in, including sauces and dressings. Participants see this on their own page to check against their dietary needs."
+        hint="Anything not covered by the meal’s items. Each item (open the meal) has its own ingredients, allergens and alternatives."
         error={errors.ingredients}
       >
-        <textarea className="textarea" rows={4} maxLength={4000} value={ingredients} onChange={(e) => setIngredients(e.target.value)} />
+        <textarea className="textarea" rows={4} maxLength={10000} value={ingredients} onChange={(e) => setIngredients(e.target.value)} />
       </Field>
       <div className="btn-row">
         <Button type="submit" kind="primary" busy={busy} busyLabel="Saving…">
@@ -440,5 +514,206 @@ function MealForm({
         <Button onClick={onCancel}>Cancel</Button>
       </div>
     </form>
+  );
+}
+
+/** The same meal on another day, with all its items (and their alternatives). */
+function DuplicateMeal({ meal, onDone, onCancel }: { meal: Meal; onDone: (day: string) => Promise<void>; onCancel: () => void }) {
+  const { event } = useEvent();
+  const days = eventDays(event.startsOn, event.endsOn);
+  const current = meal.startsAt ? dayInZone(meal.startsAt, event.timezone) : null;
+  const [day, setDay] = useState(days.find((d) => d !== current) ?? days[0] ?? '');
+  const [name, setName] = useState(meal.name.replace(new RegExp(`^${current ? weekdayName(current) : '\\b'}\\s*`, 'i'), ''));
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const suggested = (d: string) => {
+    const base = current ? meal.name.replace(new RegExp(`^${weekdayName(current)}\\s*`, 'i'), '') : meal.name;
+    return base === meal.name && current ? meal.name : `${weekdayName(d)} ${base}`.trim();
+  };
+  return (
+    <form
+      className="form"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        setProblem(null);
+        try {
+          await api(`/events/${event.id}/meals/${meal.id}/duplicate`, { body: { day, name: name.trim() || meal.name } });
+          await onDone(day);
+        } catch (err) {
+          setProblem(err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.');
+          setBusy(false);
+        }
+      }}
+    >
+      {problem && (
+        <p className="field-error" role="alert">
+          <Icon name="error" size={16} />
+          {problem}
+        </p>
+      )}
+      <Field id="dup-day" label="Day">
+        <select
+          className="select"
+          value={day}
+          onChange={(e) => {
+            setDay(e.target.value);
+            setName(suggested(e.target.value));
+          }}
+        >
+          {days.map((d) => (
+            <option key={d} value={d}>
+              {dayLabel(d, 'long')}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field id="dup-name" label="Name">
+        <input className="input" value={name || suggested(day)} maxLength={80} onChange={(e) => setName(e.target.value)} autoComplete="off" />
+      </Field>
+      <p className="meta">Same times, place, menu, notes and items. Scans aren’t copied.</p>
+      <div className="btn-row">
+        <Button type="submit" kind="primary" busy={busy} busyLabel="Duplicating…">
+          Duplicate
+        </Button>
+        <Button onClick={onCancel}>Cancel</Button>
+      </div>
+    </form>
+  );
+}
+
+interface ImportPlan {
+  ok: boolean;
+  errors: string[];
+  meals: { name: string; day: string; items: number; alternatives: number; action: 'create' | 'replace' }[];
+}
+
+/** Paste or choose a JSON file of meals and items, check it, then import. */
+function ImportMeals({ onDone, onCancel }: { onDone: (meals: number) => Promise<void>; onCancel: () => void }) {
+  const { event } = useEvent();
+  const [text, setText] = useState('');
+  const [mode, setMode] = useState<'replace' | 'add'>('replace');
+  const [plan, setPlan] = useState<ImportPlan | null>(null);
+  const [busy, setBusy] = useState<'preview' | 'import' | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  const parsed = () => {
+    try {
+      return { value: JSON.parse(text) as unknown };
+    } catch (err) {
+      return { error: `That isn’t valid JSON: ${err instanceof Error ? err.message : ''}` };
+    }
+  };
+  async function run(preview: boolean) {
+    const p = parsed();
+    if ('error' in p) return setProblem(p.error ?? 'That isn’t valid JSON.');
+    setProblem(null);
+    setBusy(preview ? 'preview' : 'import');
+    try {
+      const res = await api<ImportPlan>(`/events/${event.id}/meals/import`, { body: { meals: p.value, mode, preview } });
+      if (preview) setPlan(res);
+      else await onDone(res.meals.length);
+    } catch (err) {
+      setProblem(err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="form meal-import">
+      <p className="meta">
+        A list of meals, each with name, day (YYYY-MM-DD), start and end (HH:MM), place, menu, notes and items. Items have name, category, ingredients, contains,
+        may_contain, dietary, is_alternative, replaces (another item’s name in the same meal), alternative_for, status and internal_notes.
+      </p>
+      <Field id="import-file" label="Choose a file" optional>
+        <input
+          type="file"
+          accept=".json,application/json,text/plain"
+          onChange={async (e) => {
+            const f = e.target.files?.[0];
+            if (f) {
+              setText(await f.text());
+              setPlan(null);
+            }
+          }}
+        />
+      </Field>
+      <Field id="import-json" label="Or paste the JSON">
+        <textarea
+          className="textarea meal-import-text"
+          rows={12}
+          spellCheck={false}
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            setPlan(null);
+          }}
+        />
+      </Field>
+      <fieldset className="choices">
+        <legend className="field-label">Meals already here with the same name and day</legend>
+        <label className="choice">
+          <input type="radio" name="import-mode" checked={mode === 'replace'} onChange={() => (setMode('replace'), setPlan(null))} />
+          <span className="choice-text">
+            Replace their details and items
+            <span className="meta">Scans so far are kept.</span>
+          </span>
+        </label>
+        <label className="choice">
+          <input type="radio" name="import-mode" checked={mode === 'add'} onChange={() => (setMode('add'), setPlan(null))} />
+          <span className="choice-text">Add as new meals</span>
+        </label>
+      </fieldset>
+      {problem && (
+        <p className="field-error" role="alert">
+          <Icon name="error" size={16} />
+          {problem}
+        </p>
+      )}
+      {plan && (
+        <div className="meal-import-plan">
+          {plan.errors.length > 0 && (
+            <div className="notice notice-error" role="alert">
+              <p>
+                <strong>Fix these, then check again:</strong>
+              </p>
+              <ul>
+                {plan.errors.map((e, i) => (
+                  <li key={i}>{e}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {plan.meals.length > 0 && (
+            <ul className="list">
+              {plan.meals.map((m, i) => (
+                <li key={i} className="row">
+                  <span className="row-main">
+                    <span className="row-title">{m.name}</span>
+                    <span className="row-meta">
+                      {dayLabel(m.day, 'long')} · {m.items} {m.items === 1 ? 'item' : 'items'}
+                      {m.alternatives ? ` · ${m.alternatives} ${m.alternatives === 1 ? 'alternative' : 'alternatives'}` : ''}
+                    </span>
+                  </span>
+                  <Badge tone={m.action === 'replace' ? 'warning' : 'success'}>{m.action === 'replace' ? 'Replaces existing' : 'New'}</Badge>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+      <div className="btn-row">
+        <Button kind={plan?.ok ? 'secondary' : 'primary'} busy={busy === 'preview'} busyLabel="Checking…" disabled={!text.trim() || busy !== null} onClick={() => void run(true)}>
+          Check
+        </Button>
+        {plan?.ok && (
+          <Button kind="primary" busy={busy === 'import'} busyLabel="Importing…" disabled={busy !== null} onClick={() => void run(false)}>
+            Import {plan.meals.length} {plan.meals.length === 1 ? 'meal' : 'meals'}
+          </Button>
+        )}
+        <Button onClick={onCancel}>Cancel</Button>
+      </div>
+    </div>
   );
 }

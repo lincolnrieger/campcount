@@ -42,6 +42,7 @@ export interface EventRow {
   lanyard_print_band: number;
   youth_sections: string;
   section_settings: string | null;
+  contact_email: string;
   /** From event_logos, when the query includes it. */
   logo_updated_at?: string | null;
 }
@@ -80,6 +81,7 @@ export function eventDto(row: EventRow) {
       photoMarkerLabel: row.photo_marker_label !== 0,
       printBand: row.lanyard_print_band !== 0,
     } satisfies LanyardSettings,
+    contactEmail: row.contact_email ?? '',
     youthSections: parseYouthSections(row.youth_sections),
     sections: parseSectionSettings(row.section_settings, row.youth_sections),
     logoUrl: row.logo_updated_at ? `/api/events/${row.id}/logo?v=${encodeURIComponent(row.logo_updated_at)}` : null,
@@ -206,6 +208,7 @@ eventRoutes.patch('/:eventId', async (c) => {
   if (input.name !== undefined) set('name', input.name);
   if (input.description !== undefined) set('description', input.description);
   if (input.location !== undefined) set('location', input.location);
+  if (input.contactEmail !== undefined) set('contact_email', input.contactEmail.trim());
   if (input.startsOn !== undefined) set('starts_on', input.startsOn);
   if (input.endsOn !== undefined) set('ends_on', input.endsOn);
   if (input.brandColor !== undefined) set('brand_color', input.brandColor);

@@ -94,6 +94,8 @@ export const updateEventSchema = z
     subdomain: eventFields.subdomain.unwrap(),
     brandColor: eventFields.brandColor.unwrap(),
     lanyard: lanyardSettingsSchema.partial(),
+    /** Who people email about the camp, e.g. to change a booking. Empty for none. */
+    contactEmail: z.union([z.literal(''), z.email('Enter an email address like camp@example.org').max(200)]),
     /** Sections that count as youth at this camp; everyone else (and Leaders always) is an adult. */
     youthSections: z.array(trimmed(40).min(1)).max(40),
     /** The camp's sections (Settings › Sections). `from` is the name it had, for renames. */
@@ -279,8 +281,8 @@ const mealFields = {
   endsAt: isoDateTime.nullable(),
   /** What's served, for example "Spaghetti bolognese, garden salad". */
   menu: trimmed(1000),
-  /** What goes into it, so leaders and participants can check it against dietary needs. */
-  ingredients: trimmed(4000),
+  /** Additional notes (once the single ingredients box; items now hold each product's ingredients). */
+  ingredients: trimmed(10000),
 };
 
 export const mealInputSchema = z.strictObject({

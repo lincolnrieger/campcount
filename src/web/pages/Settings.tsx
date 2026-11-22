@@ -6,7 +6,7 @@ import type { EventFeatures, EventStatus } from '../../shared/schemas';
 import { EVENT_TRANSITIONS } from '../../shared/lifecycle';
 import { useSession } from '../session';
 import { useApi } from '../useApi';
-import { Badge, Button, Icon, Notice, PageHeader, Section, plural, useConfirm, useToast } from '../ui';
+import { Badge, Button, Field, Icon, Notice, PageHeader, Section, plural, useConfirm, useToast } from '../ui';
 import { EventFields, FeatureChecklist, checkEventForm } from './Events';
 import type { EventForm } from './Events';
 import { useEvent } from './EventLayout';
@@ -122,6 +122,7 @@ export function EventDetails() {
   const editable = can('event.configure') && (event.status === 'draft' || event.status === 'open');
   const [form, setForm] = useState<EventForm>({ name: event.name, location: event.location, startsOn: event.startsOn, endsOn: event.endsOn, description: event.description });
   const [features, setFeatures] = useState<EventFeatures>(event.features);
+  const [contactEmail, setContactEmail] = useState(event.contactEmail ?? '');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [failure, setFailure] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -138,7 +139,7 @@ export function EventDetails() {
     if (Object.keys(local).length) return;
     setBusy(true);
     try {
-      await api(`/events/${event.id}`, { method: 'PATCH', body: { ...form, features } });
+      await api(`/events/${event.id}`, { method: 'PATCH', body: { ...form, features, contactEmail: contactEmail.trim() } });
       await reload();
       toast('Changes saved');
       navigate(back.to);
@@ -169,6 +170,9 @@ export function EventDetails() {
         )}
         <fieldset className="form" disabled={!editable || busy}>
           <EventFields form={form} set={set} errors={errors} />
+          <Field id="ev-contact" label="Contact email" optional hint="Shown on booking links: “If you would like to change a booking, please email …”" error={errors.contactEmail}>
+            <input className="input" type="email" value={contactEmail} maxLength={200} onChange={(e) => setContactEmail(e.target.value)} autoComplete="off" />
+          </Field>
           <FeatureChecklist value={features} onChange={setFeatures} />
         </fieldset>
         {editable && (

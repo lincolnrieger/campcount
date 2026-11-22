@@ -432,3 +432,227 @@
 .team-new .btn {
   justify-self: start;
 }
+
+/* ---------- Meals: cards that open to show their items ---------- */
+.meal-expand {
+  justify-content: flex-end;
+}
+.meal-cards > .meal-card + .meal-card {
+  border-top: var(--border-width) solid var(--divider);
+}
+.meal-card.is-muted .meal-card-head {
+  opacity: 0.6;
+}
+.meal-card-head {
+  align-items: flex-start;
+}
+.meal-chevron {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  margin: -0.25rem 0 0 -0.5rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.meal-chevron:hover {
+  background: var(--surface-sunken);
+}
+.meal-chevron svg,
+.mi-name svg,
+.mi-cat > summary svg {
+  transition: transform var(--duration) var(--ease);
+}
+.meal-chevron[aria-expanded='true'] svg,
+.mi-name[aria-expanded='true'] svg,
+.mi-cat[open] > summary svg {
+  transform: rotate(90deg);
+}
+.meal-name {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: var(--weight-heavy);
+  text-align: left;
+  cursor: pointer;
+}
+.meal-summary {
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+.mi-panel {
+  display: grid;
+  gap: var(--space-4);
+  padding: 0 var(--space-4) var(--space-5) calc(var(--space-4) + 1.75rem);
+}
+@media (max-width: 600px) {
+  .mi-panel {
+    padding: 0 var(--space-3) var(--space-4);
+  }
+}
+.mi-actions {
+  margin: 0;
+}
+.mi-section {
+  display: grid;
+  gap: var(--space-2);
+}
+.mi-section h4 {
+  font-size: var(--text-md);
+  font-weight: var(--weight-heavy);
+}
+.mi-cat {
+  border: var(--border-width) solid var(--divider);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.mi-cat > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 2.5rem;
+  padding: 0 var(--space-3);
+  font-weight: var(--weight-bold);
+  cursor: pointer;
+  list-style: none;
+}
+.mi-cat > summary::-webkit-details-marker {
+  display: none;
+}
+.mi-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mi-row {
+  padding: var(--space-2) var(--space-3);
+  border-top: var(--border-width) solid var(--divider);
+}
+.mi-row.is-dragging {
+  opacity: 0.4;
+}
+.mi-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+}
+.mi-grip {
+  color: var(--ink-3);
+  cursor: grab;
+  letter-spacing: -0.2em;
+  user-select: none;
+}
+.mi-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 2rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-weight: var(--weight-bold);
+  text-align: left;
+  cursor: pointer;
+}
+.mi-head .menu {
+  margin-left: auto;
+}
+.mi-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.mi-chip {
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.mi-chip.is-contains {
+  background: var(--error-solid, #B3261E);
+  color: #FFFFFF;
+}
+.mi-chip.is-may {
+  border: 1.5px solid var(--warning-solid, #9A5B00);
+  color: var(--warning-fg);
+}
+.mi-chip.is-diet {
+  background: var(--success-bg);
+  color: var(--success-fg);
+}
+.mi-alt {
+  margin: 2px 0 0 1.25rem;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+.mi-detail {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 var(--space-1) 1.25rem;
+}
+.mi-ingredients {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--text-md);
+}
+.mi-notes {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  background: var(--warning-bg);
+  color: var(--warning-fg);
+  font-size: var(--text-sm);
+}
+.mi-picker {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.mi-picker-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.mi-pick {
+  min-height: 2.25rem;
+  padding: 0 var(--space-3);
+  border: var(--border-width) solid var(--border-control);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: var(--weight-bold);
+  cursor: pointer;
+}
+.mi-pick[aria-pressed='true'] {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: var(--on-brand);
+}
+.mi-picker-add {
+  display: flex;
+  gap: var(--space-2);
+}
+.mi-picker-add .input {
+  flex: 1;
+}
+.meal-import-text {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--text-sm);
+}
+.meal-import-plan {
+  display: grid;
+  gap: var(--space-3);
+}

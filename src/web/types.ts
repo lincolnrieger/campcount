@@ -22,6 +22,8 @@ export interface EventSummary {
   lanyard: LanyardSettings;
   logoUrl: string | null;
   /** Sections that count as youth at this camp; everyone else is an adult. */
+  /** Who people email about the camp (shown on booking links). */
+  contactEmail: string;
   youthSections: string[];
   /** The camp's sections: names, lanyard words, colours, youth (Settings › Sections). */
   sections: SectionSetting[];
