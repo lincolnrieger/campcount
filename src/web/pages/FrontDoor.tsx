@@ -5,8 +5,8 @@ import { useSiteEvent } from '../site';
 
 /**
  * The front of a camp's own address (supersplash.campcount.com): are you a
- * participant (type your membership number, see the parts of your page the
- * camp has switched on) or on the event team (sign in)?
+ * participant or leader (type your membership number, see the parts of your
+ * page the camp has switched on) or staff (sign in)?
  */
 export function FrontDoor() {
   const event = useSiteEvent();
@@ -23,14 +23,14 @@ export function FrontDoor() {
           <Link className="door-choice" to={`/p/${event.participantCode}`}>
             <span className="door-text">
               <strong>Participant</strong>
-              <span>Use your Scouts SA membership number</span>
+              <span>Youth and leaders: use your Scouts SA membership number</span>
             </span>
             <Icon name="chevron" size={22} />
           </Link>
           <Link className="door-choice" to="/sign-in">
             <span className="door-text">
-              <strong>Event team</strong>
-              <span>Leaders and staff sign in</span>
+              <strong>Staff</strong>
+              <span>Sign in with your email</span>
             </span>
             <Icon name="chevron" size={22} />
           </Link>
