@@ -21,7 +21,10 @@
   --pp-amber: #6E4A00;
   --pp-display: 'CC Bebas Neue', 'Bebas Neue', 'Oswald', var(--font);
   --pp-marker: 'CC Permanent Marker', 'Comic Sans MS', cursive;
-  --pp-r: 18px;
+  /* One radius scale: 6 (tags), 12 (buttons, inner cards), 20 (cards, the pass). Full rounding only for progress bars. */
+  --pp-r: 20px;
+  /* One gutter for the pass and everything under it. */
+  --pp-gutter: var(--space-4);
   min-height: 100vh;
   background: var(--pp-bg);
   color: var(--pp-ink);
@@ -87,7 +90,7 @@
 .pp-pass {
   --pass: #00843D;
   position: relative;
-  padding: var(--space-4) var(--space-5) var(--space-5);
+  padding: var(--space-4) var(--pp-gutter) var(--space-5);
   background: var(--pass);
   color: #FFFFFF;
   overflow: hidden;
@@ -97,7 +100,7 @@
     padding-top: var(--space-5);
   }
   .pp-pass {
-    border-radius: 24px 24px 0 0;
+    border-radius: var(--pp-r) var(--pp-r) 0 0;
   }
 }
 .pp-pass-top {
@@ -137,31 +140,42 @@
   text-transform: uppercase;
   overflow-wrap: anywhere;
 }
-.pp-surname {
-  display: block;
-  font-size: 0.5em;
-  line-height: 1.1;
-  letter-spacing: 0.04em;
+.pp-name.is-m {
+  font-size: clamp(2.5rem, 10.5vw, 3.5rem);
 }
-.pp-section-pill {
+.pp-name.is-s {
+  font-size: clamp(2rem, 8vw, 2.75rem);
+  line-height: 0.95;
+}
+/* The section, as a small tag rather than a pill */
+.pp-section-tag {
   display: inline-block;
-  padding: 0.125rem 0.75rem;
-  border-radius: var(--radius-pill);
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
   background: #FFFFFF;
   color: var(--pp-ink);
+  font-size: 0.75rem;
   font-weight: var(--weight-heavy);
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  text-transform: uppercase;
 }
 /* ---------- Now / Next ---------- */
 /* ---------- Sections ---------- */
 .pp-section {
   display: grid;
   gap: var(--space-3);
-  padding: var(--space-5) var(--space-4) var(--space-2);
+  padding: var(--space-5) var(--pp-gutter) var(--space-2);
   scroll-margin-top: 4rem;
 }
+/* Section headings share the pass's display face. */
 .pp-section h2 {
-  font-size: 1.5rem;
-  font-weight: var(--weight-heavy);
+  font-family: var(--pp-display);
+  font-size: 2rem;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 .pp-section-head {
   display: flex;
@@ -178,22 +192,36 @@
 .pp-toggle,
 .pp-days {
   display: flex;
-  gap: var(--space-2);
+  gap: 4px;
   overflow-x: auto;
   scrollbar-width: none;
+}
+/* Days: one segmented control (a track with the chosen day filled in) */
+.pp-days {
+  justify-self: start;
+  max-width: 100%;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--pp-surface);
+  box-shadow: inset 0 0 0 1px var(--pp-line);
 }
 .pp-toggle button,
 .pp-days button,
 .pp-anytime {
   flex: none;
-  min-height: var(--control);
+  min-height: 2.75rem;
   padding: 0 var(--space-4);
   border: 0;
-  border-radius: var(--radius-pill);
+  border-radius: 8px;
   background: var(--pp-surface);
   color: var(--pp-ink);
   font-weight: var(--weight-bold);
   box-shadow: inset 0 0 0 1px var(--pp-line);
+  transition: background-color 150ms ease-out, color 150ms ease-out;
+}
+.pp-days button {
+  background: transparent;
+  box-shadow: none;
 }
 .pp-toggle button {
   min-height: 2.5rem;
@@ -223,30 +251,75 @@
   align-items: center;
   gap: var(--space-3);
   min-height: 4rem;
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-3) var(--pp-gutter);
 }
 .pp-tl + .pp-tl {
   border-top: 1px solid var(--pp-line);
 }
 .pp-tl-time {
-  font-size: 1.125rem;
-  font-weight: var(--weight-heavy);
+  align-self: start;
+  padding-top: 0.125rem;
+  color: var(--pp-ink-2);
+  font-size: 0.9375rem;
+  font-weight: var(--weight-medium);
   white-space: nowrap;
 }
 .pp-tl-main {
   display: grid;
+  gap: 2px;
   min-width: 0;
 }
 .pp-tl-main strong {
-  font-weight: var(--weight-heavy);
-  line-height: 1.25;
+  color: var(--pp-ink);
+  font-size: 1.0625rem;
+  font-weight: var(--weight-bold);
+  line-height: 1.3;
 }
-.pp-tl-main span {
+.pp-tl-main > span {
   color: var(--pp-ink-2);
-  font-size: var(--text-md);
+  font-size: 0.9375rem;
 }
-.pp-tl.is-meal .pp-tl-time {
+/* Meals and activities: a small icon in their colour */
+.pp-tl-kind {
+  display: inline-flex;
+  margin-right: 6px;
+  vertical-align: -2px;
+  color: var(--pp-green);
+}
+.pp-tl.is-meal .pp-tl-kind {
   color: var(--pp-lagoon);
+}
+.pp-tl-where {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.pp-tl-where svg {
+  flex: none;
+}
+/* Now / next: a filled dot and a line down the row's edge */
+.pp-tl.is-now {
+  box-shadow: inset 4px 0 0 var(--pp-lagoon);
+}
+.pp-tl.is-now:not(.is-mine) {
+  background: var(--pp-pool);
+}
+.pp-tl .pp-tl-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--pp-lagoon);
+  font-size: 0.75rem;
+  font-weight: var(--weight-heavy);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.pp-tl-mark::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
 }
 .pp-tl.is-mine {
   background: var(--pp-green-bg);
@@ -258,8 +331,8 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 0.125rem 0.625rem;
-  border-radius: var(--radius-pill);
+  padding: 0.125rem 0.5rem;
+  border-radius: 6px;
   font-size: var(--text-sm);
   font-weight: var(--weight-heavy);
   white-space: nowrap;
@@ -287,7 +360,7 @@
   align-items: center;
   gap: var(--space-3);
   min-height: 4.5rem;
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-3) var(--pp-gutter);
 }
 .pp-row + .pp-row {
   border-top: 1px solid var(--pp-line);
@@ -327,6 +400,10 @@
   font-weight: var(--weight-heavy);
   text-align: center;
   white-space: nowrap;
+  transition: background-color 120ms ease-out, transform 100ms ease-out;
+}
+button.pp-state:active:not(:disabled) {
+  transform: scale(0.98);
 }
 .pp-state.is-book {
   background: var(--pp-lagoon);
@@ -366,7 +443,7 @@ button.pp-state.is-booked {
   margin-top: var(--space-3);
   padding: 0 var(--space-4);
   border: 0;
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--pp-lagoon);
   color: #FFFFFF;
   font-size: 1.125rem;
@@ -463,7 +540,7 @@ button.pp-state.is-booked {
   gap: var(--space-3);
   margin: var(--space-4) var(--space-4) 0;
   padding: var(--space-5);
-  border-radius: 22px;
+  border-radius: var(--pp-r);
   background: var(--pp-lagoon);
   color: #FFFFFF;
 }
@@ -719,7 +796,7 @@ button.pp-state.is-booked {
   max-width: 34rem;
   margin: 0 auto;
   padding: var(--space-6) var(--space-5) calc(var(--space-5) + env(safe-area-inset-bottom));
-  border-radius: 24px 24px 0 0;
+  border-radius: var(--pp-r) var(--pp-r) 0 0;
   background: var(--pp-surface);
   text-align: center;
   animation: pp-up 260ms cubic-bezier(0.2, 0, 0, 1) both;
@@ -818,7 +895,7 @@ button.pp-state.is-booked {
 }
 @media (min-width: 600px) {
   .pp-banner {
-    border-radius: 24px 24px 0 0;
+    border-radius: var(--pp-r) var(--pp-r) 0 0;
   }
 }
 
@@ -848,7 +925,7 @@ button.pp-state.is-booked {
     right: auto;
     width: min(100%, 34rem);
     transform: translateX(-50%);
-    border-radius: 18px 18px 0 0;
+    border-radius: var(--pp-r) var(--pp-r) 0 0;
     box-shadow: 0 -1px 0 var(--pp-line), 0 -8px 24px rgb(14 27 44 / 0.06);
   }
 }
@@ -868,17 +945,23 @@ button.pp-state.is-booked {
   }
   .pp-pass {
     order: 0;
-    padding: var(--space-5) var(--space-6) var(--space-6);
-    border-radius: 24px 24px 0 0;
+    padding: var(--space-5) var(--pp-gutter) var(--space-6);
+    border-radius: var(--pp-r) var(--pp-r) 0 0;
   }
   .pp-banner {
-    width: calc(100% + 2 * var(--space-6));
+    width: calc(100% + 2 * var(--pp-gutter));
     max-height: 18rem;
-    margin: calc(-1 * var(--space-5)) calc(-1 * var(--space-6)) 0;
-    border-radius: 24px 24px 0 0;
+    margin: calc(-1 * var(--space-5)) calc(-1 * var(--pp-gutter)) 0;
+    border-radius: var(--pp-r) var(--pp-r) 0 0;
   }
   .pp-name {
     font-size: clamp(3.5rem, 6vw, 5rem);
+  }
+  .pp-name.is-m {
+    font-size: 4rem;
+  }
+  .pp-name.is-s {
+    font-size: 3rem;
   }
   .pp-tabbar {
     order: 1;
@@ -893,7 +976,7 @@ button.pp-state.is-booked {
     justify-content: flex-start;
     gap: var(--space-1);
     padding: var(--space-2) var(--space-4);
-    border-radius: 0 0 24px 24px;
+    border-radius: 0 0 var(--pp-r) var(--pp-r);
     box-shadow: 0 1px 0 var(--pp-line), 0 8px 24px rgb(14 27 44 / 0.06);
   }
   .pp-tabbar button {
@@ -904,7 +987,7 @@ button.pp-state.is-booked {
     min-height: 2.75rem;
     gap: var(--space-2);
     padding: 0 var(--space-4);
-    border-radius: 999px;
+    border-radius: 12px;
     font-size: var(--text-md);
   }
   .pp-tabbar button[aria-current='page'] {
@@ -913,27 +996,31 @@ button.pp-state.is-booked {
   .pp-tabbar button:hover {
     background: var(--pp-bg);
   }
+  /* One column: cards line up with the pass's edges, and the text inside them with the pass's text. */
+  .pp {
+    --pp-gutter: var(--space-6);
+  }
   .pp-panel {
     order: 2;
-    padding: var(--space-3) var(--space-2) 0;
+    padding: var(--space-3) 0 0;
   }
   .pp-section {
     padding: var(--space-5) 0 var(--space-2);
   }
-  .pp-section h2 {
-    font-size: 1.75rem;
-  }
   .pp-row {
     grid-template-columns: 6rem 1fr 9rem;
-    padding: var(--space-4) var(--space-5);
+    padding: var(--space-4) var(--pp-gutter);
   }
   .pp-tl {
     grid-template-columns: 6rem 1fr auto;
-    padding: var(--space-4) var(--space-5);
+    padding: var(--space-4) var(--pp-gutter);
   }
   .pp-food > li {
     grid-template-columns: 6rem 1fr;
-    padding: var(--space-4) var(--space-5);
+    padding: var(--space-4) var(--pp-gutter);
+  }
+  .pp-days button:hover:not([aria-pressed='true']) {
+    background: var(--pp-bg);
   }
   .pp-state {
     cursor: pointer;
@@ -1019,7 +1106,7 @@ button.pp-state.is-booked {
 }
 .pp-mi-flag {
   padding: 0 var(--space-2);
-  border-radius: 999px;
+  border-radius: 6px;
   background: var(--pp-bg);
   color: var(--pp-ink-2);
   font-size: var(--text-sm);
@@ -1113,4 +1200,77 @@ button.pp-state.is-booked {
   align-items: center;
   gap: var(--space-1);
   margin: 0 var(--space-3) var(--space-3);
+}
+
+/* ---------- Focus: a solid 2px ring with 3:1 or more against what's around it ---------- */
+.pp :focus-visible {
+  outline: 2px solid var(--pp-ink);
+  outline-offset: 2px;
+}
+.pp-pass :focus-visible,
+.pp-quest :focus-visible,
+.pp-splash :focus-visible {
+  outline-color: #FFFFFF;
+}
+/* Nothing focused ends up under the tab bar (bottom on phones, top on computers). */
+html:has(.pp) {
+  scroll-padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+}
+@media (min-width: 900px) and (min-height: 500px) {
+  html:has(.pp) {
+    scroll-padding-top: 5rem;
+    scroll-padding-bottom: 0;
+  }
+}
+
+/* ---------- Day change: the new day fades in ---------- */
+.pp-swap {
+  animation: pp-swap-in 200ms ease-out both;
+}
+@keyframes pp-swap-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pp-swap {
+    animation: none;
+  }
+  .pp-days button,
+  .pp-state {
+    transition: none;
+  }
+}
+
+/* ---------- States ---------- */
+.pp-loading {
+  padding: var(--space-7) var(--pp-gutter);
+  color: var(--pp-ink-2);
+  text-align: center;
+}
+.pp-nudge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border-radius: 12px;
+  background: var(--pp-surface);
+}
+.pp-nudge p {
+  font-weight: var(--weight-bold);
+}
+.pp-offline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--pp-gutter);
+  background: var(--pp-amber-bg);
+  color: var(--pp-amber);
+}
+.pp-offline span {
+  flex: 1;
 }
