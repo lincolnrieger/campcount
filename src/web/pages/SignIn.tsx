@@ -242,7 +242,7 @@ export function SignIn() {
           </div>
           {siteEvent?.participantCode && (
             <Link className="signin-back meta" to="/welcome">
-              Not on the event team? Go back
+              Not staff? Go back
             </Link>
           )}
         </>
