@@ -528,13 +528,6 @@ label.btn:has(input:focus-visible) {
 .share-toggle:disabled {
   cursor: not-allowed;
 }
-.join-logo {
-  display: block;
-  max-width: 12rem;
-  max-height: 10rem;
-  margin: 0 auto var(--space-2);
-  object-fit: contain;
-}
 .join-link form {
   display: grid;
   gap: var(--space-2);
@@ -551,7 +544,8 @@ label.btn:has(input:focus-visible) {
   display: grid;
   place-items: center;
   flex: none;
-  width: 3.25rem;
+  width: 3.5rem;
+  min-height: 3.5rem;
   border: 0;
   border-radius: var(--radius);
   background: var(--brand);
@@ -562,4 +556,32 @@ label.btn:has(input:focus-visible) {
   background: var(--surface-sunken);
   color: var(--ink-3);
   cursor: not-allowed;
+}
+
+/* Simple text: the camp's name and what this page is */
+.join-link {
+  gap: var(--space-5);
+  text-align: left;
+}
+.join-head {
+  display: grid;
+  gap: var(--space-1);
+  padding-bottom: var(--space-4);
+  border-bottom: var(--border-width) solid var(--divider);
+}
+.join-head h1 {
+  font-size: 1.75rem;
+  font-weight: var(--weight-heavy);
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.join-head p {
+  color: var(--ink-3);
+  font-weight: var(--weight-medium);
+}
+.join-row .input {
+  min-height: 3.5rem;
+}
+.join-link .field-label {
+  font-weight: var(--weight-bold);
 }

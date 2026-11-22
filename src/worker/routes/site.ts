@@ -38,7 +38,7 @@ siteRoutes.get('/', async (c) => {
   return c.json({ kind: 'platform', rootDomain: root });
 });
 
-export async function sendLogo(c: AppContext, eventId: string) {
+async function sendLogo(c: AppContext, eventId: string) {
   const row = await c.env.DB.prepare(`SELECT content_type, data FROM event_logos WHERE event_id = ?`).bind(eventId).first<{ content_type: string; data: string }>();
   if (!row) throw notFound();
   const bytes = Uint8Array.from(atob(row.data), (ch) => ch.charCodeAt(0));

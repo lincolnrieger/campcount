@@ -10,7 +10,7 @@ import { ParticipantPage } from './Participant';
 import { usePerson } from './Signup';
 
 interface LinkInfo {
-  event: { name: string; timezone: string; startsOn: string; endsOn: string; contactEmail: string; banner: { url: string; width: number; height: number } | null; logoUrl: string | null };
+  event: { name: string; timezone: string; startsOn: string; endsOn: string; contactEmail: string; banner: { url: string; width: number; height: number } | null };
   features: LinkFeature[];
 }
 
@@ -84,8 +84,6 @@ export function JoinLink() {
     return <ParticipantPage view={view} busy={person.busy} actions={person} error={error} notice={null} initialTab={first} onNotMe={() => close()} />;
   }
 
-  const banner = info?.event.banner;
-  const logo = info?.event.logoUrl;
   return (
     <main className="public" id="main">
       <div className="public-card book-link join-link">
@@ -100,14 +98,10 @@ export function JoinLink() {
           </p>
         ) : (
           <>
-            {/* Just the camp's logo (or banner) and the number. */}
-            {logo ? (
-              <img className="join-logo" src={logo} alt={info.event.name} />
-            ) : banner ? (
-              <img className="join-banner" src={banner.url} width={banner.width} height={banner.height} alt={info.event.name} />
-            ) : (
+            <header className="join-head">
               <h1>{info.event.name}</h1>
-            )}
+              <p>Open your camp page</p>
+            </header>
             <form onSubmit={open} noValidate>
               <label htmlFor="join-number" className="field-label">
                 Scouts SA Membership Number
