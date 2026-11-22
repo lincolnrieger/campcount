@@ -656,3 +656,50 @@
   display: grid;
   gap: var(--space-3);
 }
+
+/* Participants: each team event is a dropdown, so the page stays short. */
+.team-drops {
+  display: grid;
+  gap: var(--space-2);
+}
+.team-drop {
+  border: 1px solid var(--divider);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.team-drop > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 3.5rem;
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-4);
+  cursor: pointer;
+  list-style: none;
+}
+.team-drop > summary::-webkit-details-marker {
+  display: none;
+}
+.team-drop-main {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.team-drop-name {
+  font-weight: var(--weight-heavy);
+}
+.team-drop-chev {
+  display: inline-flex;
+  color: var(--ink-3);
+  transition: transform 0.15s ease;
+}
+.team-drop[open] .team-drop-chev {
+  transform: rotate(90deg);
+}
+.team-drop > .team-pick {
+  padding: 0 var(--space-4) var(--space-4);
+}
+@media (prefers-reduced-motion: reduce) {
+  .team-drop-chev {
+    transition: none;
+  }
+}

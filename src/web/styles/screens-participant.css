@@ -407,11 +407,11 @@ button.pp-state.is-booked {
   text-decoration: none;
 }
 
-/* Teams use the app's own panel, sat on a card */
-.pp-teams {
-  padding: var(--space-4);
-  background: var(--pp-surface);
+/* Teams: one dropdown card per team event */
+.pp-teams .team-drop {
+  border: 0;
   border-radius: var(--pp-r);
+  background: var(--pp-surface);
 }
 
 /* Food */
@@ -1058,4 +1058,59 @@ button.pp-state.is-booked {
   color: var(--pp-ink-2);
   font-size: var(--text-sm);
   font-weight: var(--weight-bold);
+}
+
+/* ---------- Footer: contact email, "Not you?" ---------- */
+.pp-foot {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1);
+  padding: var(--space-6) var(--space-4) var(--space-4);
+  color: var(--pp-ink-2);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+.pp-foot a {
+  color: var(--pp-lagoon);
+  font-weight: var(--weight-heavy);
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Book: everything you're booked for ---------- */
+.pp-mybook {
+  border-radius: var(--pp-r);
+  background: var(--pp-surface);
+}
+.pp-mybook > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 3rem;
+  padding: 0 var(--space-4);
+  color: var(--pp-green);
+  cursor: pointer;
+}
+.pp-mybook > summary span {
+  color: var(--pp-ink);
+}
+.pp-mybook > ul {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0 var(--space-4) var(--space-2);
+  list-style: none;
+}
+.pp-mybook li {
+  display: grid;
+  grid-template-columns: 7.5rem 1fr;
+  gap: var(--space-2);
+}
+.pp-mybook li .pp-num {
+  color: var(--pp-ink-2);
+}
+.pp-mybook .pp-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0 var(--space-3) var(--space-3);
 }

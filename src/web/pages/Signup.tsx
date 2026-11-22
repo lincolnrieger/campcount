@@ -58,7 +58,7 @@ export function SignupStatus({ error, done }: { error: string | null; done: stri
 }
 
 /** Book, cancel and refresh for one identified person. */
-export function usePerson(onError: (text: string) => void) {
+export function usePerson(onError: (text: string) => void, onSignedOut?: () => void) {
   const [view, setView] = useState<SignupView | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
@@ -78,11 +78,16 @@ export function usePerson(onError: (text: string) => void) {
         if (ok) setDone(ok);
       } catch (err) {
         onError(message(err));
+        // A typed-number page times out: back to typing the number.
+        if (onSignedOut && err instanceof ApiFailure && err.status === 401) {
+          setView(null);
+          onSignedOut();
+        }
       } finally {
         setBusy(false);
       }
     },
-    [onError],
+    [onError, onSignedOut],
   );
   return {
     view,

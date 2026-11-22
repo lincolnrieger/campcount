@@ -414,3 +414,117 @@ label.btn:has(input:focus-visible) {
 .book-link-result svg {
   flex: none;
 }
+
+/* ---------- Link for everyone: type a membership number ---------- */
+.join-link {
+  display: grid;
+  gap: var(--space-3);
+}
+.join-banner {
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius);
+}
+.join-lead {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+}
+
+/* ---------- People › Links for everyone ---------- */
+.share-new {
+  display: grid;
+  gap: var(--space-4);
+}
+.share-features {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.share-presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  text-align: left;
+}
+.share-preset {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.share-preset:hover {
+  border-color: var(--brand);
+}
+.share-list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.share-link {
+  display: grid;
+  gap: var(--space-3);
+}
+.share-link.is-off {
+  opacity: 0.75;
+}
+.share-link-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.share-link-head h2 {
+  flex: 1;
+  font-size: var(--text-lg);
+}
+.share-url {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.share-url code {
+  flex: 1 1 16rem;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+.share-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.share-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 2.5rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-control);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.share-toggle.is-on {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #FFFFFF;
+}
+.share-toggle:disabled {
+  cursor: not-allowed;
+}

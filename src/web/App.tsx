@@ -32,6 +32,8 @@ import { SectionsSettings } from './pages/SectionsSettings';
 import { Intake } from './pages/Intake';
 import { BookingLinks } from './pages/BookingLinks';
 const BookLink = lazy(() => import('./pages/BookLink').then((m) => ({ default: m.BookLink })));
+const ShareLinks = lazy(() => import('./pages/ShareLinks').then((m) => ({ default: m.ShareLinks })));
+const JoinLink = lazy(() => import('./pages/JoinLink').then((m) => ({ default: m.JoinLink })));
 import { Pair } from './pages/Pair';
 import { ScanHub } from './pages/ScanHub';
 import { Stations } from './pages/Stations';
@@ -176,6 +178,7 @@ function EventSiteApp({ site }: { site: Extract<SiteInfo, { kind: 'event' }> }) 
         <Route path="/signup/:code" element={<SignupKiosk />} />
         <Route path="/c" element={<Participant />} />
         <Route path="/book/:code/:activityId" element={<BookLink />} />
+        <Route path="/p/:code" element={<JoinLink />} />
         <Route
           path="/events/:eventId/scan/:type/:contextId?"
           element={
@@ -203,6 +206,7 @@ function EventSiteApp({ site }: { site: Extract<SiteInfo, { kind: 'event' }> }) 
             <Route path="people/lanyards/print" element={<LanyardPrint />} />
             <Route path="people/roll-sheet" element={<RollSheet />} />
             <Route path="people/links" element={<ParticipantLinks />} />
+            <Route path="people/share" element={<ShareLinks />} />
             <Route path="people/leader-roster" element={<LeaderRoster />} />
             <Route path="people/:registrationId" element={<Person />} />
             <Route path="people/:registrationId/edit" element={<PersonEdit />} />
@@ -253,6 +257,7 @@ function PlatformApp() {
         <Route path="/signup/:code" element={<SignupKiosk />} />
         <Route path="/c" element={<Participant />} />
         <Route path="/book/:code/:activityId" element={<BookLink />} />
+        <Route path="/p/:code" element={<JoinLink />} />
         {/* The scanner is full screen: no sidebar or tab bar. */}
         <Route
           path="/events/:eventId/scan/:type/:contextId?"
@@ -284,6 +289,7 @@ function PlatformApp() {
             <Route path="people/lanyards/print" element={<LanyardPrint />} />
             <Route path="people/roll-sheet" element={<RollSheet />} />
             <Route path="people/links" element={<ParticipantLinks />} />
+            <Route path="people/share" element={<ShareLinks />} />
             <Route path="people/leader-roster" element={<LeaderRoster />} />
             <Route path="people/:registrationId" element={<Person />} />
             <Route path="people/:registrationId/edit" element={<PersonEdit />} />

@@ -3,6 +3,7 @@ import { Badge, Button, FilterTabs, SearchField } from '../ui';
 import { matchesSearch } from '../../shared/search';
 import { dayInZone, dayLabel, timeInZone, timeRange, todayInZone } from '../../shared/time';
 import type { ParticipantTeamEvent } from './TeamsPanel';
+import type { LinkFeature } from '../../shared/participantLinks';
 
 export interface SignupSession {
   id: string;
@@ -24,7 +25,17 @@ export interface SignupView {
   activitiesDone?: number;
   /** The Side Quest, on their own link when the camp plays it. */
   sideQuest?: SideQuestStanding | null;
-  event: { name: string; timezone: string; startsOn: string; endsOn: string; /** The camp's banner graphic, if it has one. */ banner?: { url: string; width: number; height: number } | null };
+  event: {
+    name: string;
+    timezone: string;
+    startsOn: string;
+    endsOn: string;
+    /** The camp's banner graphic, if it has one. */ banner?: { url: string; width: number; height: number } | null;
+    /** Who to email with questions (Settings › Event details). */
+    contactEmail?: string;
+  };
+  /** The parts of the page this link shows. Unset or all four on someone's own lanyard. */
+  features?: LinkFeature[];
   open: boolean;
   sessions: SignupSession[];
   bookings: { activityId: string; name: string; location: string; startsAt: string | null; endsAt: string | null; canCancel: boolean }[];
