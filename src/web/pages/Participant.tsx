@@ -565,11 +565,12 @@ function DayChips({ days, value, today, onChange, labels }: { days: string[]; va
   );
 }
 
-/** "3 places left", once few are left (not on your own bookings). */
-function placesLeft(s: SignupSession, booked: boolean) {
-  if (booked || s.full || s.capacity === null) return null;
-  const left = s.capacity - s.booked;
-  return left <= 5 ? `${left} ${left === 1 ? 'place' : 'places'} left` : null;
+/** How full an activity is: "8 of 12 booked · 4 left", or "5 booked" with no limit. */
+function fullness(s: SignupSession & { extra?: boolean }) {
+  if (s.extra) return null;
+  if (s.capacity === null) return `${s.booked} booked`;
+  const left = Math.max(0, s.capacity - s.booked);
+  return `${s.booked} of ${s.capacity} booked${left > 0 && left <= 5 ? ` · ${left} left` : ''}`;
 }
 
 /** Everything you're booked for, across every day, and a calendar file of it. */
@@ -680,8 +681,9 @@ function Book({ view, busy, onBook, onCancel }: { view: SignupView; busy: boolea
                   <span>
                     {clash
                       ? `Clashes with ${clash.name}`
-                      : [s.startsAt && s.endsAt ? `until ${timeInZone(s.endsAt, tz)}` : null, s.location, placesLeft(s, !!b)].filter(Boolean).join(' · ')}
+                      : [s.startsAt && s.endsAt ? `until ${timeInZone(s.endsAt, tz)}` : null, s.location].filter(Boolean).join(' · ')}
                   </span>
+                  {fullness(s) && <span className={s.full ? 'pp-row-count is-full' : 'pp-row-count'}>{fullness(s)}</span>}
                 </span>
                 <span className="pp-row-action">
                   {b ? (

@@ -7,12 +7,15 @@ import { ApiFailure, api } from '../api';
 import { useApi } from '../useApi';
 import { Badge, Button, EmptyState, Field, Icon, LoadError, Loading, Menu, Notice, PageHeader, useConfirm, useToast } from '../ui';
 import { useEvent } from './EventLayout';
+import { eventSiteUrl, useSite } from '../site';
 
 interface ShareLink {
   id: string;
   name: string;
   features: LinkFeature[];
   active: boolean;
+  /** The link for the camp's own address (Participant on its front page). */
+  home: boolean;
   url: string;
 }
 
@@ -30,6 +33,9 @@ const PRESETS: { name: string; features: LinkFeature[]; about: string }[] = [
  */
 export function ShareLinks() {
   const { event, can, base } = useEvent();
+  const site = useSite();
+  const siteUrl = eventSiteUrl(site.rootDomain, event.subdomain);
+  const siteName = siteUrl ? siteUrl.replace(/^https?:\/\//, '').replace(/\/$/, '') : null;
   const toast = useToast();
   const confirm = useConfirm();
   const { data, error, loading, reload } = useApi<{ links: ShareLink[] }>(`/events/${event.id}/participant-links`);
@@ -103,6 +109,17 @@ export function ShareLinks() {
           </Notice>
         )}
 
+        {siteName && (
+          <Notice tone="info">
+            <p>
+              <strong>{siteName}</strong> asks people whether they’re a participant or on the event team.{' '}
+              {data.links.some((l) => l.home && l.active)
+                ? 'Participants get the link marked “Camp website”. Give your other links more parts to test with.'
+                : 'Choose a link for participants with ⋯ › Use on the camp website. Until then it only offers Event team sign-in.'}
+            </p>
+          </Notice>
+        )}
+
         {making && (
           <form
             className="panel panel-pad form share-new"
@@ -159,6 +176,7 @@ export function ShareLinks() {
               <li key={l.id} className={l.active ? 'panel panel-pad share-link' : 'panel panel-pad share-link is-off'}>
                 <div className="share-link-head">
                   <h2>{l.name}</h2>
+                  {l.home && <Badge tone="brand">Camp website</Badge>}
                   {!l.active && <Badge tone="warning">Switched off</Badge>}
                   <Menu
                     label={`More actions for ${l.name}`}
@@ -169,6 +187,10 @@ export function ShareLinks() {
                           const n = window.prompt('Name for this link', l.name)?.trim();
                           if (n && n !== l.name) void patch(l, { name: n }, 'Renamed');
                         },
+                      },
+                      !!siteName && {
+                        label: l.home ? 'Stop using on the camp website' : `Use on the camp website (${siteName})`,
+                        onSelect: () => void patch(l, { home: !l.home }, l.home ? 'No longer on the camp website' : 'Now on the camp website'),
                       },
                       { label: l.active ? 'Switch off' : 'Switch on', onSelect: () => void patch(l, { active: !l.active }, l.active ? 'Link switched off' : 'Link switched on') },
                       {

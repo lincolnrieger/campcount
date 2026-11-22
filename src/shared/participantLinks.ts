@@ -26,4 +26,7 @@ export const participantLinkSchema = z.strictObject({
   name: z.string().trim().min(1, 'Give the link a name').max(60),
   features: z.array(z.enum(LINK_FEATURES)).min(1, 'Switch on at least one part').max(4),
 });
-export const participantLinkPatchSchema = participantLinkSchema.partial().extend({ active: z.boolean().optional() }).strict();
+export const participantLinkPatchSchema = participantLinkSchema
+  .partial()
+  .extend({ active: z.boolean().optional(), /** The link for the camp's own address. */ home: z.boolean().optional() })
+  .strict();

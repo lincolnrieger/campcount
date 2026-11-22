@@ -79,3 +79,37 @@ describe('event sites', () => {
     expect((await api(`/events/${id}/logo`, { method: 'PUT', cookie: stranger.cookie, body: { dataUrl: PNG } })).status).toBe(404);
   });
 });
+
+describe("the camp address's front door", () => {
+  it('offers the link marked for the camp website, one at a time, only while it is on', async () => {
+    const admin = await createUser({ platformAdmin: true });
+    const eventId = await createEvent(admin.id, { name: 'Splash' });
+    await grant(admin.id, 'event_manager', eventId);
+    const host = await withAddress(eventId, `door-${eventId.slice(0, 6)}`);
+    const make = async (name: string, features: string[]) =>
+      (await json(await api(`/events/${eventId}/participant-links`, { cookie: admin.cookie, body: { name, features } }))).link;
+    const everyone = await make('Everyone', ['book']);
+    const testing = await make('Testing', ['programme', 'book', 'teams', 'food']);
+    const code = (l: { url: string }) => l.url.split('/p/')[1];
+
+    // Nothing marked: no participant door.
+    expect((await json(await api('/site', { host }))).event.participantCode).toBeNull();
+
+    const patch = (id: string, body: object) => api(`/events/${eventId}/participant-links/${id}`, { method: 'PATCH', cookie: admin.cookie, body });
+    expect((await json(await patch(everyone.id, { home: true }))).link.home).toBe(true);
+    expect((await json(await api('/site', { host }))).event.participantCode).toBe(code(everyone));
+
+    // Marking another moves it.
+    await patch(testing.id, { home: true });
+    const links = (await json(await api(`/events/${eventId}/participant-links`, { cookie: admin.cookie }))).links;
+    expect(links.filter((l: { home: boolean }) => l.home).map((l: { id: string }) => l.id)).toEqual([testing.id]);
+    expect((await json(await api('/site', { host }))).event.participantCode).toBe(code(testing));
+
+    // Switched off, or the camp closed: no door.
+    await patch(testing.id, { active: false });
+    expect((await json(await api('/site', { host }))).event.participantCode).toBeNull();
+    await patch(testing.id, { active: true });
+    await testEnv.DB.prepare(`UPDATE events SET status = 'completed' WHERE id = ?`).bind(eventId).run();
+    expect((await json(await api('/site', { host }))).event.participantCode).toBeNull();
+  });
+});

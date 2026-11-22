@@ -1274,3 +1274,14 @@ html:has(.pp) {
 .pp-offline span {
   flex: 1;
 }
+
+/* Book: how many are booked and the limit */
+.pp-row-main .pp-row-count {
+  color: var(--pp-ink-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+.pp-row-main .pp-row-count.is-full {
+  color: var(--pp-alert);
+}
