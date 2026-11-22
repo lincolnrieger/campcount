@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { sectionColours } from '../../shared/lanyardDesign';
 import { dayInZone, dayLabel, timeInZone, todayInZone } from '../../shared/time';
-import { api } from '../api';
+import { ApiFailure, api } from '../api';
+import { loadSnapshot, saveSnapshot } from '../offline/db';
 import type { ParticipantItem } from '../../shared/mealItems';
 import { MEAL_CATEGORIES } from '../../shared/mealItems';
 import type { LinkFeature } from '../../shared/participantLinks';
@@ -26,7 +27,10 @@ import { SignupStatus, usePerson } from './Signup';
 export function Participant() {
   useTitle('My camp');
   const [token] = useState(() => window.location.hash.slice(1));
-  const [state, setState] = useState<'loading' | 'page' | 'collect' | 'nocard' | 'inactive'>('loading');
+  const [state, setState] = useState<'loading' | 'page' | 'collect' | 'nocard' | 'inactive' | 'offline'>('loading');
+  // No signal (common at camp): the page as it was last opened on this phone.
+  const [saved, setSaved] = useState<Saved | null>(null);
+  const slow = useDelayed(1000, state === 'loading');
   const [collected, setCollected] = useState<CollectResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const person = usePerson(setError);
@@ -39,6 +43,16 @@ export function Participant() {
     void loadFont('permanent-marker', 400);
   }, []);
 
+  /** Offline: show the last copy of this card's page, if this phone has one. */
+  const showSaved = useCallback(async (err: unknown, forToken: string | null) => {
+    if (!(err instanceof ApiFailure && err.status === 0)) return false;
+    const copy = await loadSnapshot<Saved>(SAVED_KEY).catch(() => undefined);
+    if (!copy || (forToken && copy.token !== forToken)) return false;
+    setSaved(copy);
+    setState('offline');
+    return true;
+  }, []);
+
   const showMine = useCallback(async () => {
     setState('loading');
     try {
@@ -46,10 +60,10 @@ export function Participant() {
       // The friend's card link isn't theirs: leave a clean address they can come back to.
       window.history.replaceState(null, '', '/c');
       setState('page');
-    } catch {
-      setState('nocard');
+    } catch (err) {
+      if (!(await showSaved(err, null))) setState('nocard');
     }
-  }, [setView]);
+  }, [setView, showSaved]);
 
   const open = useCallback(
     async (claim = false) => {
@@ -63,18 +77,39 @@ export function Participant() {
           setView(res);
           setState('page');
         }
-      } catch {
-        setState('inactive');
+      } catch (err) {
+        if (!(await showSaved(err, token))) setState('inactive');
       }
     },
-    [token, setView],
+    [token, setView, showSaved],
   );
+
+  // Keep a copy of the page on this phone for when there's no signal.
+  useEffect(() => {
+    if (state === 'page' && person.view) void saveSnapshot(SAVED_KEY, { view: person.view, at: Date.now(), token: token || null } satisfies Saved).catch(() => undefined);
+  }, [state, person.view, token]);
 
   useEffect(() => {
     if (/^[A-Za-z0-9_-]{22}$/.test(token)) void open();
     else void showMine();
   }, [token, open, showMine]);
 
+  if (state === 'offline' && saved)
+    return (
+      <Shell>
+        <div className="pp-offline" role="status">
+          <Icon name="offline" size={20} />
+          <span>
+            No signal. This is your page from <strong>{timeInZone(new Date(saved.at).toISOString(), saved.view.event.timezone)}</strong>.
+          </span>
+          <button type="button" className="pp-link" onClick={() => void (/^[A-Za-z0-9_-]{22}$/.test(token) ? open() : showMine())}>
+            Retry
+          </button>
+        </div>
+        {/* Busy: nothing can be booked or changed until the page is back online. */}
+        <Page view={saved.view} busy actions={person} />
+      </Shell>
+    );
   if (state === 'collect' && collected) return <CollectScreen result={collected} onDone={() => void showMine()} onMine={() => void open(true)} />;
   if (state === 'inactive' || state === 'nocard')
     return (
@@ -90,8 +125,9 @@ export function Participant() {
     // pass appears once, in the person's own colour with the banner in place.
     return (
       <Shell>
-        <p className="visually-hidden" role="status" aria-busy="true">
-          Loading your camp page
+        {/* Nothing for the first second (most loads are quicker), then a quiet line. */}
+        <p className={slow ? 'pp-loading' : 'visually-hidden'} role="status" aria-busy="true">
+          Opening your camp page…
         </p>
       </Shell>
     );
@@ -102,6 +138,27 @@ export function Participant() {
       <SignupStatus error={error} done={null} />
     </Shell>
   );
+}
+
+const SAVED_KEY = 'pp-last-page';
+interface Saved {
+  view: SignupView;
+  at: number;
+  token: string | null;
+}
+
+/** True once `ms` have passed while `active` (reset when it stops). */
+function useDelayed(ms: number, active: boolean) {
+  const [late, setLate] = useState(false);
+  useEffect(() => {
+    if (!active) return;
+    const t = setTimeout(() => setLate(true), ms);
+    return () => {
+      clearTimeout(t);
+      setLate(false);
+    };
+  }, [ms, active]);
+  return late;
 }
 
 /**
@@ -275,7 +332,7 @@ function Page({ view, busy, actions, initialTab, onNotMe }: { view: SignupView; 
       <Pass view={view} />
       <div className="pp-panel">
         {current === 'roster' && <Roster duties={duties} now={now} tz={tz} />}
-        {current === 'day' && <MyDay items={programme} mine={mine} now={now} tz={tz} />}
+        {current === 'day' && <MyDay items={programme} mine={mine} now={now} tz={tz} onBook={canBook && view.open && view.sessions.length > 0 ? () => setTab('book') : undefined} />}
         {current === 'book' && <Book view={view} busy={busy} onBook={actions.book} onCancel={actions.cancel} />}
         {current === 'teams' && (
           <section className="pp-section" aria-labelledby="teams-h">
@@ -335,29 +392,34 @@ function PageFoot({ email, onNotMe }: { email?: string; onNotMe?: () => void }) 
   );
 }
 
+const nameSize = (name: string) => (name.length <= 12 ? 'is-l' : name.length <= 20 ? 'is-m' : 'is-s');
+
 /** Who you are, at which camp. Coloured like your section's lanyard band. */
 function Pass({ view }: { view: SignupView }) {
   const word = view.person.sectionWord ?? '';
   const colour = view.person.sectionColour ?? sectionColours(word).bg;
   const first = view.person.firstName ?? view.person.name.split(' ')[0];
   const last = view.person.lastName ?? '';
-  const banner = view.event.banner;
+  // No signal (the saved copy): the camp's name instead of a broken picture.
+  const [bannerFailed, setBannerFailed] = useState(false);
+  const banner = bannerFailed ? null : view.event.banner;
   return (
     <header className="pp-pass" style={{ ['--pass' as string]: colour }}>
       {banner ? (
         // The camp's own graphic stands in for its name.
-        <img className="pp-banner" src={banner.url} width={banner.width} height={banner.height} alt={view.event.name} />
+        <img className="pp-banner" src={banner.url} width={banner.width} height={banner.height} alt={view.event.name} onError={() => setBannerFailed(true)} />
       ) : (
         <p className="pp-pass-camp">
           <strong>{view.event.name}</strong>
           <span>{formatDateRange(view.event.startsOn, view.event.endsOn)}</span>
         </p>
       )}
-      <h1 className="pp-name">
+      {/* One line, one size: smaller for longer names so they still fit. */}
+      <h1 className={`pp-name ${nameSize(`${first} ${last}`.trim())}`}>
         {first}
-        {last && <span className="pp-surname">{last}</span>}
+        {last && ` ${last}`}
       </h1>
-      {word && <span className="pp-section-pill">{word}</span>}
+      {word && <span className="pp-section-tag">{word}</span>}
     </header>
   );
 }
@@ -412,29 +474,70 @@ function Roster({ duties, now, tz }: { duties: NonNullable<SignupView['duties']>
   );
 }
 
-/** The day's programme, one day at a time. Your bookings say "Booked". */
-function MyDay({ items, mine, now, tz }: { items: ProgrammeItem[]; mine: Set<string>; now: number; tz: string }) {
+/** The item on now, or else the next one, and how to say it ("On now", "In 25 min", "Next"). */
+function nowNext(timed: ProgrammeItem[], now: number): { item: ProgrammeItem; label: string } | null {
+  const on = timed.find((i) => startOf(i) <= now && endOf(i) > now);
+  if (on) return { item: on, label: 'On now' };
+  const next = timed.find((i) => startOf(i) > now);
+  if (!next) return null;
+  const mins = Math.round((startOf(next) - now) / 60_000);
+  return { item: next, label: mins <= 90 ? `Next · in ${Math.max(1, mins)} min` : 'Next' };
+}
+
+/**
+ * The day's programme, one day at a time. Your bookings say "Booked"; what's
+ * on now (or next) is marked. Rows are information only, so they don't look
+ * tappable.
+ */
+function MyDay({ items, mine, now, tz, onBook }: { items: ProgrammeItem[]; mine: Set<string>; now: number; tz: string; onBook?: () => void }) {
   const timed = items.filter((i) => i.startsAt).sort((a, b) => startOf(a) - startOf(b));
   const days = [...new Set(timed.map((i) => dayInZone(i.startsAt!, tz)))];
   const today = todayInZone(tz);
   const [day, setDay] = useState(() => (days.includes(today) ? today : (days.find((d) => d > today) ?? days[0] ?? today)));
   const list = timed.filter((i) => dayInZone(i.startsAt!, tz) === day);
+  const marker = nowNext(timed, now);
   return (
     <section className="pp-section" aria-labelledby="my-day-h">
       <h2 id="my-day-h">My day</h2>
+      {onBook && mine.size === 0 && (
+        <div className="pp-nudge">
+          <p>You haven’t booked any activities yet.</p>
+          <button type="button" className="pp-link" onClick={onBook}>
+            Book activities
+          </button>
+        </div>
+      )}
       {days.length > 1 && <DayChips days={days} value={day} today={today} onChange={setDay} />}
       {timed.length === 0 ? (
-        <p className="pp-muted">The programme hasn’t been added yet.</p>
+        <p className="pp-muted">The programme hasn’t been added yet. Check back closer to camp.</p>
       ) : (
-        <ol className="pp-timeline">
+        <ol key={day} className="pp-timeline pp-swap">
           {list.map((it, i) => {
             const isMine = mine.has(key(it));
+            const mark = marker?.item === it ? marker.label : null;
             return (
-              <li key={i} className={['pp-tl', endOf(it) < now && 'is-past', isMine && 'is-mine'].filter(Boolean).join(' ')}>
+              <li
+                key={i}
+                aria-current={mark ? 'time' : undefined}
+                className={['pp-tl', `is-${it.kind}`, endOf(it) < now && !mark && 'is-past', isMine && 'is-mine', mark && 'is-now'].filter(Boolean).join(' ')}
+              >
                 <span className="pp-tl-time pp-num">{timeInZone(it.startsAt!, tz)}</span>
                 <span className="pp-tl-main">
-                  <strong>{it.name}</strong>
-                  {it.location && <span>{it.location}</span>}
+                  {mark && <span className="pp-tl-mark">{mark}</span>}
+                  <strong>
+                    {it.kind !== 'program' && (
+                      <span className="pp-tl-kind" aria-hidden="true">
+                        <Icon name={it.kind === 'meal' ? 'meal' : 'ticket'} size={16} />
+                      </span>
+                    )}
+                    {it.name}
+                  </strong>
+                  {it.location && (
+                    <span className="pp-tl-where">
+                      <Icon name="pin" size={14} />
+                      {it.location}
+                    </span>
+                  )}
                 </span>
                 {isMine && (
                   <span className="pp-tag pp-tag-booked">
