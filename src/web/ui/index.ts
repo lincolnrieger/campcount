@@ -13,3 +13,5 @@ export { useSort, sortRows, SortHeader, useWide } from './Table';
 export type { SortDir, SortState } from './Table';
 export { Segmented, FilterTabs, CountTile, Stepper, Progress } from './Controls';
 export { formatDateRange, formatDay, plural } from './format';
+export { Banner, FilterChips, InfoTip, Popover, SelectionBar, StatStrip, Toggle, Toolbar, useRemembered, useSlashFocus } from './Kit';
+export type { ChipOption } from './Kit';

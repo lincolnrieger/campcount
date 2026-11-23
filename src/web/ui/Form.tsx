@@ -1,6 +1,7 @@
 import { cloneElement, isValidElement, useEffect, useRef } from 'react';
 import type { InputHTMLAttributes, ReactNode } from 'react';
 import { Icon } from './Icon';
+import { useSlashFocus } from './Kit';
 
 /**
  * A labelled form field. The hint and error are tied to the control with
@@ -50,8 +51,26 @@ export function Choice({ label, description, ...input }: InputHTMLAttributes<HTM
   );
 }
 
-/** Search box with an icon and a hidden label. */
-export function SearchField({ id, label, value, onChange, placeholder, autoFocus }: { id: string; label: string; value: string; onChange: (v: string) => void; placeholder?: string; autoFocus?: boolean }) {
+/** Search box with an icon and a hidden label. `slash`: pressing "/" jumps here (for the main list on a page). */
+export function SearchField({
+  id,
+  label,
+  value,
+  onChange,
+  placeholder,
+  autoFocus,
+  slash,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  autoFocus?: boolean;
+  slash?: boolean;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useSlashFocus(slash ? ref : NO_REF);
   return (
     <div className="search" role="search">
       <label htmlFor={id} className="visually-hidden">
@@ -59,6 +78,7 @@ export function SearchField({ id, label, value, onChange, placeholder, autoFocus
       </label>
       <Icon name="search" />
       <input
+        ref={ref}
         id={id}
         className="input"
         type="search"
@@ -69,10 +89,22 @@ export function SearchField({ id, label, value, onChange, placeholder, autoFocus
         // eslint-disable-next-line jsx-a11y/no-autofocus
         autoFocus={autoFocus}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && value) {
+            e.preventDefault();
+            onChange('');
+          }
+        }}
       />
+      {slash && !value && (
+        <kbd className="search-kbd" aria-hidden="true">
+          /
+        </kbd>
+      )}
     </div>
   );
 }
+const NO_REF = { current: null };
 
 /**
  * The list of problems shown at the top of a form after a failed submit.
