@@ -13,3 +13,6 @@ coverage/
 *.csv
 !test/fixtures/*.csv
 screenshots/
+
+# Temporary agent worktrees
+.claude/worktrees/
