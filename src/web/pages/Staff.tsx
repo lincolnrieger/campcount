@@ -7,11 +7,13 @@ import { useApi } from '../useApi';
 import { matchesSearch, searchRank } from '../../shared/search';
 import {
   Badge,
+  Banner,
   Button,
   ButtonLink,
   Choice,
   EmptyState,
   Field,
+  FilterChips,
   Icon,
   LoadError,
   Loading,
@@ -22,9 +24,12 @@ import {
   Sheet,
   SkeletonHeader,
   SkeletonRows,
+  Toolbar,
   plural,
   useConfirm,
+  useRemembered,
   useToast,
+  useWide,
 } from '../ui';
 import { useEvent } from './EventLayout';
 import { dayInZone, dayLabel, timeInZone } from '../../shared/time';
@@ -49,7 +54,7 @@ interface Role {
 
 const fail = (err: unknown) => (err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.');
 
-/** The role picker: one radio per role, with what each can do; plus the activity for activity leaders. */
+/** The role picker: one card per role, with what each can do; plus the activity for activity leaders. */
 function RolePicker({
   roles,
   activities,
@@ -71,14 +76,14 @@ function RolePicker({
     <>
       <fieldset className="field">
         <legend className="field-label">Role</legend>
-        <div className="choices">
+        <div className="role-cards">
           {roles.map((r) => (
             <Choice key={r.key} type="radio" name={name} label={<strong>{r.name}</strong>} description={r.description} checked={roleKey === r.key} onChange={() => onChange(r.key, activityId)} />
           ))}
         </div>
       </fieldset>
       {role?.scope === 'activity' && (
-        <Field id={`${name}-activity`} label="Activity or team event" hint="Leaders only see the people, teams and check-ins for the one you choose.">
+        <Field id={`${name}-activity`} label="Activity or team event" hint="They only see the people and check-ins for this one.">
           <select className="select" value={activityId} onChange={(e) => onChange(roleKey, e.target.value)}>
             <option value="">All activities</option>
             {activities
@@ -95,21 +100,27 @@ function RolePicker({
   );
 }
 
+const NO_PASSWORD = '__no-password';
+
 /** Settings › Staff: who works on the event and what they can do. */
 export function Staff() {
   const { event, can } = useEvent();
   const { base: eventBase } = useEvent();
   const toast = useToast();
   const confirm = useConfirm();
+  const wide = useWide();
   const staff = useApi<{ staff: StaffRow[] }>(`/events/${event.id}/staff`);
   const roles = useApi<{ roles: Role[] }>('/me/roles');
   const activities = useApi<{ activities: Activity[] }>(event.features.activities ? `/events/${event.id}/activities` : null);
   const [changing, setChanging] = useState<{ row: StaffRow; roleKey: string; activityId: string } | null>(null);
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useRemembered<string>(`staff:${event.id}:role`, 'all');
   const back = { to: `${eventBase}/settings`, label: 'Settings' };
 
   if (!can('staff.manage')) return <Navigate to={back.to} replace />;
   const primary = (
     <ButtonLink to="add" kind="primary">
+      <Icon name="plus" />
       Add staff
     </ButtonLink>
   );
@@ -140,9 +151,48 @@ export function Staff() {
     }
   }
 
+  const list = staff.data?.staff ?? [];
+  const noPassword = list.filter((r) => !r.user.hasPassword).length;
+  const roleNames = [...new Map(list.map((r) => [r.role.key, r.role.name])).entries()];
+  const active = filter === 'all' || filter === NO_PASSWORD || roleNames.some(([k]) => k === filter) ? filter : 'all';
+  const shown = list
+    .filter((r) => active === 'all' || (active === NO_PASSWORD ? !r.user.hasPassword : r.role.key === active))
+    .filter((r) => matchesSearch(query, r.user.displayName, r.user.email, r.activity?.name ?? ''))
+    .sort((a, b) => (query ? searchRank(query, a.user.displayName) - searchRank(query, b.user.displayName) : 0));
+
+  const menu = (row: StaffRow) => (
+    <Menu
+      label={`Options for ${row.user.displayName}`}
+      items={[
+        { label: 'Change role', onSelect: () => setChanging({ row, roleKey: row.role.key, activityId: row.activity?.id ?? '' }) },
+        !row.user.hasPassword && { label: 'Resend invite email', onSelect: () => void resend(row) },
+        { label: 'Remove from event', danger: true, onSelect: () => void remove(row) },
+      ]}
+    />
+  );
+  const roleBadge = (row: StaffRow) => (
+    <Badge tone="brand">
+      {row.role.name}
+      {row.activity ? `: ${row.activity.name}` : ''}
+    </Badge>
+  );
+
   return (
     <>
-      <PageHeader title="Staff" back={back} summary={staff.data && staff.data.staff.length > 0 ? `${plural(staff.data.staff.length, 'person', 'people')} on this event` : undefined} primary={primary} />
+      <PageHeader
+        title="Staff"
+        back={back}
+        summary={
+          list.length > 0 ? (
+            <>
+              <span className="sep">{plural(list.length, 'person', 'people')}</span>
+              {noPassword > 0 && <span className="sep">{noPassword} {noPassword === 1 ? 'hasn’t' : 'haven’t'} set a password</span>}
+            </>
+          ) : undefined
+        }
+        help="Who works on this event and what each person can do. Removing someone takes away their access straight away; their account stays."
+        primary={primary}
+      />
       {staff.loading && !staff.data ? (
         <Loading what="staff">
           <SkeletonRows rows={4} action />
@@ -155,33 +205,69 @@ export function Staff() {
         </EmptyState>
       ) : (
         staff.data && (
-          <ul className="list">
-            {staff.data.staff.map((row) => (
-              <li key={row.assignmentId} className="row">
-                <span className="row-main">
-                  <span className="row-title">{row.user.displayName}</span>
-                  <span className="row-meta">{row.user.email}</span>
-                  <span className="staff-badges">
-                    <Badge tone="brand">
-                      {row.role.name}
-                      {row.activity ? `: ${row.activity.name}` : ''}
-                    </Badge>
-                    {!row.user.hasPassword && <Badge tone="warning">Hasn't set a password</Badge>}
-                  </span>
-                </span>
-                <span className="row-side">
-                  <Menu
-                    label={`Options for ${row.user.displayName}`}
-                    items={[
-                      { label: 'Change role', onSelect: () => setChanging({ row, roleKey: row.role.key, activityId: row.activity?.id ?? '' }) },
-                      !row.user.hasPassword && { label: 'Resend invite email', onSelect: () => void resend(row) },
-                      { label: 'Remove from event', danger: true, onSelect: () => void remove(row) },
-                    ]}
-                  />
-                </span>
-              </li>
-            ))}
-          </ul>
+          <div className="stack">
+            <Toolbar label="Find staff">
+              <SearchField id="staff-q" label="Find staff" placeholder="Name or email" value={query} onChange={setQuery} slash />
+              <FilterChips
+                label="Role"
+                value={active}
+                onChange={setFilter}
+                options={[
+                  { value: 'all', label: 'All', count: list.length },
+                  ...roleNames.map(([key, name]) => ({ value: key, label: name, count: list.filter((r) => r.role.key === key).length })),
+                  ...(noPassword > 0 ? [{ value: NO_PASSWORD, label: 'No password yet', count: noPassword }] : []),
+                ]}
+              />
+            </Toolbar>
+            {shown.length === 0 ? (
+              <EmptyState title="No one matches">Try another name, or show all roles.</EmptyState>
+            ) : wide ? (
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Name</th>
+                      <th scope="col">Email</th>
+                      <th scope="col">Role</th>
+                      <th scope="col">Account</th>
+                      <th scope="col" className="cell-action">
+                        <span className="visually-hidden">Options</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shown.map((row) => (
+                      <tr key={row.assignmentId}>
+                        <td>
+                          <strong>{row.user.displayName}</strong>
+                        </td>
+                        <td className="staff-email">{row.user.email}</td>
+                        <td>{roleBadge(row)}</td>
+                        <td>{row.user.hasPassword ? <span className="meta">Ready</span> : <Badge tone="warning">Hasn't set a password</Badge>}</td>
+                        <td className="cell-action">{menu(row)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <ul className="list">
+                {shown.map((row) => (
+                  <li key={row.assignmentId} className="row">
+                    <span className="row-main">
+                      <span className="row-title">{row.user.displayName}</span>
+                      <span className="row-meta">{row.user.email}</span>
+                      <span className="staff-badges">
+                        {roleBadge(row)}
+                        {!row.user.hasPassword && <Badge tone="warning">Hasn't set a password</Badge>}
+                      </span>
+                    </span>
+                    <span className="row-side">{menu(row)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         )
       )}
 
@@ -310,90 +396,91 @@ export function AddStaff() {
   return (
     <>
       <PageHeader title="Add staff" back={back} />
-      <form className="form" onSubmit={add} noValidate>
-        {failure && (
-          <p className="field-error" role="alert">
-            <Icon name="error" size={16} />
-            {failure}
-          </p>
-        )}
-        <fieldset className="field">
-          <legend className="field-label">Who are you adding?</legend>
-          <Segmented
-            label="Who are you adding?"
-            value={mode}
-            onChange={(m) => {
-              setMode(m);
-              setErrors({});
-            }}
-            options={[
-              { value: 'existing', label: 'Has an account' },
-              { value: 'new', label: 'Someone new' },
-            ]}
-          />
-        </fieldset>
-        {mode === 'existing' ? (
-          picked ? (
-            <ul className="list">
-              <li className="row">
-                <span className="row-main">
-                  <span className="row-title">{picked.displayName}</span>
-                  <span className="row-meta">{picked.email}</span>
-                </span>
-                <Button small kind="ghost" onClick={() => setPicked(null)}>
-                  Choose someone else
-                </Button>
-              </li>
-            </ul>
-          ) : (
-            <div className="field">
-              <SearchField id="staff-search" label="Find a person by name or email" value={query} onChange={setQuery} placeholder="Name or email, even one letter" />
-              {errors['staff-search'] && (
-                <span className="field-error" id="staff-search-error">
-                  <Icon name="error" size={16} />
-                  {errors['staff-search']}
-                </span>
-              )}
-              {people.error ? (
-                <LoadError error={people.error} onRetry={people.reload} what="accounts" />
-              ) : people.data ? (
-                <PersonResults people={people.data.people} query={query} onPick={setPicked} />
+      <form className="settings-form" onSubmit={add} noValidate>
+        {failure && <Banner tone="error">{failure}</Banner>}
+        <div className="settings-columns settings-columns-even">
+          <div className="panel panel-pad settings-panel">
+            <h2 className="settings-panel-title">Who</h2>
+            <Segmented
+              label="Who are you adding?"
+              block
+              value={mode}
+              onChange={(m) => {
+                setMode(m);
+                setErrors({});
+              }}
+              options={[
+                { value: 'existing', label: 'Has an account' },
+                { value: 'new', label: 'Someone new' },
+              ]}
+            />
+            {mode === 'existing' ? (
+              picked ? (
+                <div className="staff-picked">
+                  <span className="row-main">
+                    <span className="row-title">{picked.displayName}</span>
+                    <span className="row-meta">{picked.email}</span>
+                  </span>
+                  <Button small kind="ghost" onClick={() => setPicked(null)}>
+                    Change
+                  </Button>
+                </div>
               ) : (
-                <Loading what="accounts" rows={3} />
-              )}
-              <p className="meta">
-                Not listed?{' '}
-                <button type="button" className="link-button" onClick={() => setMode('new')}>
-                  Add someone new
-                </button>
-              </p>
-            </div>
-          )
-        ) : (
-          <>
-            <Field id="displayName" label="Name" error={errors.displayName}>
-              <input className="input" autoComplete="off" value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} />
-            </Field>
-            <Field id="email" label="Email address" hint="We'll email them a link to set their password. If they already have an account, they're just added." error={errors.email}>
-              <input className="input" type="email" autoComplete="off" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-            </Field>
-          </>
-        )}
-        <RolePicker
-          name="add-role"
-          roles={roleList}
-          activities={activities.data?.activities ?? []}
-          roleKey={form.roleKey}
-          activityId={form.activityId}
-          onChange={(roleKey, activityId) => setForm({ ...form, roleKey, activityId })}
-        />
-        <div className="btn-row">
-          <Button type="submit" kind="primary" busy={busy} busyLabel="Adding…">
-            Add staff
-          </Button>
+                <div className="field">
+                  <SearchField id="staff-search" label="Find a person by name or email" value={query} onChange={setQuery} placeholder="Name or email" />
+                  {errors['staff-search'] && (
+                    <span className="field-error" id="staff-search-error">
+                      <Icon name="error" size={16} />
+                      {errors['staff-search']}
+                    </span>
+                  )}
+                  {people.error ? (
+                    <LoadError error={people.error} onRetry={people.reload} what="accounts" />
+                  ) : people.data ? (
+                    <PersonResults people={people.data.people} query={query} onPick={setPicked} />
+                  ) : (
+                    <Loading what="accounts" rows={3} />
+                  )}
+                  <p className="meta">
+                    Not listed?{' '}
+                    <button type="button" className="link-button" onClick={() => setMode('new')}>
+                      Add someone new
+                    </button>
+                  </p>
+                </div>
+              )
+            ) : (
+              <>
+                <Field id="displayName" label="Name" error={errors.displayName}>
+                  <input className="input" autoComplete="off" value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} />
+                </Field>
+                <Field id="email" label="Email address" hint="We email them a link to set a password." error={errors.email}>
+                  <input className="input" type="email" autoComplete="off" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                </Field>
+              </>
+            )}
+          </div>
+          <div className="panel panel-pad settings-panel">
+            <RolePicker
+              name="add-role"
+              roles={roleList}
+              activities={activities.data?.activities ?? []}
+              roleKey={form.roleKey}
+              activityId={form.activityId}
+              onChange={(roleKey, activityId) => setForm({ ...form, roleKey, activityId })}
+            />
+          </div>
+        </div>
+        <div className="save-bar">
+          <span className="save-bar-state">
+            {mode === 'existing' ? (picked ? picked.displayName : 'Choose someone') : form.displayName || 'Someone new'} as {selectedRole?.name ?? form.roleKey}
+          </span>
           <Link to={back.to} className="btn btn-secondary">
             Cancel
           </Link>
+          <Button type="submit" kind="primary" busy={busy} busyLabel="Adding…">
+            Add staff
+          </Button>
         </div>
       </form>
     </>

@@ -289,3 +289,186 @@
     display: none;
   }
 }
+
+/* ---------- Settings › Sections: one row per section ---------- */
+.sec-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.sec-table {
+  display: grid;
+  border: var(--border-width) solid var(--divider);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.sec-row {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(9rem, 1.4fr) minmax(7rem, 1fr) 7.5rem 5rem minmax(9rem, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+}
+.sec-row + .sec-row {
+  border-top: var(--border-width) solid var(--divider);
+}
+.sec-head {
+  min-height: 2.5rem;
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+.sec-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.sec-cell .input {
+  width: 100%;
+  min-height: 2.5rem;
+}
+.sec-label {
+  display: none;
+}
+.sec-toggle-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.sec-colour input[type='color'] {
+  flex: none;
+  width: 2.75rem;
+  height: 2.5rem;
+  padding: 2px;
+  border: var(--border-width) solid var(--border-control);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.sec-side {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  text-align: right;
+}
+@media (max-width: 899.98px) {
+  .sec-head {
+    display: none;
+  }
+  .sec-row {
+    grid-template-columns: 5.5rem minmax(0, 1fr) minmax(0, 1fr);
+    padding: var(--space-3) var(--space-4);
+  }
+  .sec-row > :first-child {
+    grid-row: span 2;
+    align-self: start;
+  }
+  .sec-cell {
+    display: grid;
+    gap: 2px;
+  }
+  .sec-colour {
+    grid-template-columns: auto 1fr;
+    align-items: center;
+  }
+  .sec-label {
+    display: block;
+    grid-column: 1 / -1;
+    color: var(--ink-3);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-bold);
+  }
+  .sec-side {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+  }
+}
+@media (max-width: 599.98px) {
+  .sec-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .sec-row > :first-child {
+    grid-row: auto;
+    grid-column: 1 / -1;
+  }
+}
+
+/* ---------- Settings › Banner ---------- */
+.banner-settings {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 44rem;
+}
+.banner-stage {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4);
+}
+.banner-stage .banner-preview {
+  max-width: none;
+}
+.banner-empty {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: var(--space-1);
+  aspect-ratio: 2 / 1;
+  width: 100%;
+  border: 2px dashed var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  text-align: center;
+}
+.banner-empty-name {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-heavy);
+}
+
+/* ---------- Staff ---------- */
+.staff-email {
+  font-size: var(--text-md);
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.role-cards {
+  display: grid;
+  gap: var(--space-2);
+}
+.role-cards .choice {
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--divider);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.role-cards .choice:has(input:checked) {
+  border-color: var(--brand);
+  background: var(--brand-tint);
+}
+.role-cards .choice .meta {
+  font-size: var(--text-sm);
+}
+.staff-picked {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: var(--border-width) solid var(--brand);
+  border-radius: var(--radius);
+  background: var(--brand-tint);
+}
+@media (min-width: 1024px) {
+  .settings-columns-even {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+.settings-panel > .field > legend.field-label {
+  margin-bottom: var(--space-2);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-heavy);
+}

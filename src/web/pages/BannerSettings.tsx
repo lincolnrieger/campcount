@@ -3,15 +3,15 @@ import { Navigate } from 'react-router';
 import { ApiFailure, api } from '../api';
 import { prepareImage } from '../lanyards/edit';
 import { useApi } from '../useApi';
-import { Button, Icon, LoadError, Loading, Notice, PageHeader, useConfirm, useToast } from '../ui';
+import { Banner, Button, Icon, LoadError, Loading, PageHeader, useConfirm, useToast } from '../ui';
 import { useEvent } from './EventLayout';
 
-type Banner = { url: string; width: number; height: number } | null;
+type BannerImage = { url: string; width: number; height: number } | null;
 
 /** Settings › Participant page banner: one graphic for this camp, across the top of everyone's page. */
 export function BannerSettings() {
   const { event, can, base } = useEvent();
-  const { data, error, loading, reload } = useApi<{ banner: Banner }>(can('event.configure') ? `/events/${event.id}/banner` : null);
+  const { data, error, loading, reload } = useApi<{ banner: BannerImage }>(can('event.configure') ? `/events/${event.id}/banner` : null);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const toast = useToast();
@@ -41,61 +41,68 @@ export function BannerSettings() {
       <PageHeader
         title="Participant page banner"
         back={back}
-        summary="A graphic for this camp, shown across the top of every participant’s page (the page their lanyard opens) instead of the camp’s name. A wide image works best, about 2 to 1."
+        summary="Wide image, about 2 to 1. PNG, JPEG or WebP."
+        help="Shown across the top of every participant’s page (the page their lanyard opens) instead of the camp’s name."
       />
       {loading && !data ? (
         <Loading what="the banner" rows={2} />
       ) : error ? (
         <LoadError error={error} onRetry={reload} what="the banner" />
       ) : (
-        <div className="form">
+        <div className="banner-settings">
           {problem && (
-            <Notice tone="error">
-              <p>{problem}</p>
-            </Notice>
+            <Banner tone="error" onDismiss={() => setProblem(null)}>
+              {problem}
+            </Banner>
           )}
-          {banner ? (
-            <img className="banner-preview" src={banner.url} width={banner.width} height={banner.height} alt={`${event.name} banner`} />
-          ) : (
-            <p className="meta">No banner yet. Participants see the camp’s name instead.</p>
-          )}
-          {editable && (
-            <div className="btn-row">
-              <label className={busy ? 'btn btn-primary is-busy' : 'btn btn-primary'}>
-                <Icon name="image" />
-                {busy ? 'Uploading…' : banner ? 'Replace banner' : 'Upload banner'}
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  className="visually-hidden"
-                  disabled={busy}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    e.target.value = '';
-                    if (file) void upload(file);
-                  }}
-                />
-              </label>
-              {banner && (
-                <Button
-                  kind="ghost"
-                  disabled={busy}
-                  onClick={async () => {
-                    if (!(await confirm({ title: 'Remove the banner?', body: <p>Participants will see the camp’s name instead.</p>, confirm: 'Remove', danger: true }))) return;
-                    try {
-                      await api(`/events/${event.id}/banner`, { method: 'DELETE' });
-                      await reload();
-                      toast('Banner removed');
-                    } catch (err) {
-                      setProblem(err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.');
-                    }
-                  }}
-                >
-                  Remove
-                </Button>
-              )}
-            </div>
-          )}
+          {!editable && <Banner>Locked while the event isn’t open.</Banner>}
+          <div className="panel banner-stage">
+            {banner ? (
+              <img className="banner-preview" src={banner.url} width={banner.width} height={banner.height} alt={`${event.name} banner`} />
+            ) : (
+              <div className="banner-empty">
+                <span className="banner-empty-name">{event.name}</span>
+                <span className="meta">No banner yet. Participants see the camp’s name.</span>
+              </div>
+            )}
+            {editable && (
+              <div className="btn-row">
+                <label className={busy ? 'btn btn-primary is-busy' : 'btn btn-primary'}>
+                  <Icon name="image" />
+                  {busy ? 'Uploading…' : banner ? 'Replace banner' : 'Upload banner'}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="visually-hidden"
+                    disabled={busy}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = '';
+                      if (file) void upload(file);
+                    }}
+                  />
+                </label>
+                {banner && (
+                  <Button
+                    kind="ghost"
+                    disabled={busy}
+                    onClick={async () => {
+                      if (!(await confirm({ title: 'Remove the banner?', body: <p>Participants will see the camp’s name instead.</p>, confirm: 'Remove', danger: true }))) return;
+                      try {
+                        await api(`/events/${event.id}/banner`, { method: 'DELETE' });
+                        await reload();
+                        toast('Banner removed');
+                      } catch (err) {
+                        setProblem(err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.');
+                      }
+                    }}
+                  >
+                    <Icon name="trash" /> Remove
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </>

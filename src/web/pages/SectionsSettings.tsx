@@ -5,14 +5,15 @@ import type { SectionSetting } from '../../shared/sections';
 import { textOn } from '../../shared/sections';
 import { ApiFailure, api } from '../api';
 import { useApi } from '../useApi';
-import { Button, Icon, Notice, PageHeader, plural, useToast } from '../ui';
+import { Badge, Banner, Button, Icon, PageHeader, Toggle, plural, useToast } from '../ui';
+import { SaveBar } from '../ui/EventSaveBar';
 import { useEvent } from './EventLayout';
 
 type Row = SectionSetting & { from?: string; id: string };
 
 const BUILT_IN_NOTE: Record<string, string> = {
-  Leaders: 'Built-in: Leaders, always adults',
-  Other: 'Built-in: anyone without a section',
+  Leaders: 'Built-in · adults',
+  Other: 'Built-in · no section',
 };
 
 /**
@@ -26,7 +27,8 @@ export function SectionsSettings() {
   const navigate = useNavigate();
   const toast = useToast();
   const roster = useApi<{ registrations: { section: string; status: string }[] }>(can('roster.view') ? `/events/${event.id}/registrations` : null);
-  const [rows, setRows] = useState<Row[]>(() => event.sections.map((s, i) => ({ ...s, from: s.name, id: `s${i}` })));
+  const [initial] = useState<Row[]>(() => event.sections.map((s, i) => ({ ...s, from: s.name, id: `s${i}` })));
+  const [rows, setRows] = useState<Row[]>(initial);
   const [failure, setFailure] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const back = { to: `${base}/settings`, label: 'Settings' };
@@ -36,6 +38,7 @@ export function SectionsSettings() {
   const counts = new Map<string, number>();
   for (const r of roster.data?.registrations ?? []) counts.set(r.section, (counts.get(r.section) ?? 0) + 1);
   const set = (id: string, patch: Partial<Row>) => setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  const dirty = JSON.stringify(rows) !== JSON.stringify(initial);
 
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -68,89 +71,98 @@ export function SectionsSettings() {
     }
   }
 
+  const addSection = (
+    <Button
+      small
+      onClick={() => setRows((rs) => [...rs, { id: `new${Date.now()}`, name: '', base: 'custom', word: '', colour: '#5A6770', youth: true }])}
+      disabled={!editable || busy}
+    >
+      <Icon name="plus" /> Add a section
+    </Button>
+  );
+
   return (
     <>
       <PageHeader
         title="Sections"
         back={back}
-        summary="Rename sections, set the word and colour on their lanyards, choose which count as youth, and add your own. Renaming a section moves everyone in it."
+        summary={`${plural(rows.length, 'section')} · ${plural(rows.filter((r) => r.base !== 'Leaders' && r.youth).length, 'youth section')}`}
+        help={
+          <>
+            Renaming a section moves everyone in it. Youth sections count as youth everywhere: reports, bookings and the Side Quest; everyone else is an adult. Imports file people
+            under the built-in sections, so a renamed one keeps working. Put someone in an added section from their People page or in Import &amp; check.
+          </>
+        }
+        primary={editable && addSection}
       />
-      <form className="form sections-form" onSubmit={save} noValidate>
-        {failure && (
-          <Notice tone="error">
-            <p>{failure}</p>
-          </Notice>
+      <form className="settings-form" onSubmit={save} noValidate>
+        {(!editable || failure) && (
+          <div className="banners">
+            {!editable && <Banner>Locked while the event isn’t open.</Banner>}
+            {failure && <Banner tone="error">{failure}</Banner>}
+          </div>
         )}
-        <fieldset className="form" disabled={!editable || busy}>
-          <ul className="list section-settings">
+        <fieldset className="sec-fieldset" disabled={!editable || busy}>
+          <div className="sec-table" role="table" aria-label="Sections">
+            <div className="sec-row sec-head" role="row">
+              <span role="columnheader">Lanyard</span>
+              <span role="columnheader">Name</span>
+              <span role="columnheader">Word on lanyards</span>
+              <span role="columnheader">Colour</span>
+              <span role="columnheader">Youth</span>
+              <span role="columnheader">
+                <span className="visually-hidden">Type and actions</span>
+              </span>
+            </div>
             {rows.map((r) => {
               const n = counts.get(r.from ?? '') ?? 0;
               const fg = textOn(r.colour);
+              const label = r.name || 'this section';
               return (
-                <li key={r.id} className="row section-setting">
-                  <span className="section-swatch" style={{ background: r.colour, color: fg }} aria-hidden="true">
-                    {r.word || '—'}
+                <div key={r.id} className="sec-row" role="row">
+                  <span role="cell">
+                    <span className="section-swatch" style={{ background: r.colour, color: fg }} aria-hidden="true">
+                      {r.word || '—'}
+                    </span>
                   </span>
-                  <div className="section-setting-fields">
-                    <label className="section-field">
-                      <span className="meta">Name</span>
-                      <input className="input" value={r.name} maxLength={40} onChange={(e) => set(r.id, { name: e.target.value })} />
-                    </label>
-                    <label className="section-field">
-                      <span className="meta">On lanyards</span>
-                      <input className="input" value={r.word} maxLength={20} placeholder="No word" onChange={(e) => set(r.id, { word: e.target.value })} />
-                    </label>
-                    <label className="section-field section-colour">
-                      <span className="meta">Colour</span>
-                      <input type="color" value={r.colour} onChange={(e) => set(r.id, { colour: e.target.value.toUpperCase() })} aria-label={`Colour for ${r.name || 'this section'}`} />
-                    </label>
-                    <label className="section-field section-youth">
-                      <input type="checkbox" checked={r.base !== 'Leaders' && r.youth} disabled={r.base === 'Leaders'} onChange={(e) => set(r.id, { youth: e.target.checked })} />
-                      <span>Youth</span>
-                    </label>
+                  <div role="cell" className="sec-cell">
+                    <span className="sec-label">Name</span>
+                    <input className="input" value={r.name} maxLength={40} onChange={(e) => set(r.id, { name: e.target.value })} aria-label={`Name of ${label}`} />
                   </div>
-                  <span className="section-setting-side">
+                  <div role="cell" className="sec-cell">
+                    <span className="sec-label">Word on lanyards</span>
+                    <input className="input" value={r.word} maxLength={20} placeholder="No word" onChange={(e) => set(r.id, { word: e.target.value })} aria-label={`Lanyard word for ${label}`} />
+                  </div>
+                  <div role="cell" className="sec-cell sec-colour">
+                    <span className="sec-label">Colour</span>
+                    <input type="color" value={r.colour} onChange={(e) => set(r.id, { colour: e.target.value.toUpperCase() })} aria-label={`Colour for ${label}`} />
+                    <span className="meta num">{r.colour}</span>
+                  </div>
+                  <span role="cell" className="sec-cell">
+                    <Toggle
+                      checked={r.base !== 'Leaders' && r.youth}
+                      disabled={r.base === 'Leaders'}
+                      onChange={(on) => set(r.id, { youth: on })}
+                      label={<span className="sec-toggle-label">Youth</span>}
+                    />
+                  </span>
+                  <span role="cell" className="sec-side">
                     <span className="meta">
-                      {r.base === 'custom' ? 'Added' : (BUILT_IN_NOTE[r.base] ?? `Built-in: ${r.base}`)}
-                      {r.from && roster.data ? ` · ${plural(n, 'person', 'people')}` : ''}
+                      {r.base === 'custom' ? <Badge tone="info">Added</Badge> : <span title={`Built-in: ${r.base}`}>{BUILT_IN_NOTE[r.base] ?? 'Built-in'}</span>}
+                      {r.from && roster.data ? <span className="sec-count"> · {plural(n, 'person', 'people')}</span> : ''}
                     </span>
                     {r.base === 'custom' && (
-                      <Button
-                        small
-                        kind="ghost"
-                        disabled={n > 0}
-                        aria-label={`Remove ${r.name || 'this section'}`}
-                        onClick={() => setRows((rs) => rs.filter((x) => x.id !== r.id))}
-                      >
-                        {n > 0 ? 'In use' : 'Remove'}
+                      <Button small kind="ghost" disabled={n > 0} aria-label={`Remove ${label}`} title={n > 0 ? 'People are in this section' : undefined} onClick={() => setRows((rs) => rs.filter((x) => x.id !== r.id))}>
+                        {n > 0 ? 'In use' : <Icon name="trash" size={18} />}
                       </Button>
                     )}
                   </span>
-                </li>
+                </div>
               );
             })}
-          </ul>
-          <div>
-            <Button
-              kind="ghost"
-              onClick={() => setRows((rs) => [...rs, { id: `new${Date.now()}`, name: '', base: 'custom', word: '', colour: '#5A6770', youth: true }])}
-            >
-              <Icon name="plus" /> Add a section
-            </Button>
           </div>
         </fieldset>
-        <p className="meta">
-          Youth sections count as youth everywhere: reports, bookings and the Side Quest. Everyone else is an adult. Imports file people under the built-in sections, so a
-          renamed one keeps working. Choose an added section for someone on their People page or in Import & check.
-        </p>
-        {editable && (
-          <div className="btn-row">
-            <Button type="submit" kind="primary" busy={busy} busyLabel="Saving…">
-              Save sections
-            </Button>
-            <Button onClick={() => navigate(back.to)}>Cancel</Button>
-          </div>
-        )}
+        {editable && <SaveBar dirty={dirty} busy={busy} saveLabel="Save sections" onCancel={() => navigate(back.to)} />}
       </form>
     </>
   );
