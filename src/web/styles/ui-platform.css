@@ -1,1 +1,422 @@
 /* Organiser pages (platform): layout for the UI rework. Uses the shared kit (kit.css). */
+
+/* ---------- Layout ---------- */
+.pf-stack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  min-width: 0;
+}
+.pf-split {
+  display: grid;
+  gap: var(--space-4);
+  align-items: start;
+}
+@media (min-width: 1024px) {
+  .pf-split {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-5);
+  }
+  .pf-split-wide {
+    grid-template-columns: minmax(0, 3fr) minmax(18rem, 2fr);
+  }
+}
+.pf-account {
+  max-width: 62rem;
+}
+.pf-nowrap {
+  white-space: nowrap;
+}
+
+/* ---------- Panels ---------- */
+.pf-panel {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  border: var(--border-width) solid var(--divider);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+@media (max-width: 599.98px) {
+  .pf-panel {
+    padding: var(--space-4);
+  }
+}
+.pf-panel-title {
+  margin: 0;
+  padding: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-heavy);
+  letter-spacing: var(--tracking-tight);
+}
+/* A legend sits on the border by default: put it inside the panel like a heading. */
+legend.pf-panel-title {
+  float: left;
+  width: 100%;
+}
+legend.pf-panel-title + * {
+  clear: both;
+}
+.pf-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.pf-panel-head .pf-panel-title {
+  flex: 1;
+}
+
+/* Rows of links inside a panel: no outer box, hairlines between. */
+.pf-links {
+  margin: 0 calc(var(--space-5) * -1) calc(var(--space-3) * -1);
+  border-top: var(--border-width) solid var(--divider);
+}
+@media (max-width: 599.98px) {
+  .pf-links {
+    margin-inline: calc(var(--space-4) * -1);
+  }
+}
+.pf-links > li + li {
+  border-top: var(--border-width) solid var(--divider);
+}
+.pf-links .row {
+  padding-inline: var(--space-5);
+}
+.pf-links .row > .icon:first-child {
+  flex: none;
+  color: var(--brand);
+}
+
+/* ---------- Forms ---------- */
+.pf-form {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.pf-form-grid {
+  display: grid;
+  gap: var(--space-4) var(--space-5);
+  align-items: start;
+}
+@media (min-width: 1440px) {
+  .pf-form-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+.pf-panel .field-pair {
+  gap: var(--space-4);
+}
+.pf-toggles {
+  display: grid;
+  gap: var(--space-2);
+}
+
+/* Save / create: stays in reach at the bottom of long forms. */
+.pf-actionbar {
+  position: sticky;
+  bottom: 0;
+  z-index: var(--z-sticky);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin: 0 calc(var(--space-2) * -1);
+  padding: var(--space-3) var(--space-2);
+  border-top: var(--border-width) solid var(--divider);
+  background: color-mix(in srgb, var(--canvas) 94%, transparent);
+  backdrop-filter: blur(6px);
+}
+@media (max-width: 1023.98px) {
+  /* Phones and tablets: the page's own primary action bar is already pinned here. */
+  .pf-actionbar {
+    position: static;
+    margin: 0;
+    padding: var(--space-2) 0 0;
+    border-top: 0;
+    background: none;
+    backdrop-filter: none;
+  }
+}
+.pf-dirty {
+  margin-left: auto;
+  color: var(--warning-fg);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+
+/* ---------- Lists and tables ---------- */
+.pf-group-count {
+  margin-left: var(--space-1);
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.table .pf-group-row th {
+  height: auto;
+  padding-top: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-top: var(--border-width) solid var(--divider);
+  background: var(--canvas);
+  color: var(--ink-2);
+}
+.pf-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.pf-row-actions > .btn,
+.row-side > .btn {
+  white-space: nowrap;
+}
+.pf-table td {
+  height: 3rem;
+}
+
+/* ---------- Admin index ---------- */
+.pf-cards {
+  display: grid;
+  gap: var(--space-3);
+}
+@media (min-width: 768px) {
+  .pf-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.pf-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 5rem;
+  padding: var(--space-4);
+  border: var(--border-width) solid var(--divider);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  transition: border-color var(--duration) var(--ease);
+}
+.pf-card:hover {
+  border-color: var(--border-soft);
+  background: var(--surface);
+}
+.pf-card-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: var(--radius);
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+.pf-card:has(.row-title a:focus-visible) {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* ---------- Activity log ---------- */
+.pf-log-day {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: 0;
+}
+@media (min-width: 1024px) {
+  /* Below the sticky toolbar. */
+  .pf-log-day {
+    top: 3.75rem;
+  }
+}
+.pf-log section:first-child .pf-log-day {
+  border-top-left-radius: calc(var(--radius-lg) - var(--border-width));
+  border-top-right-radius: calc(var(--radius-lg) - var(--border-width));
+}
+.pf-log-row {
+  display: grid;
+  grid-template-columns: 5.5rem 1.5rem minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-1) var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-top: var(--border-width) solid var(--divider);
+}
+.pf-log ol > .pf-log-row:first-child {
+  border-top: 0;
+}
+.pf-log-time {
+  padding-top: 2px;
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+.pf-log-kind {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--ink-2);
+}
+.pf-log-kind-scan {
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+.pf-log-text {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.pf-log-meta {
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+}
+.pf-log .log-person {
+  min-height: 0;
+}
+.pf-log-row.is-muted .pf-log-text > span:first-child {
+  color: var(--ink-2);
+}
+@media (max-width: 599.98px) {
+  .pf-log-row {
+    grid-template-columns: 1.5rem minmax(0, 1fr);
+    padding-inline: var(--space-3);
+  }
+  .pf-log-time {
+    grid-column: 2;
+    grid-row: 1;
+    padding: 0;
+  }
+  .pf-log-kind {
+    grid-row: 1 / span 2;
+  }
+  .pf-log-text {
+    grid-column: 2;
+  }
+  .pf-log-badge {
+    grid-column: 2;
+  }
+}
+
+/* ---------- Header controls ---------- */
+.pf-create {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.pf-create .select {
+  width: auto;
+}
+@media (max-width: 1023.98px) {
+  .pf-create {
+    flex-wrap: nowrap;
+  }
+  .pf-create .select {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .pf-create .btn {
+    flex: none;
+  }
+}
+.pf-inline-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+.pf-inline-field .select {
+  width: auto;
+  min-width: 14rem;
+  max-width: 100%;
+}
+
+/* ---------- Danger ---------- */
+.pf-danger {
+  border-color: var(--error-border);
+}
+.pf-danger .pf-panel-title {
+  font-size: var(--text-base);
+}
+.pf-danger-text {
+  color: var(--error-fg);
+}
+
+/* ---------- Accounts ---------- */
+.pf-person {
+  display: grid;
+  min-width: 0;
+}
+.pf-person .meta {
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+.pf-sort-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.pf-table .badges {
+  flex-wrap: nowrap;
+}
+@media (min-width: 1024px) {
+  /* Wide screens: the details sit on the same line as the sentence. */
+  .pf-log-text {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 var(--space-3);
+  }
+  .pf-log-row {
+    padding-block: 6px;
+  }
+}
+@media (max-width: 599.98px) {
+  /* Phones: a wrapped toolbar is too tall to keep on screen. */
+  .pf-stack > .toolbar-sticky {
+    position: static;
+    backdrop-filter: none;
+    background: none;
+  }
+}
+@media (max-width: 1023.98px) {
+  .pf-log-day {
+    top: var(--topbar-h, 0px);
+  }
+}
+.pf-links + * {
+  margin-top: var(--space-3);
+}
+
+/* An open ⋯ menu floats over the buttons in the rows below it. */
+.pf-stack .menu:has(> [aria-expanded='true']) {
+  z-index: var(--z-overlay);
+}
+.pf-stack .list > .list-group-heading:first-child,
+.pf-stack .list > section:first-child > .list-group-heading {
+  border-top-left-radius: calc(var(--radius-lg) - var(--border-width));
+  border-top-right-radius: calc(var(--radius-lg) - var(--border-width));
+}
+@media (max-width: 599.98px) {
+  /* Phones: filter chips scroll sideways in one row. */
+  .pf-stack .toolbar .chips {
+    flex-wrap: nowrap;
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .pf-stack .toolbar .chip {
+    flex: none;
+  }
+  .pf-stack .row > .badges {
+    flex-direction: column;
+    align-items: flex-end;
+  }
+}
