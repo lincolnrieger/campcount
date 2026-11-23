@@ -176,6 +176,23 @@ export const dietarySignature = (p: Linked) => {
   return meaningful([n.myscout, n.consent2go]).join('\u0000');
 };
 
+/** Consent2Go's answer when there's nothing to declare. Only this exact text counts. */
+export const CONSENT2GO_NONE = 'None; None';
+export const consent2GoSaysNone = (p: Linked) => p.cg !== undefined && p.cg.dietaryText.trim() === CONSENT2GO_NONE;
+
+/**
+ * Safe to record "No dietary needs" without reading: Consent2Go says exactly
+ * "None; None", MyScout says nothing (empty, or "Nil" and the like), and the
+ * roster has no dietary needs recorded. Anything from MyScout or already on
+ * the roster means a person reads it: this never replaces what's there.
+ */
+export function autoNoDietary(p: Linked, rosterEntries: readonly unknown[] | undefined): boolean {
+  if (!consent2GoSaysNone(p)) return false;
+  if (rosterEntries === undefined || rosterEntries.length > 0) return false;
+  const ms = p.ms?.dietaryText.trim() ?? '';
+  return ms === '' || saysNothing(ms);
+}
+
 /** A short fingerprint of a note (to tell notes apart without keeping them on the server). */
 export function noteHash(text: string): string {
   let h1 = 0xdeadbeef;

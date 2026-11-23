@@ -3,6 +3,7 @@ import { csvCell } from '../../shared/csv';
 import { suggestDietary } from '../../shared/dietarySuggest';
 import type { Linked, RosterPerson, Section as SectionName } from '../../shared/localIntake';
 import {
+  autoNoDietary,
   autoSection,
   buildRow,
   checkedNotes,
@@ -205,7 +206,23 @@ export function Intake() {
         };
       }
 
-      update((l) => ({ ...l, files: next, changes, seen: [...seen], removed }));
+      // Consent2Go says exactly "None; None" and there's nothing from MyScout or on the roster: record no dietary needs.
+      // Never when MyScout says anything or something is already recorded (they stay to be read).
+      const dietaryDone: Record<string, string> = {};
+      let markedNone = 0;
+      if (context.data?.dietaryEnabled && context.data.canEditDietary) {
+        const regNow = new Map(fresh.map((r) => [memberKey(r.memberNumber), r]));
+        for (const p of after) {
+          const r = regNow.get(p.key);
+          if (!r || r.status !== 'active' || !autoNoDietary(p, r.dietary)) continue;
+          if (dietaryIsDone(p, old.dietaryDone[p.key], r.dietaryChecked)) continue;
+          await api(`/events/${event.id}/registrations/${r.id}/dietary`, { method: 'PUT', body: { entries: [], checkedNotes: checkedNotes(p) } });
+          dietaryDone[p.key] = dietarySignature(p);
+          markedNone++;
+        }
+      }
+
+      update((l) => ({ ...l, files: next, changes, seen: [...seen], removed, dietaryDone: { ...l.dietaryDone, ...dietaryDone } }));
       await registrations.reload();
       setSummary(
         [
@@ -213,6 +230,7 @@ export function Intake() {
           `${totals.create} added, ${totals.unchanged + totals.update} already on the roster.`,
           changed ? `${plural(changed, 'person has', 'people have')} changed details to review.` : '',
           gone.length ? `${plural(gone.length, 'person', 'people')} taken off (in neither file now).` : '',
+          markedNone ? `${plural(markedNone, 'person', 'people')} marked “No dietary needs” (Consent2Go said None; None and MyScout had nothing).` : '',
         ]
           .filter(Boolean)
           .join(' '),
