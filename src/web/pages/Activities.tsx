@@ -51,8 +51,6 @@ export function Activities() {
           ? [
               editable && { label: 'Import programme', to: `${base}/activities/import` },
               { label: 'Schedule', to: `${base}/schedule` },
-              { label: 'Sign-up kiosk and posters', to: `${base}/activities/signup` },
-              { label: 'Booking links', to: `${base}/activities/links` },
             ]
           : undefined
       }
