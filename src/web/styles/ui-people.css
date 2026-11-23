@@ -311,3 +311,123 @@
   height: auto;
   padding: var(--space-1) var(--space-3);
 }
+
+/* ---------- Import with column matching ---------- */
+.import-page {
+  gap: var(--space-5);
+}
+.import-source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+.import-source .field-label {
+  margin: 0;
+}
+.import-privacy {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.map-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: var(--space-2) var(--space-4);
+}
+.map-item {
+  display: grid;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  border: var(--border-width) solid var(--divider);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.map-item.is-unset {
+  background: transparent;
+}
+.map-item.is-missing {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+.map-label {
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+}
+.map-item .select {
+  min-height: 2.5rem;
+}
+.map-sample {
+  overflow: hidden;
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.other-columns-legend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+}
+.other-columns-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0 var(--space-4);
+}
+.import-withdraw {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.import-problems {
+  display: grid;
+  gap: var(--space-2);
+}
+.import-problems .problem-list {
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-6);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: var(--text-md);
+}
+.import-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+.import-tabs .row {
+  min-height: 2.75rem;
+}
+.review-item {
+  padding: var(--space-4);
+}
+.review-item.is-done {
+  border-color: var(--success-border);
+}
+.nothing-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-base);
+  font-weight: var(--weight-heavy);
+}
+@media (min-width: 1024px) {
+  .review-list {
+    grid-template-columns: repeat(auto-fill, minmax(26rem, 1fr));
+    align-items: start;
+  }
+}
+
+/* ---------- Dietary editor (admin) ---------- */
+.dietary-editor .dietary-row {
+  min-height: 2.75rem;
+  padding-top: var(--space-1);
+  padding-bottom: var(--space-1);
+}
+.dietary-editor .quick-picks .chip {
+  min-height: 2.25rem;
+}
+.dietary-editor details.more-options > summary {
+  min-height: 2.25rem;
+}

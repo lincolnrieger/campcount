@@ -43,14 +43,6 @@
   width: auto;
   max-width: 20rem;
 }
-.import-tiles-4 {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-@media (min-width: 600px) {
-  .import-tiles-4 {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
 .problem-list {
   display: grid;
   gap: var(--space-1);
@@ -107,16 +99,6 @@
 }
 
 /* ---------- People list selection ---------- */
-.select-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  background: var(--warning-bg);
-  border: var(--border-width) solid var(--warning-border);
-  border-radius: var(--radius);
-}
 .cell-check {
   width: 1%;
 }
@@ -171,48 +153,6 @@
   width: 100%;
   font-size: var(--text-sm);
 }
-
-/* Import: where the file is from */
-.source-choice {
-  display: grid;
-  gap: var(--space-2);
-  margin: 0 0 var(--space-4);
-  padding: 0;
-  border: 0;
-  max-width: var(--form-max);
-}
-.source-choice legend {
-  margin-bottom: var(--space-2);
-}
-.source-option {
-  position: relative;
-  display: flex;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  border: var(--border-width) solid var(--divider);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  cursor: pointer;
-}
-.source-option input {
-  width: var(--icon);
-  height: var(--icon);
-  margin: 2px 0 0;
-  flex: none;
-}
-.source-option .choice-text {
-  font-weight: var(--weight-bold);
-}
-.source-option .meta {
-  display: block;
-  font-weight: var(--weight-regular);
-}
-.source-option:has(input:checked) {
-  border-color: var(--brand);
-  background: var(--brand-tint);
-  box-shadow: inset 0 0 0 1px var(--brand);
-}
-
 
 /* ---------- Import & check ---------- */
 .intake-sources {
