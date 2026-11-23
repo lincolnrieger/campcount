@@ -4,8 +4,13 @@
 .people-list {
   gap: var(--space-3);
 }
+.people-list > * {
+  min-width: 0;
+}
 .people-list .toolbar > .chips {
   flex-basis: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 .people-list .toolbar-count {
   margin: 0;

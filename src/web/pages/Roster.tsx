@@ -318,7 +318,7 @@ export function Roster() {
             </Banner>
           )}
           <Toolbar sticky label="Search and filter people">
-            <SearchField id="people-q" label="Search name, member number or lanyard code" placeholder="Search name, number or code" value={query} onChange={setQuery} slash />
+            <SearchField id="people-q" label="Search name, member number or lanyard code" placeholder="Search people" value={query} onChange={setQuery} slash />
             {moreFilters}
             <div className="toolbar-end">
               <p className="toolbar-count" aria-live="polite">
