@@ -818,3 +818,17 @@
     height: var(--control);
   }
 }
+
+/* Print: when each lanyard was issued and printed */
+.print-person-main {
+  display: grid;
+  min-width: 0;
+  padding: var(--space-1) 0;
+}
+.print-person-dates {
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+}
+.print-new {
+  color: var(--warning-fg);
+}

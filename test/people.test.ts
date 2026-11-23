@@ -124,6 +124,24 @@ describe('a person on the event', () => {
     expect((await api(path, { cookie: scanner.cookie, method: 'PATCH', body: { groupName: 'x' } })).status).toBe(403);
   });
 
+  it('records when each lanyard was issued and printed', async () => {
+    const c = await camp();
+    const print = async () => (await json(await api(`/events/${c.eventId}/credentials/print`, { cookie: c.manager.cookie, body: {} }))).cards as { registrationId: string; issuedAt: string; printedAt: string | null }[];
+    const first = await print();
+    expect(first.every((x) => x.issuedAt && x.printedAt === null)).toBe(true);
+    const id = c.card('100').registrationId;
+    const mark = (printed: boolean) => api(`/events/${c.eventId}/credentials/printed`, { cookie: c.manager.cookie, body: { registrationIds: [id], printed } });
+    expect((await mark(true)).status).toBe(200);
+    const after = await print();
+    expect(after.find((x) => x.registrationId === id)!.printedAt).toMatch(/^20/);
+    expect(after.filter((x) => x.registrationId !== id).every((x) => x.printedAt === null)).toBe(true);
+    await mark(false);
+    expect((await print()).find((x) => x.registrationId === id)!.printedAt).toBeNull();
+    const scanner = await createUser();
+    await grant(scanner.id, 'scanner', c.eventId);
+    expect((await api(`/events/${c.eventId}/credentials/printed`, { cookie: scanner.cookie, body: { registrationIds: [id], printed: true } })).status).toBe(403);
+  });
+
   it('keeps which dietary notes were read (fingerprints only) on the roster', async () => {
     const c = await camp();
     const id = c.card('100').registrationId;

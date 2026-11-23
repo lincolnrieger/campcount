@@ -15,7 +15,13 @@ import { CardThumb } from './LanyardDesigner';
 
 interface Card extends CardPerson {
   registrationId: string;
+  /** When this lanyard was issued (a reissued one is new). */
+  issuedAt: string;
+  /** When its PDF was last downloaded for printing, or null. */
+  printedAt: string | null;
 }
+
+const stamp = (iso: string) => new Date(iso).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 
 /** Design | Print, at the top of both lanyard pages. */
 export function LanyardTabs({ base, current }: { base: string; current: 'design' | 'print' }) {
@@ -52,6 +58,8 @@ export function LanyardPrint() {
   const [query, setQuery] = useState('');
   const [group, setGroup] = useState('');
   const [onlyNoPhotos, setOnlyNoPhotos] = useState(false);
+  const [onlyUnprinted, setOnlyUnprinted] = useState(false);
+  const [sort, setSort] = useState<'group' | 'newest' | 'oldest'>('group');
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [progress, setProgress] = useState<number | null>(null);
   const [redraw, setRedraw] = useState(0);
@@ -81,9 +89,16 @@ export function LanyardPrint() {
   }, [load]);
 
   const groups = useMemo(() => [...new Set((cards ?? []).map((c) => c.groupName))].filter(Boolean).sort(), [cards]);
-  const shown = (cards ?? []).filter(
-    (c) => (!group || c.groupName === group) && (!onlyNoPhotos || c.noPhotos) && (!query || `${c.name} ${c.shortCode}`.toLowerCase().includes(query.toLowerCase())),
-  );
+  const shown = (cards ?? [])
+    .filter(
+      (c) =>
+        (!group || c.groupName === group) &&
+        (!onlyNoPhotos || c.noPhotos) &&
+        (!onlyUnprinted || !c.printedAt) &&
+        (!query || `${c.name} ${c.shortCode}`.toLowerCase().includes(query.toLowerCase())),
+    )
+    .sort((a, b) => (sort === 'group' ? 0 : (sort === 'newest' ? b.issuedAt.localeCompare(a.issuedAt) : a.issuedAt.localeCompare(b.issuedAt)) || a.name.localeCompare(b.name)));
+  const unprintedCount = (cards ?? []).filter((c) => !c.printedAt).length;
   const selected = shown.filter((c) => !excluded.has(c.registrationId));
   const noPhotoCount = (cards ?? []).filter((c) => c.noPhotos).length;
 
@@ -95,6 +110,12 @@ export function LanyardPrint() {
     } catch (err) {
       toast(err instanceof ApiFailure ? err.message : 'No connection. Try again.', { tone: 'error' });
     }
+  }
+
+  async function markPrinted(ids: string[], printed: boolean) {
+    const res = await api<{ printedAt: string | null }>(`/events/${event.id}/credentials/printed`, { body: { registrationIds: ids, printed } });
+    const set = new Set(ids);
+    setCards((prev) => prev && prev.map((c) => (set.has(c.registrationId) ? { ...c, printedAt: res.printedAt } : c)));
   }
 
   async function download() {
@@ -111,7 +132,10 @@ export function LanyardPrint() {
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      toast(`PDF ready: ${selected.length} lanyard${selected.length === 1 ? '' : 's'}. Print at 100% (actual size).`);
+      // Downloaded for printing: mark them printed, so later registrations stand out.
+      const ids = selected.map((c) => c.registrationId);
+      await markPrinted(ids, true).catch(() => undefined);
+      toast(`PDF ready: ${selected.length} lanyard${selected.length === 1 ? '' : 's'}, marked as printed. Print at 100% (actual size).`);
     } catch {
       toast('The PDF couldn’t be made. Try fewer lanyards at a time.', { tone: 'error' });
     } finally {
@@ -272,6 +296,15 @@ export function LanyardPrint() {
                     ))}
                   </select>
                 )}
+                <label className="choice">
+                  <input type="checkbox" checked={onlyUnprinted} onChange={(e) => setOnlyUnprinted(e.target.checked)} />
+                  <span className="choice-text">Only lanyards not printed yet ({unprintedCount})</span>
+                </label>
+                <select className="select" aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
+                  <option value="group">Sort by group and name</option>
+                  <option value="newest">Sort by issue date, newest first</option>
+                  <option value="oldest">Sort by issue date, oldest first</option>
+                </select>
                 {noPhotoCount > 0 && (
                   <label className="choice">
                     <input type="checkbox" checked={onlyNoPhotos} onChange={(e) => setOnlyNoPhotos(e.target.checked)} />
@@ -289,12 +322,30 @@ export function LanyardPrint() {
                     None
                   </Button>
                 </div>
+                {selected.some((c) => c.printedAt) && (
+                  <Button
+                    small
+                    kind="ghost"
+                    onAction={async () => {
+                      const ids = selected.filter((c) => c.printedAt).map((c) => c.registrationId);
+                      await markPrinted(ids, false);
+                      toast(`${ids.length} marked as not printed`);
+                    }}
+                  >
+                    Mark chosen as not printed
+                  </Button>
+                )}
                 <ul className="print-people">
                   {shown.map((c) => (
                     <li key={c.registrationId}>
                       <label className="print-person">
                         <input type="checkbox" checked={!excluded.has(c.registrationId)} onChange={() => toggle(c.registrationId)} />
-                        <span className="print-person-name">{c.name}</span>
+                        <span className="print-person-main">
+                          <span className="print-person-name">{c.name}</span>
+                          <span className="print-person-dates">
+                            Issued {stamp(c.issuedAt)} · {c.printedAt ? `Printed ${stamp(c.printedAt)}` : <strong className="print-new">Not printed</strong>}
+                          </span>
+                        </span>
                         <span className="meta">{c.groupName}</span>
                       </label>
                     </li>
