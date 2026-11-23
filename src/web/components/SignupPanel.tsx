@@ -56,6 +56,8 @@ export interface SideQuestStanding {
 
 export interface CollectResult {
   fresh: boolean;
+  /** A leader's lanyard: leaders aren't in the game. */
+  leader?: boolean;
   friend: { firstName: string; section: string; kind?: 'youth' | 'adult'; sectionWord: string; sectionColour?: string };
   owner: { firstName: string };
   standing: SideQuestStanding;

@@ -100,13 +100,17 @@ export async function standing(db: D1Database, eventId: string, registrationId: 
     db
       .prepare(
         `SELECT r.id, r.kind, r.section, p.first_name, p.preferred_name, p.last_name FROM registrations r JOIN people p ON p.id = r.person_id
-          WHERE r.event_id = ? AND r.status = 'active'`,
+          WHERE r.event_id = ? AND r.status = 'active' AND r.kind = 'youth'`,
       )
       .bind(eventId)
       .all<{ id: string; kind: string; section: string; first_name: string; preferred_name: string; last_name: string }>(),
     db.prepare(`SELECT collected_id FROM side_quest_collections WHERE collector_id = ?`).bind(registrationId).all<{ collected_id: string }>(),
     db
-      .prepare(`SELECT collector_id, count(*) AS n FROM side_quest_collections WHERE event_id = ? GROUP BY collector_id`)
+      .prepare(
+        `SELECT c.collector_id, count(*) AS n FROM side_quest_collections c
+           JOIN registrations b ON b.id = c.collected_id AND b.kind = 'youth' AND b.status = 'active'
+          WHERE c.event_id = ? GROUP BY c.collector_id`,
+      )
       .bind(eventId)
       .all<{ collector_id: string; n: number }>(),
   ]);
@@ -114,11 +118,11 @@ export async function standing(db: D1Database, eventId: string, registrationId: 
   const got = new Set(mine.results.map((r) => r.collected_id).filter((id) => byId.has(id)));
   const others = people.results.filter((p) => p.id !== registrationId);
 
-  // Quests: everyone in each of the camp's sections, with adults (leaders and the event team) as one.
+  // Quests: everyone in each youth section. Only young people play.
   const sections = await loadSections(db, eventId);
-  const groupOf = (p: { kind: string; section: string }) => (p.kind === 'adult' ? 'leaders' : p.section.toLowerCase());
+  const groupOf = (p: { kind: string; section: string }) => p.section.toLowerCase();
   const quests: Quest[] = [];
-  const keys = [...sections.filter((s) => s.youth && s.base !== 'Other').map((s) => ({ key: s.name.toLowerCase(), label: s.name })), { key: 'leaders', label: 'Leaders and the event team' }];
+  const keys = sections.filter((s) => s.youth && s.base !== 'Other').map((s) => ({ key: s.name.toLowerCase(), label: s.name }));
   for (const { key, label } of keys) {
     const inGroup = others.filter((p) => groupOf(p) === key);
     if (inGroup.length === 0) continue;

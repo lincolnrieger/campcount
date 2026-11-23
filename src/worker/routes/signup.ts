@@ -253,7 +253,7 @@ async function programme(db: D1Database, eventId: string) {
 async function personView(c: AppContext, base: Person, opts: { sideQuest?: boolean; reduced?: boolean; mask?: number } = {}) {
   const p = opts.reduced ? { ...base, reduced: true, mask: opts.mask ?? base.mask } : base;
   const on = (f: LinkFeature) => hasFeature(p.mask, f);
-  const sideQuestOn = opts.sideQuest === true && p.event.feature_side_quest === 1;
+  const sideQuestOn = opts.sideQuest === true && p.event.feature_side_quest === 1 && p.kind === 'youth';
   const [list, booked, programmeList, teams, done, quest, duties, banner] = await Promise.all([
     sessions(c.env.DB, p.event.id),
     c.env.DB.prepare(
@@ -381,13 +381,16 @@ publicSignupRoutes.post('/identify', async (c) => {
   const mine = me && me.registrationId === person.registrationId;
   const someoneElse = me && !mine && (await meIsValid(c.env.DB, me, person.event.id));
 
-  if (someoneElse && person.event.feature_side_quest === 1) {
-    const fresh = await collect(c.env.DB, person.event.id, me.registrationId, person.registrationId);
-    const owner = await personFor(c, me).catch(() => null);
-    if (owner) {
+  // The game is for young people: only youth collect, and only youth can be collected.
+  const owner = someoneElse && person.event.feature_side_quest === 1 ? await personFor(c, me).catch(() => null) : null;
+  if (owner && owner.kind === 'youth') {
+    const fresh = person.kind === 'youth' && (await collect(c.env.DB, person.event.id, me!.registrationId, person.registrationId));
+    {
       return c.json({
         collect: {
           fresh,
+          // A leader's lanyard: not part of the game.
+          ...(person.kind !== 'youth' ? { leader: true } : {}),
           friend: { firstName: person.firstName, section: person.section, kind: person.kind, sectionWord: styleOf(person).word, sectionColour: styleOf(person).bg },
           owner: { firstName: owner.firstName },
           standing: await standing(c.env.DB, person.event.id, owner.registrationId),

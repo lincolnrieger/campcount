@@ -863,22 +863,13 @@ function Food({ meals, tz, pass }: { meals: ProgrammeItem[]; tz: string; pass: s
 function QuestCard({ quest }: { quest: SideQuestStanding }) {
   return (
     <section className="pp-quest" aria-labelledby="quest-h">
-      <div className="pp-quest-head">
-        <h2 id="quest-h">Super Splash Side Quest</h2>
-        {quest.rank !== null && <span className="pp-rank">{ordinal(quest.rank)} of {quest.players}</span>}
-      </div>
+      <h2 id="quest-h">Side Quest</h2>
       <p className="pp-quest-big">
         <span className="pp-num">{quest.collected}</span>
-        <span>
-          friend{quest.collected === 1 ? '' : 's'} collected
-          <small>
-            {quest.collected} of {quest.total} at camp
-          </small>
-        </span>
+        <span>of {quest.total}</span>
       </p>
       <QuestList quests={quest.quests} />
       {quest.board.length > 1 && <Board board={quest.board} />}
-      <p className="pp-quest-hint">Scan someone’s lanyard with your phone camera to collect them.</p>
     </section>
   );
 }
@@ -890,7 +881,7 @@ function QuestList({ quests, highlight }: { quests: SideQuestStanding['quests'];
         <li key={q.key} className={[q.done && 'is-done', highlight === q.key && 'is-highlight'].filter(Boolean).join(' ')}>
           <span className="pp-quest-name">
             {q.done ? <Icon name="check" size={18} /> : null}
-            {q.done ? `Collected every one: ${q.label}` : `Collect all ${q.label}`}
+            {q.label}
           </span>
           <span className="pp-num pp-quest-count">
             {q.collected}/{q.total}
@@ -960,6 +951,21 @@ function CollectScreen({ result, onDone, onMine }: { result: CollectResult; onDo
     return () => cancelAnimationFrame(raf);
   }, [result.fresh, s.collected, reduced]);
 
+  if (result.leader) {
+    return (
+      <div className="pp pp-repeat" role="dialog" aria-modal="true" aria-labelledby="repeat-h">
+        <div className="pp-sheet">
+          <p className="pp-sheet-lead" id="repeat-h">
+            Leaders aren’t in the Side Quest
+          </p>
+          <button ref={done} type="button" className="pp-btn" onClick={onDone}>
+            Keep collecting
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!result.fresh) {
     return (
       <div className="pp pp-repeat" role="dialog" aria-modal="true" aria-labelledby="repeat-h">
@@ -968,9 +974,6 @@ function CollectScreen({ result, onDone, onMine }: { result: CollectResult; onDo
             Bah bahhhh!
           </p>
           <p className="pp-sheet-lead">You’ve already collected {result.friend.firstName}.</p>
-          <p className="pp-muted">
-            {s.total - s.collected > 0 ? `${s.total - s.collected} still to find. Go and collect someone new.` : 'You’ve collected everyone at camp. Legend.'}
-          </p>
           <button ref={done} type="button" className="pp-btn" onClick={onDone}>
             Keep collecting
           </button>
@@ -983,7 +986,6 @@ function CollectScreen({ result, onDone, onMine }: { result: CollectResult; onDo
   }
 
   const colour = result.friend.sectionColour ?? sectionColours(result.friend.sectionWord).bg;
-  const first = s.collected === 1;
   return (
     <div className={milestone ? 'pp pp-collect is-milestone' : 'pp pp-collect'} role="dialog" aria-modal="true" aria-labelledby="splash-h">
       <div className="pp-collect-body">
@@ -997,19 +999,11 @@ function CollectScreen({ result, onDone, onMine }: { result: CollectResult; onDo
             <span className="pp-card-no pp-num">No. {s.collected}</span>
           </div>
         </div>
-        <p className="pp-collect-kicker">{first ? 'You found the Super Splash Side Quest' : 'Super Splash Side Quest'}</p>
         <h1 id="splash-h">You collected {result.friend.firstName}</h1>
         <p className="pp-collect-count" aria-live="polite">
           <span className="pp-num">{shown}</span>
-          <span>of {s.total} collected</span>
+          <span>of {s.total}</span>
         </p>
-        {s.rank !== null && <p className="pp-collect-rank">{ordinal(s.rank)} on the leaderboard</p>}
-        {quest && (
-          <div className="pp-splash-quest">
-            <QuestList quests={[quest]} highlight={quest.key} />
-          </div>
-        )}
-        {first && <p className="pp-splash-hint">Scan another lanyard with your phone camera to add them. Keep it quiet, or don’t.</p>}
         <button ref={done} type="button" className="pp-btn pp-btn-sun" onClick={onDone}>
           Keep collecting
         </button>
