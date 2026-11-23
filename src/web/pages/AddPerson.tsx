@@ -11,8 +11,7 @@ const FIELD_LABEL: Record<string, string> = { firstName: 'pf-first', lastName: '
 
 /** People › Add person: one person by hand. They go straight on the event with a lanyard. */
 export function AddPerson() {
-  const { event } = useEvent();
-  const { base: eventBase } = useEvent();
+  const { event, base: eventBase } = useEvent();
   const navigate = useNavigate();
   const toast = useToast();
   const [person, setPerson] = useState<PersonForm>(EMPTY_PERSON);
@@ -53,7 +52,7 @@ export function AddPerson() {
 
   return (
     <>
-      <PageHeader title="Add person" back={{ to: people, label: 'People' }} summary="They join the event straight away and get a lanyard. For lots of people, import from MyScout instead." />
+      <PageHeader title="Add person" back={{ to: people, label: 'People' }} help="They join the event straight away with a lanyard. For lots of people, use Import & check instead." />
       <form className="form" onSubmit={submit} noValidate>
         <ErrorSummary errors={summary} />
         <PersonFields
@@ -66,7 +65,7 @@ export function AddPerson() {
           youthLabel="Youth"
           adultLabel="Leader or helper"
         />
-        <div className="btn-row">
+        <div className="btn-row form-actions">
           <Button type="submit" kind="primary" busy={busy} busyLabel="Adding…">
             Add person
           </Button>
