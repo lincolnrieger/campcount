@@ -159,12 +159,90 @@ export function combinedPhoto(...answers: ('yes' | 'no' | 'unknown' | undefined)
   return 'unknown';
 }
 
-/** Both files' dietary notes, as compared to tell whether they've been looked at. */
+/** Both files' dietary notes, as written. */
 export const dietaryNotes = (p: Linked) => ({ myscout: p.ms?.dietaryText.trim() ?? '', consent2go: p.cg?.dietaryText.trim() ?? '' });
+
+const normNote = (t: string) => t.toLowerCase().replace(/\s+/g, ' ').trim();
+/** The notes that say something, compared without case or spacing, each once (the same note in both files counts once). */
+const meaningful = (notes: string[]) => [...new Set(notes.map(normNote).filter((t) => t && !saysNothing(t)))].sort();
+
+/**
+ * What was read, kept to tell later whether anything new has arrived. Only
+ * notes that say something count, so a later "Nil" from Consent2Go, or the
+ * same words as MyScout, doesn't bring someone back.
+ */
 export const dietarySignature = (p: Linked) => {
   const n = dietaryNotes(p);
-  return `${n.myscout.toLowerCase().replace(/\s+/g, ' ')}\u0000${n.consent2go.toLowerCase().replace(/\s+/g, ' ')}`;
+  return meaningful([n.myscout, n.consent2go]).join('\u0000');
 };
+
+/** Already read: nothing that says something is new since. (Reads older saved forms too.) */
+export function dietaryIsDone(p: Linked, saved: string | undefined): boolean {
+  if (saved === undefined) return false;
+  const before = new Set(meaningful(saved.split('\u0000')));
+  const n = dietaryNotes(p);
+  return meaningful([n.myscout, n.consent2go]).every((t) => before.has(t));
+}
+
+/** Which file's notes are new since they were last read (to mark them). */
+export function newDietarySources(p: Linked, saved: string | undefined): ('myscout' | 'consent2go')[] {
+  if (saved === undefined) return [];
+  const before = new Set(meaningful(saved.split('\u0000')));
+  const n = dietaryNotes(p);
+  return (['myscout', 'consent2go'] as const).filter((s) => {
+    const t = normNote(n[s]);
+    return t && !saysNothing(t) && !before.has(t);
+  });
+}
+
+/** One detail that differs from the last upload of the same file. */
+export interface DetailChange {
+  label: string;
+  before: string;
+  after: string;
+}
+
+const PHOTO_TEXT = { yes: 'Yes', no: 'No', unknown: 'Not given' } as const;
+const same = (a: string, b: string) => a.trim().replace(/\s+/g, ' ').toLowerCase() === b.trim().replace(/\s+/g, ' ').toLowerCase();
+
+/**
+ * What changed for one person between two uploads, file by file (only where
+ * the person was in that file both times). Dietary notes are left out: they
+ * have their own queue. Row numbers and other bookkeeping are ignored.
+ */
+export function detailChanges(before: Linked, after: Linked): DetailChange[] {
+  const out: DetailChange[] = [];
+  const cmp = (label: string, a: string, b: string) => !same(a, b) && out.push({ label, before: a.trim() || '(blank)', after: b.trim() || '(blank)' });
+  if (before.ms && after.ms) {
+    const [a, b] = [before.ms, after.ms];
+    cmp('MyScout first name', a.firstName, b.firstName);
+    cmp('MyScout preferred name', a.preferredName, b.preferredName);
+    cmp('MyScout last name', a.lastName, b.lastName);
+    cmp('MyScout position', a.position, b.position);
+    cmp('MyScout group', a.groupName, b.groupName);
+    cmp('MyScout photo consent', PHOTO_TEXT[a.photo], PHOTO_TEXT[b.photo]);
+  }
+  if (before.cg && after.cg) {
+    const [a, b] = [before.cg, after.cg];
+    cmp('Consent2Go first name', a.firstName, b.firstName);
+    cmp('Consent2Go last name', a.lastName, b.lastName);
+    cmp('Consent2Go class', a.section ?? '', b.section ?? '');
+    cmp('Consent2Go group', a.groupName, b.groupName);
+    cmp('Consent2Go photo consent', PHOTO_TEXT[a.photo], PHOTO_TEXT[b.photo]);
+    for (const k of new Set([...Object.keys(a.extra ?? {}), ...Object.keys(b.extra ?? {})])) cmp(k, a.extra?.[k] ?? '', b.extra?.[k] ?? '');
+  }
+  return out;
+}
+
+/** Fold new changes into ones not yet reviewed: keep the first "before", take the latest "after", drop any that changed back. */
+export function mergeChanges(older: DetailChange[], newer: DetailChange[]): DetailChange[] {
+  const byLabel = new Map(older.map((c) => [c.label, c]));
+  for (const c of newer) {
+    const was = byLabel.get(c.label);
+    byLabel.set(c.label, was ? { ...c, before: was.before } : c);
+  }
+  return [...byLabel.values()].filter((c) => !same(c.before, c.after));
+}
 /** Has notes worth reading (not empty, not just "Nil"). */
 export const hasDietaryNotes = (p: Linked) => Object.values(dietaryNotes(p)).some((t) => t && !saysNothing(t));
 

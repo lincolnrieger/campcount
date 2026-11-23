@@ -1,6 +1,6 @@
 import { prepareConsent2Go } from '../../shared/consent2go';
 import { parseDelimited } from '../../shared/csv';
-import type { FilePerson } from '../../shared/localIntake';
+import type { DetailChange, FilePerson } from '../../shared/localIntake';
 import { positionSection } from '../../shared/localIntake';
 import { autoMap, flagDuplicates, missingRequired, prepareRows } from '../../shared/myscout';
 import { deleteSnapshot, loadSnapshot, saveSnapshot } from '../offline/db';
@@ -119,6 +119,14 @@ export interface LocalImport {
   chosen: Record<string, string>;
   /** Dietary notes already done, by membership key: the notes as they were. */
   dietaryDone: Record<string, string>;
+  /** Details that differ from the last upload, waiting to be looked at, by membership key. */
+  changes?: Record<string, { name: string; memberNumber: string; at: string; items: DetailChange[] }>;
+  /** Everyone who has been in an uploaded file here (so people added by hand are never taken off). */
+  seen?: string[];
+  /** Taken off the roster because they're in neither file any more. */
+  removed?: Record<string, { name: string; memberNumber: string; registrationId: string; at: string }>;
+  /** Put back by hand: never taken off again automatically. */
+  keep?: string[];
 }
 
 const storageKey = (eventId: string) => `import:${eventId}`;

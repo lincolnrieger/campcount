@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import type { FilePerson, RosterPerson } from '../src/shared/localIntake';
-import { buildRow, combinedPhoto, dietarySignature, hasDietaryNotes, linkPeople, needsSection, positionSection } from '../src/shared/localIntake';
+import {
+  buildRow,
+  combinedPhoto,
+  detailChanges,
+  dietaryIsDone,
+  dietarySignature,
+  hasDietaryNotes,
+  linkPeople,
+  mergeChanges,
+  needsSection,
+  newDietarySources,
+  positionSection,
+} from '../src/shared/localIntake';
 
 // Invented people only.
 const person = (over: Partial<FilePerson>): FilePerson => ({
@@ -99,5 +111,47 @@ describe('photo and dietary helpers', () => {
     const b = linkPeople([ms('4', 'Dee', 'Scout', { dietaryText: 'Vegetarian' })], [cg('4', 'Dee', { dietaryText: 'Peanut allergy' })], []).people[0]!;
     expect(hasDietaryNotes(a)).toBe(true);
     expect(dietarySignature(a)).not.toBe(dietarySignature(b));
+  });
+});
+
+describe('uploading again', () => {
+  const link = (m: FilePerson[], c: FilePerson[]) => linkPeople(m, c, []).people[0]!;
+
+  it('only brings dietary back for notes that say something new', () => {
+    const before = link([ms('100', 'Ava', 'Scout', { dietaryText: 'Peanut allergy' })], []);
+    const saved = dietarySignature(before);
+    // Consent2Go arrives with "Nil", or the same words: still done.
+    expect(dietaryIsDone(link([ms('100', 'Ava', 'Scout', { dietaryText: 'Peanut allergy' })], [cg('100', 'Ava', { dietaryText: 'Nil' })]), saved)).toBe(true);
+    expect(dietaryIsDone(link([ms('100', 'Ava', 'Scout', { dietaryText: 'Peanut allergy' })], [cg('100', 'Ava', { dietaryText: ' peanut  ALLERGY ' })]), saved)).toBe(true);
+    // Something new from Consent2Go: back, with that note marked new.
+    const after = link([ms('100', 'Ava', 'Scout', { dietaryText: 'Peanut allergy' })], [cg('100', 'Ava', { dietaryText: 'Also lactose intolerant' })]);
+    expect(dietaryIsDone(after, saved)).toBe(false);
+    expect(newDietarySources(after, saved)).toEqual(['consent2go']);
+    // Signatures saved before this change (both notes, joined) still count as done.
+    const old = `peanut allergy\u0000`;
+    expect(dietaryIsDone(link([ms('100', 'Ava', 'Scout', { dietaryText: 'Peanut allergy' })], [cg('100', 'Ava', { dietaryText: 'N/A' })]), old)).toBe(true);
+  });
+
+  it('lists details that differ from the last upload of each file, and nothing else', () => {
+    const a = link([ms('100', 'Ava', 'Scout', { photo: 'yes', where: 'Line 2' })], [cg('100', 'Ava', { extra: { Swimming: 'Strong' } })]);
+    const b = link(
+      [ms('100', 'Ava', 'Venturer Scout', { photo: 'no', where: 'Line 9', dietaryText: 'Vegan' })],
+      [cg('100', 'Ava', { extra: { Swimming: 'Weak' } })],
+    );
+    expect(detailChanges(a, b)).toEqual([
+      { label: 'MyScout position', before: 'Scout', after: 'Venturer Scout' },
+      { label: 'MyScout photo consent', before: 'Yes', after: 'No' },
+      { label: 'Swimming', before: 'Strong', after: 'Weak' },
+    ]);
+    // First Consent2Go for someone isn't a change; neither is spacing or case.
+    expect(detailChanges(link([ms('100', 'Ava', 'Scout')], []), link([ms('100', 'ava ', 'Scout')], [cg('100', 'Ava')]))).toEqual([]);
+  });
+
+  it('keeps the first "before" across uploads and drops changes that went back', () => {
+    const one = [{ label: 'MyScout position', before: 'Scout', after: 'Venturer Scout' }];
+    expect(mergeChanges(one, [{ label: 'MyScout position', before: 'Venturer Scout', after: 'Rover Scout' }])).toEqual([
+      { label: 'MyScout position', before: 'Scout', after: 'Rover Scout' },
+    ]);
+    expect(mergeChanges(one, [{ label: 'MyScout position', before: 'Venturer Scout', after: 'Scout' }])).toEqual([]);
   });
 });

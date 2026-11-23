@@ -457,3 +457,20 @@
   width: auto;
   min-width: 13rem;
 }
+
+/* Import & check: what changed since the last upload */
+.intake-change-items {
+  display: grid;
+  gap: 2px;
+  margin: var(--space-1) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-md);
+}
+.intake-change-items s {
+  color: var(--ink-3);
+}
+.intake-note h4 .badge {
+  margin-left: var(--space-1);
+  vertical-align: middle;
+}
