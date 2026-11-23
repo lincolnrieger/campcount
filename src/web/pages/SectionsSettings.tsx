@@ -93,7 +93,6 @@ export function SectionsSettings() {
             under the built-in sections, so a renamed one keeps working. Put someone in an added section from their People page or in Import &amp; check.
           </>
         }
-        primary={editable && addSection}
       />
       <form className="settings-form" onSubmit={save} noValidate>
         {(!editable || failure) && (
@@ -161,6 +160,7 @@ export function SectionsSettings() {
               );
             })}
           </div>
+          {editable && <div className="sec-add">{addSection}</div>}
         </fieldset>
         {editable && <SaveBar dirty={dirty} busy={busy} saveLabel="Save sections" onCancel={() => navigate(back.to)} />}
       </form>

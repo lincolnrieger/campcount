@@ -194,10 +194,12 @@
 /* ---------- Settings forms: two columns and a sticky Save bar ---------- */
 .settings-form {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
 }
 .settings-columns {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
   align-items: start;
   min-width: 0;
@@ -492,4 +494,95 @@
 }
 .copy-ends .meta {
   font-weight: var(--weight-regular);
+}
+
+/* ---------- Links ---------- */
+.share-links {
+  gap: var(--space-4);
+}
+.share-links .share-list {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 30rem), 1fr));
+}
+.share-links .share-link {
+  align-content: start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+.share-links .share-link-head {
+  min-height: var(--control);
+}
+.share-links .share-link-head h2 {
+  font-size: var(--text-base);
+}
+.share-links .share-link-head .toggle {
+  min-height: 0;
+}
+.share-links .share-url code {
+  flex-basis: 12rem;
+}
+.share-links .share-toggles {
+  align-items: center;
+  gap: var(--space-1);
+}
+.share-toggles-label {
+  margin-right: var(--space-1);
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+.share-links .share-toggle {
+  min-height: 2.25rem;
+  border-color: var(--border-soft);
+  font-size: var(--text-md);
+}
+.share-links .share-toggle.is-on {
+  border-color: var(--brand);
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+.share-new .share-features {
+  gap: var(--space-1);
+}
+.share-new .toggle-text .meta {
+  font-weight: var(--weight-regular);
+}
+.share-links .share-presets {
+  width: min(100%, 46rem);
+  margin-top: 0;
+}
+.plinks {
+  gap: var(--space-4);
+}
+.share-links .empty .btn-row {
+  width: 100%;
+}
+.share-onoff {
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+}
+.share-links .share-link-head .toggle {
+  gap: var(--space-2);
+}
+.sec-add {
+  margin-top: var(--space-3);
+}
+@media (max-width: 899.98px) {
+  .sec-toggle-label {
+    position: static;
+    width: auto;
+    height: auto;
+    clip-path: none;
+  }
+}
+@media (max-width: 599.98px) {
+  .save-bar {
+    flex-wrap: nowrap;
+  }
+  .save-bar-state {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
