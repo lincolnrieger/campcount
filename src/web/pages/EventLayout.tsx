@@ -100,6 +100,7 @@ export function eventSections(event: EventSummary, onSite = false): NavSection[]
     programme.length > 0 && group(programme[0]!.to, 'Programme', 'events', programme),
     links.length > 0 && { to: 'links', label: 'Links', icon: 'qr', children: links },
     can('reports.view') && event.status !== 'draft' && { to: 'reports', label: 'Reports', icon: 'clipboard' },
+    event.features.sideQuest && can('reports.view') && { to: 'side-quest', label: 'Side Quest', icon: 'star' },
     (can('event.configure') || can('staff.manage') || can('stations.manage')) && group('settings', 'Settings', 'admin', settings),
   ].filter((s): s is NavSection => Boolean(s));
 }

@@ -198,7 +198,6 @@ export function Reports() {
           options={[
             { value: 'checkup', label: <>Check-up{items.length > 0 && <span className="tab-count">{items.length}</span>}</> },
             { value: 'downloads', label: <>Downloads{exportCount ? <span className="tab-count">{exportCount}</span> : null}</> },
-            ...(event.features.sideQuest ? [{ value: 'quest' as Tab, label: 'Side Quest' }] : []),
           ]}
         />
 
@@ -398,7 +397,6 @@ export function Reports() {
           </section>
         )}
 
-        {tab === 'quest' && event.features.sideQuest && <SideQuestBoard eventId={event.id} />}
       </div>
 
       <Sheet open={ask !== null} title={ask?.title ?? ''} onClose={() => setAsk(null)}>
@@ -408,59 +406,3 @@ export function Reports() {
   );
 }
 
-/** Super Splash Side Quest: who has collected the most people, for prizes. Full names here; participants only ever see first names. */
-function SideQuestBoard({ eventId }: { eventId: string }) {
-  const { data } = useApi<{ collections: number; rows: { registrationId: string; place: number; name: string; groupName: string; section: string; collected: number }[] }>(
-    `/events/${eventId}/side-quest`,
-  );
-  return (
-    <section className="section" aria-labelledby="side-quest-heading">
-      <div className="section-head section-head-start">
-        <h2 id="side-quest-heading">Super Splash Side Quest</h2>
-        <InfoTip label="About the Side Quest">The secret game: campers collect each other by scanning lanyards with their own phone. Top 20 shown.</InfoTip>
-      </div>
-      {!data ? (
-        <Loading what="the leaderboard" rows={4} />
-      ) : (
-        <>
-          <StatStrip
-            items={[
-              { label: data.rows.length === 1 ? 'Player' : 'Players', value: data.rows.length },
-              { label: 'People collected', value: data.collections },
-            ]}
-          />
-          {data.rows.length === 0 ? (
-            <EmptyState title="No one has found it yet" />
-          ) : (
-            <div className="table-wrap">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th scope="col" className="cell-num">
-                      Place
-                    </th>
-                    <th scope="col">Name</th>
-                    <th scope="col">Group</th>
-                    <th scope="col" className="cell-num">
-                      Collected
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.rows.slice(0, 20).map((r) => (
-                    <tr key={r.registrationId}>
-                      <td className="cell-num">{r.place}</td>
-                      <td>{r.name}</td>
-                      <td>{[r.section, r.groupName].filter(Boolean).join(' · ')}</td>
-                      <td className="cell-num">{r.collected}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
-      )}
-    </section>
-  );
-}

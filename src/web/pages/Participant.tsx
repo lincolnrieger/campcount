@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { sectionColours } from '../../shared/lanyardDesign';
+import { textOn } from '../../shared/sections';
 import { dayInZone, dayLabel, timeInZone, todayInZone } from '../../shared/time';
 import { ApiFailure, api } from '../api';
 import { loadSnapshot, saveSnapshot } from '../offline/db';
@@ -981,38 +982,34 @@ function CollectScreen({ result, onDone, onMine }: { result: CollectResult; onDo
     );
   }
 
+  const colour = result.friend.sectionColour ?? sectionColours(result.friend.sectionWord).bg;
+  const first = s.collected === 1;
   return (
-    <div className={milestone ? 'pp pp-splash is-milestone' : 'pp pp-splash'} role="dialog" aria-modal="true" aria-labelledby="splash-h">
-      {milestone && (
-        <div className="pp-drops" aria-hidden="true">
-          {Array.from({ length: 18 }, (_, i) => (
-            <span key={i} style={{ ['--i' as string]: i }} />
-          ))}
+    <div className={milestone ? 'pp pp-collect is-milestone' : 'pp pp-collect'} role="dialog" aria-modal="true" aria-labelledby="splash-h">
+      <div className="pp-collect-body">
+        {/* Their card lands in your collection, with one ring on the water behind it. */}
+        <div className="pp-collect-stage" aria-hidden="true">
+          <span className="pp-ring" />
+          {milestone && <span className="pp-ring pp-ring-2" />}
+          <div className="pp-card" style={{ ['--card' as string]: colour, ['--card-fg' as string]: textOn(colour) }}>
+            <span className="pp-card-band">{result.friend.sectionWord || 'Camp'}</span>
+            <span className="pp-card-name">{result.friend.firstName}</span>
+            <span className="pp-card-no pp-num">No. {s.collected}</span>
+          </div>
         </div>
-      )}
-      <div className="pp-splash-body">
-        <p className="pp-splash-kicker">Super Splash Side Quest</p>
-        <h1 id="splash-h">
-          {s.collected === 1 ? 'You found the side quest!' : 'Splash!'} You collected {result.friend.firstName}.
-        </h1>
-        <p className="pp-splash-count" aria-live="polite">
+        <p className="pp-collect-kicker">{first ? 'You found the Super Splash Side Quest' : 'Super Splash Side Quest'}</p>
+        <h1 id="splash-h">You collected {result.friend.firstName}</h1>
+        <p className="pp-collect-count" aria-live="polite">
           <span className="pp-num">{shown}</span>
-          <span>friend{s.collected === 1 ? '' : 's'} collected</span>
+          <span>of {s.total} collected</span>
         </p>
-        <p className="pp-splash-of">
-          {s.collected} of {s.total} at camp
-        </p>
-        {s.rank !== null && (
-          <p className="pp-rank pp-rank-big">
-            You’re {ordinal(s.rank)} on the Side Quest table
-          </p>
-        )}
+        {s.rank !== null && <p className="pp-collect-rank">{ordinal(s.rank)} on the leaderboard</p>}
         {quest && (
           <div className="pp-splash-quest">
             <QuestList quests={[quest]} highlight={quest.key} />
           </div>
         )}
-        {s.collected === 1 && <p className="pp-splash-hint">Every lanyard you scan with your phone camera adds a friend. Keep it a secret… or don’t.</p>}
+        {first && <p className="pp-splash-hint">Scan another lanyard with your phone camera to add them. Keep it quiet, or don’t.</p>}
         <button ref={done} type="button" className="pp-btn pp-btn-sun" onClick={onDone}>
           Keep collecting
         </button>

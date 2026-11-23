@@ -586,3 +586,72 @@
     white-space: nowrap;
   }
 }
+
+/* ---------- Side Quest (staff) ---------- */
+.sq .toolbar > .segmented {
+  flex: none;
+}
+.sq-place {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius-pill);
+  font-weight: var(--weight-heavy);
+  font-variant-numeric: tabular-nums;
+}
+.sq-top-1 .sq-place {
+  background: #F6C445;
+  color: #3D2B00;
+}
+.sq-top-2 .sq-place {
+  background: #D5DBE1;
+  color: #23303B;
+}
+.sq-top-3 .sq-place {
+  background: #E4B48A;
+  color: #3F2410;
+}
+.sq-name {
+  font-weight: var(--weight-bold);
+  text-align: left;
+}
+.sq-when {
+  white-space: nowrap;
+}
+.sq-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.sq-rapid > td:first-child {
+  box-shadow: inset 4px 0 0 var(--warning-border);
+}
+.sq .cell-check {
+  width: 2.5rem;
+}
+.sq .cell-check input {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+.sq .cell-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+.sq-person {
+  display: grid;
+  gap: var(--space-4);
+}
+.sq-person-list {
+  display: grid;
+  gap: var(--space-2);
+}
+.sq-person-list h3 {
+  font-size: var(--text-md);
+}
+.sq-person .row-side {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
