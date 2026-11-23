@@ -672,7 +672,7 @@ a.row-title {
 .notice {
   display: flex;
   gap: var(--space-3);
-  padding: var(--space-4);
+  padding: var(--space-3) var(--space-4);
   border: var(--border-width) solid var(--info-border);
   border-radius: var(--radius-lg);
   background: var(--info-bg);
@@ -756,8 +756,7 @@ a.row-title {
   display: grid;
   align-content: start;
   gap: var(--space-1);
-  min-height: calc(var(--row-large) + var(--space-5));
-  padding: var(--space-4);
+  padding: var(--space-3) var(--space-4);
   border: 0;
   border-radius: 0;
   background: var(--surface);
@@ -768,11 +767,7 @@ a.row-title {
 .tile + .tile {
   border-left: var(--border-width) solid var(--divider);
 }
-@media (min-width: 600px) {
-  .tile {
-    padding: var(--space-4) var(--space-5) var(--space-5);
-  }
-}
+
 button.tile:hover {
   background: var(--canvas);
 }
@@ -782,7 +777,7 @@ button.tile:hover {
 }
 .tile-value {
   order: 2;
-  font-size: var(--text-display);
+  font-size: 1.75rem;
   font-weight: var(--weight-heavy);
   line-height: 1.05;
   letter-spacing: -0.02em;

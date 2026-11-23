@@ -9,6 +9,7 @@ import '@fontsource-variable/nunito-sans/wght.css';
 import './styles/tokens.css';
 import './styles/base.css';
 import './styles/components.css';
+import './styles/kit.css';
 import './styles/shell.css';
 import './styles/screens.css';
 import './styles/screens-people.css';
