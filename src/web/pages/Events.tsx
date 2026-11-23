@@ -8,7 +8,7 @@ import { useSession } from '../session';
 import type { EventSummary } from '../types';
 import { useApi } from '../useApi';
 import { FEATURE_COPY } from './featureCopy';
-import { Badge, Button, ButtonLink, Choice, EmptyState, Field, Icon, LoadError, Loading, PageHeader, SearchField, Section, SkeletonHeader, SkeletonRows, formatDateRange, useToast } from '../ui';
+import { Badge, Banner, Button, ButtonLink, Choice, EmptyState, Field, FilterChips, Icon, LoadError, Loading, PageHeader, SearchField, SkeletonHeader, SkeletonRows, Toolbar, formatDateRange, useToast } from '../ui';
 import type { Tone } from '../ui';
 
 const STATUS: Record<EventStatus, { label: string; tone: Tone }> = {
@@ -87,24 +87,32 @@ export function Events() {
           {canCreate ? 'Create an event to get started.' : 'An administrator adds you to an event. It shows up here once they do.'}
         </EmptyState>
       ) : (
-        <div className="sections">
-          {all.length > 8 && (
-            <div className="toolbar">
-              <SearchField id="event-q" label="Search events" value={q} onChange={setQ} />
-            </div>
+        <div className="pf-stack">
+          {(all.length > 8 || past.length > 0) && (
+            <Toolbar label="Find events">
+              {all.length > 8 && <SearchField id="event-q" label="Search events" placeholder="Search name or place" value={q} onChange={setQ} slash />}
+              {past.length > 0 && !q && (
+                <FilterChips
+                  label="Show"
+                  value={showPast ? 'past' : 'current'}
+                  onChange={(v) => setShowPast(v === 'past')}
+                  options={[
+                    { value: 'current', label: 'Current', count: now.length + soon.length },
+                    { value: 'past', label: 'Past', count: past.length },
+                  ]}
+                />
+              )}
+            </Toolbar>
           )}
-          {q && matching.length === 0 && <EmptyState title={`No events match "${q}"`}>Check the spelling, or search by location.</EmptyState>}
-          <EventList title="Happening now" id="now" events={now} />
-          <EventList title="Coming up" id="soon" events={soon} />
-          {past.length > 0 &&
-            (showPast || q ? (
-              <EventList title="Past events" id="past" events={past} />
-            ) : (
-              <div>
-                <Button onClick={() => setShowPast(true)}>Show past events ({past.length})</Button>
-              </div>
-            ))}
-          {!q && now.length === 0 && soon.length === 0 && !showPast && <p className="meta">No current events.</p>}
+          {q && matching.length === 0 && <EmptyState title={`No events match "${q}"`}>Try a name or place.</EmptyState>}
+          {(!showPast || q) && (
+            <>
+              <EventList title="Happening now" id="now" events={now} />
+              <EventList title="Coming up" id="soon" events={soon} />
+            </>
+          )}
+          {past.length > 0 && (showPast || q) && <EventList title="Past events" id="past" events={past} />}
+          {!q && now.length === 0 && soon.length === 0 && !showPast && <EmptyState title="No current events" />}
         </div>
       )}
     </>
@@ -114,8 +122,11 @@ export function Events() {
 function EventList({ title, id, events }: { title: string; id: string; events: EventSummary[] }) {
   if (events.length === 0) return null;
   return (
-    <Section title={title} id={id}>
-      <ul className="list">
+    <section className="list" aria-labelledby={`${id}-heading`}>
+      <h2 className="list-group-heading" id={`${id}-heading`}>
+        {title} <span className="pf-group-count">{events.length}</span>
+      </h2>
+      <ul>
         {events.map((e) => (
           <li key={e.id} className="row row-large row-link">
             <span className="row-main">
@@ -134,7 +145,7 @@ function EventList({ title, id, events }: { title: string; id: string; events: E
           </li>
         ))}
       </ul>
-    </Section>
+    </section>
   );
 }
 
@@ -257,17 +268,18 @@ export function NewEvent() {
 
   return (
     <>
-      <PageHeader title="Create event" back={back} summary="It starts as a draft. Nobody can scan until you open it." />
-      <form className="form" onSubmit={submit} noValidate>
-        {failure && (
-          <p className="field-error" role="alert">
-            <Icon name="error" size={16} />
-            {failure}
-          </p>
-        )}
-        <EventFields form={form} set={set} errors={errors} />
-        <FeatureChecklist value={features} onChange={setFeatures} />
-        <div className="btn-row">
+      <PageHeader title="Create event" back={back} summary="Starts as a draft" help="Nobody can scan until you open it." />
+      <form className="pf-form" onSubmit={submit} noValidate>
+        {failure && <Banner tone="error">{failure}</Banner>}
+        <div className="pf-split">
+          <div className="pf-panel">
+            <EventFields form={form} set={set} errors={errors} />
+          </div>
+          <div className="pf-panel">
+            <FeatureChecklist value={features} onChange={setFeatures} />
+          </div>
+        </div>
+        <div className="pf-actionbar">
           <Button type="submit" kind="primary" busy={busy} busyLabel="Creating…">
             Create event
           </Button>

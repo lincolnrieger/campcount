@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { eventSiteUrl, useSite } from '../site';
 import type { EventSummary } from '../types';
 import { useApi } from '../useApi';
-import { EmptyState, LoadError, Loading, PageHeader, SkeletonHeader, SkeletonRows } from '../ui';
+import { EmptyState, Icon, LoadError, Loading, PageHeader, SkeletonHeader, SkeletonRows } from '../ui';
 import { CampMark } from './Camps';
 import { Events } from './Events';
 
@@ -33,14 +33,14 @@ export function StaffLanding() {
     return (
       <>
         <PageHeader title="CampCount" />
-        <EmptyState title="You're not on a camp yet">An event manager adds you to their camp's staff. Then you'll be sent straight there.</EmptyState>
+        <EmptyState title="You're not on a camp yet">An event manager adds you to their camp's staff.</EmptyState>
       </>
     );
   }
   return (
     <>
-      <PageHeader title="Your camps" summary="Each camp has its own address. Choose one." />
-      <ul className="list">
+      <PageHeader title="Your camps" summary="Choose a camp" help="Each camp has its own address." />
+      <ul className="list pf-camp-list">
         {camps.map(({ e, url }) => (
           <li key={e.id} className="row row-link row-large">
             <CampMark event={e} />
@@ -49,6 +49,9 @@ export function StaffLanding() {
                 <a href={url!}>{e.name}</a>
               </span>
               <span className="row-meta">{url!.replace(/^https?:\/\//, '').replace(/\/$/, '')}</span>
+            </span>
+            <span className="row-chevron">
+              <Icon name="chevron" />
             </span>
           </li>
         ))}

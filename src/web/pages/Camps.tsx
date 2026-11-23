@@ -3,11 +3,39 @@ import type { FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { ApiFailure, api } from '../api';
 import { accessibleBrand, contrast, DEFAULT_BRAND, subdomainProblem, suggestSubdomain } from '../../shared/site';
+import { matchesSearch } from '../../shared/search';
 import { useSession } from '../session';
 import { eventSiteUrl, useSite } from '../site';
 import type { EventSummary } from '../types';
 import { useApi } from '../useApi';
-import { Badge, Button, ButtonLink, EmptyState, ErrorSummary, Field, Icon, LoadError, Loading, PageHeader, Section, SkeletonHeader, SkeletonRows, formatDateRange, useConfirm, useToast, useWide } from '../ui';
+import {
+  Badge,
+  Banner,
+  Button,
+  ButtonLink,
+  EmptyState,
+  ErrorSummary,
+  Field,
+  FilterChips,
+  Icon,
+  InfoTip,
+  LoadError,
+  Loading,
+  PageHeader,
+  SearchField,
+  SkeletonHeader,
+  SkeletonRows,
+  SortHeader,
+  Toolbar,
+  formatDateRange,
+  plural,
+  sortRows,
+  useConfirm,
+  useRemembered,
+  useSort,
+  useToast,
+  useWide,
+} from '../ui';
 import { FeatureChecklist } from './Events';
 import type { EventFeatures } from '../../shared/schemas';
 
@@ -34,6 +62,9 @@ function addressText(rootDomain: string | null, subdomain: string | null) {
   return subdomain ? `${subdomain}.${rootDomain ?? 'campcount.com'}` : null;
 }
 
+type CampFilter = 'all' | 'current' | 'past' | 'demo';
+const isCurrent = (e: EventSummary) => e.status === 'open' || e.status === 'draft';
+
 /**
  * The admin console's home: every camp, each with its own address and
  * branding. Day-to-day work happens on each camp's own site.
@@ -44,6 +75,9 @@ export function Camps() {
   const wide = useWide();
   const { data, error, loading, reload } = useApi<{ events: EventSummary[] }>('/events');
   const canCreate = me?.kind === 'user' && me.platformPermissions.includes('platform.events.create');
+  const [q, setQ] = useRemembered('camps:q', '');
+  const [filter, setFilter] = useRemembered<CampFilter>('camps:filter', 'all');
+  const { sort, toggle } = useSort<'name' | 'dates' | 'status'>('dates');
 
   if (loading && !data)
     return (
@@ -54,70 +88,57 @@ export function Camps() {
     );
   if (error) return <LoadError error={error} onRetry={reload} what="camps" />;
   const events = data?.events ?? [];
-  const current = events.filter((e) => e.status === 'open' || e.status === 'draft');
-  const past = events.filter((e) => e.status !== 'open' && e.status !== 'draft');
+  const address = (e: EventSummary) => addressText(site.rootDomain, e.subdomain);
+  const counts: Record<CampFilter, number> = {
+    all: events.length,
+    current: events.filter(isCurrent).length,
+    past: events.filter((e) => !isCurrent(e)).length,
+    demo: events.filter((e) => e.isDemo).length,
+  };
+  const shown = sortRows(
+    events.filter(
+      (e) =>
+        matchesSearch(q, e.name, e.location, e.subdomain ?? '') &&
+        (filter === 'all' || (filter === 'current' && isCurrent(e)) || (filter === 'past' && !isCurrent(e)) || (filter === 'demo' && e.isDemo)),
+    ),
+    (e) => (sort.key === 'name' ? e.name : sort.key === 'status' ? STATUS[e.status]!.label : e.startsOn),
+    sort.dir,
+  );
+  const groups = [
+    { title: 'Current and upcoming', list: shown.filter(isCurrent) },
+    { title: 'Past', list: shown.filter((e) => !isCurrent(e)) },
+  ].filter((g) => g.list.length > 0);
+  const filtered = q !== '' || filter !== 'all';
+  const clear = () => {
+    setQ('');
+    setFilter('all');
+  };
 
-  const table = (list: EventSummary[]) =>
-    wide ? (
-      <div className="table-wrap">
-        <table className="table">
-          <thead>
-            <tr>
-              <th scope="col">Camp</th>
-              <th scope="col">Address</th>
-              <th scope="col">Dates</th>
-              <th scope="col">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((e) => (
-              <tr key={e.id} className="row-link">
-                <td>
-                  <span className="camp-cell">
-                    <CampMark event={e} size={32} />
-                    <Link to={`/camps/${e.id}`} className="cell-link">
-                      {e.name}
-                    </Link>
-                  </span>
-                </td>
-                <td>{addressText(site.rootDomain, e.subdomain) ?? <span className="meta">Not set</span>}</td>
-                <td className="num">{formatDateRange(e.startsOn, e.endsOn)}</td>
-                <td>
-                  <Badge tone={STATUS[e.status]!.tone}>{STATUS[e.status]!.label}</Badge>
-                  {e.isDemo && (
-                    <>
-                      {' '}
-                      <Badge tone="info">Demo</Badge>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+  const openSite = (e: EventSummary) => {
+    const url = eventSiteUrl(site.rootDomain, e.subdomain);
+    return url ? (
+      <a className="btn btn-secondary btn-small" href={url} aria-label={`Open ${e.name}'s site`}>
+        Open site
+      </a>
     ) : (
-      <ul className="list">
-        {list.map((e) => (
-          <li key={e.id} className="row row-link row-large">
-            <CampMark event={e} />
-            <span className="row-main">
-              <span className="row-title">
-                <Link to={`/camps/${e.id}`}>{e.name}</Link>
-              </span>
-              <span className="row-meta">{[addressText(site.rootDomain, e.subdomain) ?? 'No address yet', formatDateRange(e.startsOn, e.endsOn)].join(' · ')}</span>
-            </span>
-            <Badge tone={STATUS[e.status]!.tone}>{STATUS[e.status]!.label}</Badge>
-          </li>
-        ))}
-      </ul>
+      <ButtonLink small to={`/events/${e.id}`} aria-label={`Open ${e.name}`}>
+        Open
+      </ButtonLink>
     );
+  };
+  const badges = (e: EventSummary) => (
+    <span className="badges">
+      <Badge tone={STATUS[e.status]!.tone}>{STATUS[e.status]!.label}</Badge>
+      {e.isDemo && <Badge tone="info">Demo</Badge>}
+    </span>
+  );
 
   return (
     <>
       <PageHeader
         title="Camps"
-        summary="Each camp has its own address, logo and colour. Staff only ever see their own camp."
+        summary={events.length > 0 && `${plural(events.length, 'camp')} · ${counts.current} current`}
+        help="Each camp has its own address, logo and colour. Staff only ever see their own camp."
         primary={
           canCreate && (
             <ButtonLink to="/camps/new" kind="primary">
@@ -127,26 +148,94 @@ export function Camps() {
           )
         }
       />
-      <div className="sections">
-        {events.length === 0 ? (
-          <EmptyState title="No camps yet" actions={canCreate && <ButtonLink to="/camps/new" kind="primary">Create camp</ButtonLink>}>
-            Create a camp, give it an address and a logo, then add its staff.
-          </EmptyState>
-        ) : (
-          <>
-            {current.length > 0 && (
-              <Section title="Current and upcoming" id="current">
-                {table(current)}
-              </Section>
-            )}
-            {past.length > 0 && (
-              <Section title="Past" id="past">
-                {table(past)}
-              </Section>
-            )}
-          </>
-        )}
-      </div>
+      {events.length === 0 ? (
+        <EmptyState title="No camps yet" actions={canCreate && <ButtonLink to="/camps/new" kind="primary">Create camp</ButtonLink>}>
+          Create a camp, then add its staff.
+        </EmptyState>
+      ) : (
+        <div className="pf-stack">
+          <Toolbar sticky label="Find camps">
+            <SearchField id="camps-q" label="Search camps" placeholder="Search camps" value={q} onChange={setQ} slash />
+            <FilterChips
+              label="Show"
+              value={filter}
+              onChange={setFilter}
+              options={[
+                { value: 'all', label: 'All', count: counts.all },
+                { value: 'current', label: 'Current', count: counts.current },
+                { value: 'past', label: 'Past', count: counts.past },
+                { value: 'demo', label: 'Demo', count: counts.demo },
+              ]}
+            />
+          </Toolbar>
+          {groups.length === 0 ? (
+            <EmptyState title="No camps match" actions={filtered && <Button onClick={clear}>Clear filters</Button>} />
+          ) : wide ? (
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <SortHeader label="Camp" column="name" sort={sort} onSort={toggle} />
+                    <th scope="col">Address</th>
+                    <SortHeader label="Dates" column="dates" sort={sort} onSort={toggle} />
+                    <SortHeader label="Status" column="status" sort={sort} onSort={toggle} />
+                    <th scope="col" className="cell-action">
+                      <span className="visually-hidden">Open</span>
+                    </th>
+                  </tr>
+                </thead>
+                {groups.map((g) => (
+                  <tbody key={g.title}>
+                    <tr className="pf-group-row">
+                      <th scope="colgroup" colSpan={5}>
+                        {g.title} <span className="pf-group-count">{g.list.length}</span>
+                      </th>
+                    </tr>
+                    {g.list.map((e) => (
+                      <tr key={e.id} className="row-link">
+                        <td>
+                          <span className="camp-cell">
+                            <CampMark event={e} size={32} />
+                            <Link to={`/camps/${e.id}`} className="cell-link">
+                              {e.name}
+                            </Link>
+                          </span>
+                        </td>
+                        <td>{address(e) ?? <span className="meta">Not set</span>}</td>
+                        <td className="num pf-nowrap">{formatDateRange(e.startsOn, e.endsOn)}</td>
+                        <td>{badges(e)}</td>
+                        <td className="cell-action">{openSite(e)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                ))}
+              </table>
+            </div>
+          ) : (
+            groups.map((g) => (
+              <div className="list" key={g.title}>
+                <h2 className="list-group-heading">
+                  {g.title} <span className="pf-group-count">{g.list.length}</span>
+                </h2>
+                <ul>
+                  {g.list.map((e) => (
+                    <li key={e.id} className="row row-link row-large">
+                      <CampMark event={e} />
+                      <span className="row-main">
+                        <span className="row-title">
+                          <Link to={`/camps/${e.id}`}>{e.name}</Link>
+                        </span>
+                        <span className="row-meta">{[address(e) ?? 'No address yet', formatDateRange(e.startsOn, e.endsOn)].join(' · ')}</span>
+                      </span>
+                      {badges(e)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))
+          )}
+        </div>
+      )}
     </>
   );
 }
@@ -168,7 +257,10 @@ interface BrandingValue {
   logo: string | null;
 }
 
-/** Name, address, colour and logo: shared by Create camp and a camp's page. */
+/**
+ * Name, address, colour and logo: shared by Create camp and a camp's page.
+ * `part` renders just the name and address ("identity") or just the colour and logo ("look").
+ */
 function BrandingFields({
   value,
   onChange,
@@ -176,6 +268,7 @@ function BrandingFields({
   currentLogo,
   rootDomain,
   suggest,
+  part,
 }: {
   value: BrandingValue;
   onChange: (v: BrandingValue) => void;
@@ -183,6 +276,7 @@ function BrandingFields({
   currentLogo: string | null;
   rootDomain: string | null;
   suggest: boolean;
+  part?: 'identity' | 'look';
 }) {
   const [logoError, setLogoError] = useState<string | null>(null);
   const set = (patch: Partial<BrandingValue>) => onChange({ ...value, ...patch });
@@ -191,89 +285,96 @@ function BrandingFields({
   const preview = value.logo === '' ? null : (value.logo ?? currentLogo);
   return (
     <>
-      <Field id="camp-name" label="Camp name" error={errors.name}>
-        <input
-          className="input"
-          value={value.name}
-          autoComplete="off"
-          onChange={(e) => {
-            const name = e.target.value;
-            set(suggest ? { name, subdomain: suggestSubdomain(name) } : { name });
-          }}
-        />
-      </Field>
-      <Field id="camp-address" label="Address" error={errors.subdomain} hint="Staff open this to reach the camp. Lowercase letters, numbers and hyphens.">
-        <span className="address-input">
-          <input
-            id="camp-address"
-            className="input"
-            value={value.subdomain}
-            autoComplete="off"
-            autoCapitalize="none"
-            spellCheck={false}
-            onChange={(e) => set({ subdomain: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
-          />
-          <span className="address-suffix">.{rootDomain ?? 'campcount.com'}</span>
-        </span>
-      </Field>
-      <Field
-        id="camp-colour"
-        label="Colour"
-        hint={adjusted ? `Made a little darker (${shown}) so white text on it stays readable.` : 'Used for buttons, links and the current page.'}
-        error={errors.brandColor}
-      >
-        <span className="colour-input">
-          <input type="color" className="colour-swatch" aria-label="Pick a colour" value={value.brandColor} onChange={(e) => set({ brandColor: e.target.value })} />
-          <input
-            id="camp-colour"
-            className="input"
-            value={value.brandColor}
-            maxLength={7}
-            autoComplete="off"
-            spellCheck={false}
-            onChange={(e) => set({ brandColor: e.target.value.startsWith('#') ? e.target.value : `#${e.target.value}` })}
-          />
-          <span className="colour-sample" style={{ background: shown, color: contrast(shown, '#ffffff') >= 4.5 ? '#fff' : '#000' }} aria-hidden="true">
-            Start scanning
-          </span>
-        </span>
-      </Field>
-      <div className="field">
-        <label htmlFor="camp-logo" className="field-label">
-          Logo <span className="field-optional">(optional)</span>
-        </label>
-        <span className="field-hint" id="camp-logo-hint">
-          PNG, JPEG or WebP, up to 300 KB. Square works best.
-        </span>
-        <div className="logo-input">
-          {preview ? <img src={preview} alt="Logo preview" width={56} height={56} className="camp-mark" /> : <CampMark event={{ name: value.name || 'C', logoUrl: null, brandColor: value.brandColor }} size={56} />}
-          <input
-            id="camp-logo"
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            aria-describedby={logoError ? 'camp-logo-hint camp-logo-error' : 'camp-logo-hint'}
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              setLogoError(null);
-              if (!file) return;
-              if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) return setLogoError('Choose a PNG, JPEG or WebP image');
-              if (file.size > 300 * 1024) return setLogoError('That image is over 300 KB. Choose a smaller one');
-              set({ logo: await readFile(file) });
-            }}
-          />
-          {preview && (
-            <Button small kind="ghost" onClick={() => set({ logo: '' })}>
-              Remove logo
-            </Button>
-          )}
-        </div>
-        {logoError && (
-          <span className="field-error" id="camp-logo-error">
-            <Icon name="error" size={16} />
-            {logoError}
-          </span>
-        )}
-      </div>
+      {part !== 'look' && (
+        <>
+          <Field id="camp-name" label="Camp name" error={errors.name}>
+            <input
+              className="input"
+              value={value.name}
+              autoComplete="off"
+              onChange={(e) => {
+                const name = e.target.value;
+                set(suggest ? { name, subdomain: suggestSubdomain(name) } : { name });
+              }}
+            />
+          </Field>
+          <Field id="camp-address" label="Address" error={errors.subdomain} hint="Lowercase letters, numbers and hyphens">
+            <span className="address-input" id="camp-address-row">
+              <input
+                id="camp-address"
+                className="input"
+                aria-describedby={errors.subdomain ? 'camp-address-hint camp-address-error' : 'camp-address-hint'}
+                aria-invalid={errors.subdomain ? true : undefined}
+                value={value.subdomain}
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                onChange={(e) => set({ subdomain: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
+              />
+              <span className="address-suffix">.{rootDomain ?? 'campcount.com'}</span>
+            </span>
+          </Field>
+        </>
+      )}
+      {part !== 'identity' && (
+        <>
+          <Field id="camp-colour" label="Colour" hint={adjusted ? `Darkened to ${shown} so white text stays readable` : undefined} error={errors.brandColor}>
+            <span className="colour-input" id="camp-colour-row">
+              <input type="color" className="colour-swatch" aria-label="Pick a colour" value={value.brandColor} onChange={(e) => set({ brandColor: e.target.value })} />
+              <input
+                id="camp-colour"
+                className="input"
+                aria-describedby={[adjusted && 'camp-colour-hint', errors.brandColor && 'camp-colour-error'].filter(Boolean).join(' ') || undefined}
+                aria-invalid={errors.brandColor ? true : undefined}
+                value={value.brandColor}
+                maxLength={7}
+                autoComplete="off"
+                spellCheck={false}
+                onChange={(e) => set({ brandColor: e.target.value.startsWith('#') ? e.target.value : `#${e.target.value}` })}
+              />
+              <span className="colour-sample" style={{ background: shown, color: contrast(shown, '#ffffff') >= 4.5 ? '#fff' : '#000' }} aria-hidden="true">
+                Start scanning
+              </span>
+            </span>
+          </Field>
+          <div className="field">
+            <label htmlFor="camp-logo" className="field-label">
+              Logo <span className="field-optional">(optional)</span>
+            </label>
+            <span className="field-hint" id="camp-logo-hint">
+              PNG, JPEG or WebP, up to 300 KB. Square is best.
+            </span>
+            <div className="logo-input">
+              {preview ? <img src={preview} alt="Logo preview" width={56} height={56} className="camp-mark" /> : <CampMark event={{ name: value.name || 'C', logoUrl: null, brandColor: value.brandColor }} size={56} />}
+              <input
+                id="camp-logo"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                aria-describedby={logoError ? 'camp-logo-hint camp-logo-error' : 'camp-logo-hint'}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  setLogoError(null);
+                  if (!file) return;
+                  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) return setLogoError('Choose a PNG, JPEG or WebP image');
+                  if (file.size > 300 * 1024) return setLogoError('That image is over 300 KB. Choose a smaller one');
+                  set({ logo: await readFile(file) });
+                }}
+              />
+              {preview && (
+                <Button small kind="ghost" onClick={() => set({ logo: '' })}>
+                  Remove logo
+                </Button>
+              )}
+            </div>
+            {logoError && (
+              <span className="field-error" id="camp-logo-error">
+                <Icon name="error" size={16} />
+                {logoError}
+              </span>
+            )}
+          </div>
+        </>
+      )}
     </>
   );
 }
@@ -338,25 +439,39 @@ export function NewCamp() {
     }
   }
 
+  const suggest = !brand.subdomain || brand.subdomain === suggestSubdomain(brand.name.slice(0, -1)) || brand.subdomain === suggestSubdomain(brand.name);
   return (
     <>
       <PageHeader title="Create camp" back={{ to: '/', label: 'Camps' }} />
-      <form className="form" onSubmit={submit} noValidate>
+      <form className="pf-form" onSubmit={submit} noValidate>
         <ErrorSummary errors={Object.entries(errors).map(([k, m]) => ({ id: k === 'form' ? 'camp-name' : k === 'subdomain' ? 'camp-address' : k === 'brandColor' ? 'camp-colour' : k === 'name' ? 'camp-name' : `camp-${k}`, message: k === 'form' ? m : `${LABELS[k] ?? k}: ${m}` }))} />
-        <BrandingFields value={brand} onChange={setBrand} errors={errors} currentLogo={null} rootDomain={site.rootDomain} suggest={!brand.subdomain || brand.subdomain === suggestSubdomain(brand.name.slice(0, -1)) || brand.subdomain === suggestSubdomain(brand.name)} />
-        <div className="field-pair">
-          <Field id="camp-startsOn" label="First day" error={errors.startsOn}>
-            <input className="input" type="date" value={startsOn} onChange={(e) => setStartsOn(e.target.value)} />
-          </Field>
-          <Field id="camp-endsOn" label="Last day" error={errors.endsOn}>
-            <input className="input" type="date" value={endsOn} min={startsOn || undefined} onChange={(e) => setEndsOn(e.target.value)} />
-          </Field>
+        <div className="pf-split">
+          <div className="pf-stack">
+            <fieldset className="pf-panel">
+              <legend className="pf-panel-title">Camp</legend>
+              <BrandingFields value={brand} onChange={setBrand} errors={errors} currentLogo={null} rootDomain={site.rootDomain} suggest={suggest} part="identity" />
+              <div className="field-pair">
+                <Field id="camp-startsOn" label="First day" error={errors.startsOn}>
+                  <input className="input" type="date" value={startsOn} onChange={(e) => setStartsOn(e.target.value)} />
+                </Field>
+                <Field id="camp-endsOn" label="Last day" error={errors.endsOn}>
+                  <input className="input" type="date" value={endsOn} min={startsOn || undefined} onChange={(e) => setEndsOn(e.target.value)} />
+                </Field>
+              </div>
+              <Field id="camp-location" label="Location" optional>
+                <input className="input" value={location} onChange={(e) => setLocation(e.target.value)} autoComplete="off" />
+              </Field>
+            </fieldset>
+            <fieldset className="pf-panel">
+              <legend className="pf-panel-title">Look</legend>
+              <BrandingFields value={brand} onChange={setBrand} errors={errors} currentLogo={null} rootDomain={site.rootDomain} suggest={suggest} part="look" />
+            </fieldset>
+          </div>
+          <div className="pf-panel">
+            <FeatureChecklist value={features} onChange={setFeatures} />
+          </div>
         </div>
-        <Field id="camp-location" label="Location" optional>
-          <input className="input" value={location} onChange={(e) => setLocation(e.target.value)} autoComplete="off" />
-        </Field>
-        <FeatureChecklist value={features} onChange={setFeatures} />
-        <div className="btn-row">
+        <div className="pf-actionbar">
           <Button type="submit" kind="primary" busy={busy} busyLabel="Creating…">
             Create camp
           </Button>
@@ -380,8 +495,9 @@ export function CampPage() {
   const [brand, setBrand] = useState<BrandingValue | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const saved = (ev: EventSummary): BrandingValue => ({ name: ev.name, subdomain: ev.subdomain ?? '', brandColor: ev.brandColor ?? DEFAULT_BRAND, logo: null });
   useEffect(() => {
-    if (data) setBrand({ name: data.event.name, subdomain: data.event.subdomain ?? '', brandColor: data.event.brandColor ?? DEFAULT_BRAND, logo: null });
+    if (data) setBrand(saved(data.event));
   }, [data]);
 
   if (loading && !data)
@@ -402,6 +518,8 @@ export function CampPage() {
   const e = data.event;
   const url = eventSiteUrl(site.rootDomain, e.subdomain);
   const fallback = `/events/${e.id}`;
+  const was = saved(e);
+  const dirty = brand.name !== was.name || brand.subdomain !== was.subdomain || brand.brandColor.toLowerCase() !== was.brandColor.toLowerCase() || brand.logo !== null;
 
   async function save(ev: FormEvent) {
     ev.preventDefault();
@@ -424,6 +542,35 @@ export function CampPage() {
     }
   }
 
+  async function deleteCamp() {
+    const ok = await confirm({
+      title: `Delete ${e.name}?`,
+      body: (
+        <p>
+          Everything in this camp is deleted for good: its people, lanyards, scans, dietary records, activities, meals, stations, logo and address. Staff accounts
+          are kept but lose access. Download anything you need from Reports first. This can't be undone.
+        </p>
+      ),
+      confirm: 'Delete camp',
+      danger: true,
+      typeToConfirm: 'DELETE',
+    });
+    if (!ok) return;
+    try {
+      await api(`/admin/events/${e.id}`, { method: 'DELETE' });
+      toast(`Deleted ${e.name}`);
+      navigate('/', { replace: true });
+    } catch (err) {
+      toast(err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.', { tone: 'error' });
+    }
+  }
+
+  const steps = [
+    { label: 'Add staff', hint: 'Managers, scanners, leaders, meal team', path: 'settings/staff', icon: 'team' as const },
+    { label: 'Add people', hint: 'Import from MyScout or add one by one', path: 'people', icon: 'user' as const },
+    { label: 'Details and features', hint: 'Dates, location, notes, features', path: 'settings/event', icon: 'clipboard' as const },
+  ];
+
   return (
     <>
       <PageHeader
@@ -434,6 +581,7 @@ export function CampPage() {
             <span className="sep">{addressText(site.rootDomain, e.subdomain) ?? 'No address yet'}</span>
             <span className="sep">{formatDateRange(e.startsOn, e.endsOn)}</span>
             <Badge tone={STATUS[e.status]!.tone}>{STATUS[e.status]!.label}</Badge>
+            {e.isDemo && <Badge tone="info">Demo</Badge>}
           </>
         }
         primary={
@@ -447,30 +595,51 @@ export function CampPage() {
             </ButtonLink>
           )
         }
+        menu={canDelete ? [{ label: 'Delete camp…', danger: true, onSelect: () => void deleteCamp() }] : undefined}
+        menuLabel={`More actions for ${e.name}`}
       />
-      <div className="columns">
-        <Section title="Address and branding" id="branding">
-          <form className="form" onSubmit={save} noValidate>
-            <ErrorSummary errors={Object.entries(errors).map(([k, m]) => ({ id: k === 'subdomain' ? 'camp-address' : k === 'brandColor' ? 'camp-colour' : 'camp-name', message: k === 'form' ? m : `${LABELS[k] ?? k}: ${m}` }))} />
-            <BrandingFields value={brand} onChange={setBrand} errors={errors} currentLogo={e.logoUrl} rootDomain={site.rootDomain} suggest={false} />
-            {e.subdomain && brand.subdomain !== e.subdomain && (
-              <p className="meta">Changing the address breaks old links and bookmarks. Tell the camp's staff the new one.</p>
-            )}
-            <div className="btn-row">
-              <Button type="submit" kind="primary" busy={busy} busyLabel="Saving…">
-                Save changes
-              </Button>
+      <div className="pf-split pf-split-wide">
+        <form className="pf-form" onSubmit={save} noValidate aria-labelledby="branding-heading">
+          <ErrorSummary errors={Object.entries(errors).map(([k, m]) => ({ id: k === 'subdomain' ? 'camp-address' : k === 'brandColor' ? 'camp-colour' : 'camp-name', message: k === 'form' ? m : `${LABELS[k] ?? k}: ${m}` }))} />
+          <section className="pf-panel">
+            <h2 className="pf-panel-title" id="branding-heading">
+              Address and branding
+            </h2>
+            <div className="pf-form-grid">
+              <div className="pf-stack">
+                <BrandingFields value={brand} onChange={setBrand} errors={errors} currentLogo={e.logoUrl} rootDomain={site.rootDomain} suggest={false} part="identity" />
+              </div>
+              <div className="pf-stack">
+                <BrandingFields value={brand} onChange={setBrand} errors={errors} currentLogo={e.logoUrl} rootDomain={site.rootDomain} suggest={false} part="look" />
+              </div>
             </div>
-          </form>
-        </Section>
-        <Section title="Next steps" id="next">
-          <ul className="list">
-            {[
-              { label: 'Add staff', hint: 'Event managers, scanners, activity leaders and the meal team', path: 'settings/staff' },
-              { label: 'Add people', hint: 'Import from MyScout, or add people one at a time', path: 'people' },
-              { label: 'Event details and features', hint: 'Dates, location, notes and what the camp uses', path: 'settings/event' },
-            ].map((s) => (
+            {e.subdomain && brand.subdomain !== e.subdomain && <Banner tone="warning">A new address breaks old links. Tell the camp's staff.</Banner>}
+          </section>
+          <div className="pf-actionbar">
+            <Button type="submit" kind="primary" busy={busy} busyLabel="Saving…">
+              Save changes
+            </Button>
+            {dirty && (
+              <>
+                <Button kind="ghost" onClick={() => setBrand(was)}>
+                  Discard
+                </Button>
+                <span className="pf-dirty">Unsaved changes</span>
+              </>
+            )}
+          </div>
+        </form>
+        <section className="pf-panel" aria-labelledby="next-heading">
+          <div className="pf-panel-head">
+            <h2 className="pf-panel-title" id="next-heading">
+              Next steps
+            </h2>
+            {url && <InfoTip label="About these links">These open on the camp's own site. Sign in there with your CampCount account.</InfoTip>}
+          </div>
+          <ul className="pf-links">
+            {steps.map((s) => (
               <li key={s.path} className="row row-link">
+                <Icon name={s.icon} />
                 <span className="row-main">
                   <span className="row-title">{url ? <a href={eventSiteUrl(site.rootDomain, e.subdomain, `/${s.path}`)!}>{s.label}</a> : <Link to={`${fallback}/${s.path}`}>{s.label}</Link>}</span>
                   <span className="row-meta">{s.hint}</span>
@@ -481,43 +650,8 @@ export function CampPage() {
               </li>
             ))}
           </ul>
-          {url && <p className="meta">These open on the camp's own site. Sign in there with your CampCount account.</p>}
-        </Section>
-      </div>
-      {canDelete && (
-        <section className="danger-zone camp-delete" aria-labelledby="delete-heading">
-          <h2 id="delete-heading">Delete camp</h2>
-          <p className="prose">
-            Deletes {e.name} for good: its people, lanyards, scans, dietary records, activities, meals, stations, logo and address. Staff accounts are kept;
-            they just lose access to this camp. Download anything you need from Reports first.
-          </p>
-          <div>
-            <Button
-              kind="danger"
-              busyLabel="Deleting…"
-              onAction={async () => {
-                const ok = await confirm({
-                  title: `Delete ${e.name}?`,
-                  body: <p>Everything in this camp is deleted, including every scan and person on it. This can't be undone.</p>,
-                  confirm: 'Delete camp',
-                  danger: true,
-                  typeToConfirm: 'DELETE',
-                });
-                if (!ok) return;
-                try {
-                  await api(`/admin/events/${e.id}`, { method: 'DELETE' });
-                  toast(`Deleted ${e.name}`);
-                  navigate('/', { replace: true });
-                } catch (err) {
-                  toast(err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.', { tone: 'error' });
-                }
-              }}
-            >
-              Delete camp
-            </Button>
-          </div>
         </section>
-      )}
+      </div>
     </>
   );
 }
