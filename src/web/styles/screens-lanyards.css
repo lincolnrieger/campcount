@@ -1,12 +1,8 @@
 /* Lanyards: the designer (a three-panel studio) and the print page. */
 
 /* The studio uses the full width of the window. */
-.page:has(.studio-page),
-.page:has(.print-layout) {
+.page:has(.studio-page) {
   max-width: none;
-}
-.studio-tabs {
-  margin: calc(var(--space-3) * -1) 0 var(--space-5);
 }
 .studio-page > .notice {
   margin-bottom: var(--space-4);
@@ -20,13 +16,40 @@
   display: grid;
   gap: var(--space-4);
 }
-@media (min-width: 1024px) {
+/* Column layouts follow the room the page has (the sidebar takes some), not the window. */
+.studio-page {
+  container-type: inline-size;
+}
+@container (min-width: 40rem) {
   .studio {
-    grid-template-columns: 15.5rem minmax(0, 1fr) 19.5rem;
-    height: max(36rem, calc(100vh - 13rem));
+    gap: var(--space-3);
+    height: max(34rem, calc(100vh - 12.5rem));
   }
   .studio > * {
     min-height: 0;
+  }
+}
+/* Wide: add | card | settings */
+@container (min-width: 60rem) {
+  .studio {
+    grid-template-columns: 15rem minmax(0, 1fr) 18.5rem;
+  }
+}
+/* Medium: the card, with settings over add-and-layers beside it */
+@container (min-width: 40rem) and (max-width: 59.99rem) {
+  .studio {
+    grid-template-columns: minmax(0, 1fr) 18rem;
+    grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
+    grid-template-areas: 'centre right' 'centre left';
+  }
+  .studio-left {
+    grid-area: left;
+  }
+  .studio-centre {
+    grid-area: centre;
+  }
+  .studio-right {
+    grid-area: right;
   }
 }
 
@@ -97,7 +120,7 @@
   flex-wrap: wrap;
   gap: var(--space-2);
 }
-.chip {
+.studio-chips .chip {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
@@ -110,14 +133,14 @@
   font-size: var(--text-sm);
   font-weight: var(--weight-bold);
 }
-.chip .icon {
+.studio-chips .chip .icon {
   color: var(--brand);
 }
-.chip:hover:not(:disabled) {
+.studio-chips .chip:hover:not(:disabled) {
   background: var(--brand-tint);
   border-color: var(--brand);
 }
-.chip-small {
+.studio-chips .chip-small {
   min-height: 2rem;
   padding: 0 var(--space-2);
 }
@@ -607,152 +630,6 @@
     0 1px 2px rgb(16 40 30 / 0.12),
     0 6px 18px rgb(16 40 30 / 0.14);
 }
-
-/* ---------- Print ---------- */
-.print-layout {
-  display: grid;
-  gap: var(--space-6);
-  align-items: start;
-}
-@media (min-width: 1024px) {
-  .print-layout {
-    grid-template-columns: minmax(22rem, 30rem) minmax(0, 1fr);
-  }
-  .print-preview {
-    position: sticky;
-    top: var(--space-5);
-  }
-}
-.print-options {
-  display: grid;
-  gap: var(--space-6);
-}
-.print-field {
-  display: grid;
-  gap: var(--space-3);
-}
-.print-choice-group {
-  display: grid;
-  gap: var(--space-3);
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-.print-choice-group legend {
-  margin-bottom: var(--space-3);
-  padding: 0;
-}
-.print-choice {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-4);
-  border: var(--border-width) solid var(--divider);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  cursor: pointer;
-}
-.print-choice input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  margin: 0;
-  cursor: pointer;
-}
-.print-choice:has(input:checked) {
-  border-color: var(--brand);
-  background: var(--brand-tint);
-  box-shadow: inset 0 0 0 1px var(--brand);
-}
-.print-choice:has(input:focus-visible) {
-  outline: var(--focus-width) solid var(--focus);
-  outline-offset: 2px;
-}
-.print-choice .choice-text {
-  font-weight: var(--weight-bold);
-}
-.print-choice .meta {
-  display: block;
-  font-weight: var(--weight-regular);
-  margin-top: 2px;
-}
-/* Little drawings of the two layouts */
-.print-choice-art {
-  flex: none;
-  width: 2.75rem;
-  height: 3.5rem;
-  border: 2px solid var(--ink-3);
-  border-radius: 3px;
-  background: var(--surface);
-}
-.print-art-sheet {
-  background-image:
-    linear-gradient(var(--ink-3) 0 0),
-    linear-gradient(var(--ink-3) 0 0);
-  background-size: 1px 100%, 100% 1px;
-  background-position: center, center;
-  background-repeat: no-repeat;
-  box-shadow: inset 0 0 0 4px var(--surface);
-}
-.print-art-card {
-  width: 1.75rem;
-  height: 2.75rem;
-  margin: 0 0.5rem;
-}
-.print-select-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.print-select-row p {
-  margin-right: auto;
-}
-.print-people {
-  max-height: 22rem;
-  overflow-y: auto;
-  background: var(--surface);
-  border: var(--border-width) solid var(--divider);
-  border-radius: var(--radius-lg);
-}
-.print-people li + li {
-  border-top: var(--border-width) solid var(--divider);
-}
-.print-person {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: var(--control);
-  padding: 0 var(--space-4);
-  cursor: pointer;
-}
-.print-person input {
-  width: 1.125rem;
-  height: 1.125rem;
-  flex: none;
-}
-.print-person-name {
-  font-weight: var(--weight-bold);
-}
-.print-person .meta {
-  margin-left: auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.print-preview {
-  display: grid;
-  gap: var(--space-4);
-  justify-items: start;
-  padding: var(--space-5);
-  background: var(--surface);
-  border: var(--border-width) solid var(--divider);
-  border-radius: var(--radius-lg);
-}
-.print-preview-head {
-  display: grid;
-  gap: var(--space-1);
-}
 .sheet-preview-wrap {
   padding: var(--space-4);
   background: #E8EEEA;
@@ -779,11 +656,6 @@
   gap: var(--space-2);
   justify-items: center;
 }
-.print-progress {
-  display: grid;
-  gap: var(--space-2);
-  max-width: var(--form-max);
-}
 
 /* Phones and small tablets: the card first, then the panels. */
 @media (max-width: 1023.98px) {
@@ -797,8 +669,7 @@
 
 /* Phones and tablets: everything you tap in the designer is at least 44px. */
 @media (max-width: 1023.98px) {
-  .chip,
-  .chip-small,
+  .studio-chips .chip,
   .input-small,
   .select-small,
   .layer-name,
@@ -817,18 +688,4 @@
     width: var(--control);
     height: var(--control);
   }
-}
-
-/* Print: when each lanyard was issued and printed */
-.print-person-main {
-  display: grid;
-  min-width: 0;
-  padding: var(--space-1) 0;
-}
-.print-person-dates {
-  color: var(--ink-3);
-  font-size: var(--text-sm);
-}
-.print-new {
-  color: var(--warning-fg);
 }

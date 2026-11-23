@@ -1,1 +1,444 @@
 /* Organiser pages (lanyards): layout for the UI rework. Uses the shared kit (kit.css). */
+
+/* ---------- Design | Print tabs, with the save status on the right ---------- */
+.ly-tabs-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+  margin: calc(var(--space-3) * -1) 0 var(--space-4);
+  border-bottom: var(--border-width) solid var(--divider);
+}
+.ly-tabs-row .studio-tabs {
+  margin: 0;
+  border-bottom: 0;
+}
+.ly-tabs-end {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+  padding-bottom: var(--space-2);
+  color: var(--ink-3);
+  font-size: var(--text-md);
+}
+
+/* ---------- Print ---------- */
+.page:has(.ly-print) {
+  max-width: none;
+}
+.ly-print {
+  display: grid;
+  gap: var(--space-4);
+  container-type: inline-size;
+}
+.ly-print-grid {
+  display: grid;
+  gap: var(--space-5);
+  align-items: start;
+}
+/* Side by side when there's room; otherwise the print settings sit beside the preview, under the list. */
+@container (min-width: 52rem) {
+  .ly-print-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(19rem, 23rem);
+  }
+}
+@container (min-width: 34rem) and (max-width: 51.99rem) {
+  .ly-how {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+.ly-who {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.ly-who .toolbar > .search {
+  flex: 1 1 13rem;
+}
+.ly-who .toolbar .select {
+  flex: 0 1 10.5rem;
+  min-width: 0;
+}
+.ly-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+.ly-clear {
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+}
+
+.ly-list-card {
+  overflow: hidden;
+  border: var(--border-width) solid var(--divider);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.ly-list-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 3rem;
+  padding: 0 var(--space-2) 0 var(--space-4);
+  border-bottom: var(--border-width) solid var(--divider);
+  background: var(--canvas);
+}
+.ly-check-all {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--ink-2);
+  font-size: var(--text-md);
+  cursor: pointer;
+}
+.ly-check-all strong {
+  color: var(--ink);
+}
+.ly-list-head-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+.ly-sort {
+  width: auto;
+  min-height: 2.25rem;
+  margin-right: var(--space-2);
+  font-size: var(--text-md);
+}
+.ly-check-all input,
+.ly-person input {
+  flex: none;
+  width: 1.125rem;
+  height: 1.125rem;
+  accent-color: var(--brand);
+}
+.ly-list-empty {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-4);
+  color: var(--ink-2);
+}
+
+/* Hundreds of people: the list scrolls inside, in columns when there's room. */
+.ly-people.scroll-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+  align-content: start;
+  max-height: max(18rem, calc(100vh - 26rem));
+}
+.ly-people li {
+  border-bottom: var(--border-width) solid var(--divider);
+}
+.ly-person {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--row-min);
+  padding: var(--space-1) var(--space-4);
+  cursor: pointer;
+}
+.ly-person:hover {
+  background: var(--canvas);
+}
+.ly-person:has(input:not(:checked)) .ly-person-main {
+  opacity: 0.6;
+}
+.ly-person-main {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.ly-person-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-weight: var(--weight-bold);
+}
+.ly-person-name .icon {
+  color: var(--ink-3);
+}
+.ly-person-meta {
+  overflow: hidden;
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ly-status {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  white-space: nowrap;
+}
+.ly-status-done {
+  background: var(--success-bg);
+  color: var(--success-fg);
+}
+.ly-status-new {
+  background: var(--warning-bg);
+  color: var(--warning-fg);
+}
+
+/* Print settings and the preview */
+.ly-how {
+  display: grid;
+  gap: var(--space-3);
+}
+.ly-panel {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: var(--border-width) solid var(--divider);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.ly-field {
+  display: grid;
+  gap: var(--space-2);
+}
+.ly-field > .meta {
+  font-size: var(--text-sm);
+}
+.ly-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+.ly-field .segmented label {
+  min-width: 0;
+  padding: 0 var(--space-2);
+}
+.ly-preview {
+  gap: var(--space-3);
+  justify-items: center;
+}
+.ly-preview-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  justify-self: stretch;
+}
+.ly-preview .sheet-preview-wrap {
+  padding: var(--space-3);
+}
+.ly-preview .sheet-preview {
+  max-height: calc(100vh - 26rem);
+  min-height: 14rem;
+  width: auto !important;
+}
+.ly-preview .print-cards-preview {
+  justify-content: center;
+  justify-self: stretch;
+  padding: var(--space-4);
+  gap: var(--space-4);
+}
+
+/* The bar at the bottom: count, mark, download. Always in reach. */
+.ly-actionbar {
+  margin-top: 0;
+}
+.ly-actionbar .selection-count {
+  color: rgb(255 255 255 / 0.85);
+}
+.ly-actionbar .selection-count strong {
+  color: #FFFFFF;
+}
+.ly-actionbar .ly-bar-ghost {
+  color: #FFFFFF;
+}
+.ly-actionbar .ly-bar-ghost:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.12);
+}
+.ly-actionbar .btn-primary {
+  background: #FFFFFF;
+  color: var(--brand);
+}
+.ly-actionbar .btn-primary:hover:not(:disabled) {
+  background: var(--brand-tint);
+}
+.ly-actionbar-progress {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 12rem;
+  font-weight: var(--weight-bold);
+}
+.ly-actionbar-progress .progress {
+  background: rgb(255 255 255 / 0.25);
+}
+
+@container (max-width: 51.99rem) {
+  .ly-preview .sheet-preview {
+    max-height: 28rem;
+  }
+}
+@media (max-width: 1023.98px) {
+  .ly-people.scroll-list {
+    max-height: 60vh;
+  }
+}
+@media (max-width: 599.98px) {
+  .ly-who .toolbar .select {
+    flex: 1 1 9rem;
+  }
+  .ly-list-head {
+    flex-wrap: wrap;
+    padding-top: var(--space-1);
+    padding-bottom: var(--space-1);
+  }
+  .ly-person-meta {
+    white-space: normal;
+  }
+  .ly-person {
+    flex-wrap: wrap;
+  }
+  .ly-actionbar {
+    gap: var(--space-1) var(--space-3);
+  }
+  .ly-actionbar .selection-actions {
+    flex-wrap: nowrap;
+    width: 100%;
+    margin-left: 0;
+  }
+  .ly-actionbar .btn-primary {
+    flex: 1;
+  }
+}
+
+/* ---------- Designer ---------- */
+/* Each banner brings its own space, so none shown means no gap. */
+.studio-banners {
+  gap: 0;
+}
+.studio-banners > * {
+  margin-bottom: var(--space-2);
+}
+.studio-panel {
+  padding: var(--space-3);
+}
+
+/* Add: compact icon + word buttons, two to a row */
+.studio-add-grid {
+  gap: var(--space-1);
+}
+.studio-add {
+  gap: 2px;
+  min-height: 3.25rem;
+  padding: var(--space-1);
+  line-height: 1.15;
+  text-align: center;
+}
+.studio-add .icon {
+  flex: none;
+  width: 1.125rem;
+  height: 1.125rem;
+}
+.studio-chips {
+  gap: var(--space-1);
+}
+.studio-chips .chip {
+  min-height: 2rem;
+  padding: 0 var(--space-2);
+}
+.studio-label-tip,
+.studio-subheading,
+.studio-tip-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.studio-tip-row {
+  gap: var(--space-1);
+}
+/* Side switch, undo/redo and zoom stay on one slim row (mouse-sized on computers) */
+@media (min-width: 1024px) {
+  .studio-toolbar {
+    flex-wrap: nowrap;
+    padding: var(--space-1) var(--space-2);
+  }
+  .studio-toolbar .segmented label {
+    min-width: 4rem;
+    min-height: 2.25rem;
+    padding: 0 var(--space-3);
+  }
+  .studio-toolbar .icon-btn {
+    width: 2.25rem;
+    height: 2.25rem;
+    min-width: 0;
+    min-height: 0;
+  }
+  .studio-toolbar .studio-zoom {
+    min-width: 3.5rem;
+    min-height: 2.25rem;
+    padding: 0 var(--space-1);
+  }
+}
+.studio-layers .layer-name {
+  min-height: 2.25rem;
+}
+
+/* The card area: one slim bar above, one below */
+.studio-footer {
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-2) var(--space-3);
+}
+.studio-footer .toggle {
+  min-height: 2.25rem;
+  font-size: var(--text-md);
+}
+.studio-hint {
+  flex-basis: auto;
+  margin-left: auto;
+}
+
+/* Selected thing: arrange tools straight under its name */
+.studio-props-head {
+  margin-bottom: 0;
+}
+.studio-arrange {
+  display: flex;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: var(--border-width) solid var(--divider);
+}
+.studio-props > .banner-line {
+  margin-bottom: var(--space-3);
+}
+.studio-props .toggle {
+  min-height: 2.25rem;
+}
+.studio-props .toggle-text {
+  font-size: var(--text-md);
+}
+.studio-ok {
+  align-items: center;
+}
+.size-option {
+  padding: var(--space-2) var(--space-3);
+}
+
+@media (max-width: 1023.98px) {
+  .studio-add {
+    min-height: var(--control);
+  }
+  .studio-hint {
+    margin-left: 0;
+  }
+}
+.ly-actionbar .btn .icon {
+  flex: none;
+}
