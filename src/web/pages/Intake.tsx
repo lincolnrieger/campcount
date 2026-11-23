@@ -5,13 +5,17 @@ import type { Linked, RosterPerson, Section as SectionName } from '../../shared/
 import {
   autoSection,
   buildRow,
+  detailChanges,
+  dietaryIsDone,
   dietaryNotes,
   dietarySignature,
   displayName,
   hasDietaryNotes,
   linkPeople,
   memberKey,
+  mergeChanges,
   needsSection,
+  newDietarySources,
 } from '../../shared/localIntake';
 import type { DietaryEntryInput, ImportRow } from '../../shared/schemas';
 import { ApiFailure, api } from '../api';
@@ -136,7 +140,8 @@ export function Intake() {
     try {
       const results: ReadFile[] = [];
       for (const f of [...list]) results.push(await readIntakeFile(f));
-      const next = { ...local?.files };
+      const old = local ?? emptyLocal();
+      const next = { ...old.files };
       for (const r of results)
         next[r.source] = {
           fileName: r.fileName,
@@ -144,11 +149,70 @@ export function Intake() {
           people: r.people,
           problems: r.problems,
         };
-      const totals = await sendToRoster(next, local?.chosen ?? {});
-      update((l) => ({ ...l, files: next }));
+      const at = new Date().toISOString();
+      const before = linkPeople(old.files.myscout?.people ?? [], old.files.consent2go?.people ?? [], roster).people;
+      const after = linkPeople(next.myscout?.people ?? [], next.consent2go?.people ?? [], roster).people;
+
+      // What's different from the last upload of each file, for review (merged with anything not looked at yet).
+      const beforeByKey = new Map(before.map((p) => [p.key, p]));
+      const changes = { ...(old.changes ?? {}) };
+      let changed = 0;
+      for (const p of after) {
+        const b = beforeByKey.get(p.key);
+        const items = b ? detailChanges(b, p) : [];
+        if (!items.length) continue;
+        const merged = mergeChanges(changes[p.key]?.items ?? [], items);
+        if (merged.length) {
+          changes[p.key] = { name: displayName(p), memberNumber: p.memberNumber, at, items: merged };
+          changed++;
+        } else delete changes[p.key];
+      }
+
+      const totals = await sendToRoster(next, old.chosen);
+
+      // Anyone who was in a file before, but is in neither now, comes off the roster (and onto the removed list).
+      const seen = new Set([...(old.seen ?? []), ...before.map((p) => p.key), ...after.map((p) => p.key)]);
+      const inFiles = new Set(after.map((p) => p.key));
+      const keep = new Set(old.keep ?? []);
+      const fresh = (await api<{ registrations: Registration[] }>(`/events/${event.id}/registrations`)).registrations;
+      const active = fresh.filter((r) => r.status === 'active');
+      let gone = active.filter((r) => {
+        const k = memberKey(r.memberNumber);
+        return seen.has(k) && !inFiles.has(k) && !keep.has(k);
+      });
+      // A lot at once usually means the wrong file: check first.
+      if (gone.length > 10 && gone.length > active.length * 0.1) {
+        const ok = await confirm({
+          title: `Take ${gone.length} people off the roster?`,
+          body: <p>They were in an earlier upload but aren’t in either file now. If this is the wrong file, cancel (nobody is taken off) and upload the right one.</p>,
+          confirm: 'Take them off',
+          danger: true,
+        });
+        if (!ok) gone = [];
+      }
+      const removed = { ...(old.removed ?? {}) };
+      for (const k of Object.keys(removed)) if (inFiles.has(k)) delete removed[k]; // back in a file: back on the roster
+      for (const r of gone) {
+        await api(`/events/${event.id}/registrations/${r.id}`, { method: 'PATCH', body: { status: 'withdrawn' } });
+        removed[memberKey(r.memberNumber)] = {
+          name: `${r.preferredName || r.firstName} ${r.lastName}`.trim(),
+          memberNumber: r.memberNumber,
+          registrationId: r.id,
+          at,
+        };
+      }
+
+      update((l) => ({ ...l, files: next, changes, seen: [...seen], removed }));
       await registrations.reload();
       setSummary(
-        `${results.map((r) => `${SOURCE_NAME[r.source]}: ${plural(r.people.length, 'person', 'people')}`).join(' · ')}. On the roster: ${totals.create} added, ${totals.update} updated, ${totals.unchanged} unchanged.`,
+        [
+          `${results.map((r) => `${SOURCE_NAME[r.source]}: ${plural(r.people.length, 'person', 'people')}`).join(' · ')}.`,
+          `${totals.create} added, ${totals.unchanged + totals.update} already on the roster.`,
+          changed ? `${plural(changed, 'person has', 'people have')} changed details to review.` : '',
+          gone.length ? `${plural(gone.length, 'person', 'people')} taken off (in neither file now).` : '',
+        ]
+          .filter(Boolean)
+          .join(' '),
       );
     } catch (err) {
       setProblem(fail(err));
@@ -156,6 +220,30 @@ export function Intake() {
       setBusy(false);
     }
   }
+
+  async function putBack(key: string) {
+    const r = local?.removed?.[key];
+    if (!r) return;
+    try {
+      await api(`/events/${event.id}/registrations/${r.registrationId}`, { method: 'PATCH', body: { status: 'active' } });
+      update((l) => {
+        const removed = { ...(l.removed ?? {}) };
+        delete removed[key];
+        return { ...l, removed, keep: [...new Set([...(l.keep ?? []), key])] };
+      });
+      await registrations.reload();
+      toast(`${r.name} is back on the roster`);
+    } catch (err) {
+      toast(fail(err), { tone: 'error' });
+    }
+  }
+
+  const reviewed = (keys: string[]) =>
+    update((l) => {
+      const changes = { ...(l.changes ?? {}) };
+      for (const k of keys) delete changes[k];
+      return { ...l, changes };
+    });
 
   async function chooseSection(p: Linked, section: SectionName) {
     const reg = regByKey.get(p.key);
@@ -190,7 +278,7 @@ export function Intake() {
     <PageHeader
       title="Import & check"
       back={{ to: `${base}/people`, label: 'People' }}
-      summary="Upload the MyScout and Consent2Go exports, as often as you like. Everyone goes onto the roster straight away. Then choose sections where the MyScout position doesn’t say, and read through dietary notes. The files stay on this computer."
+      summary="Upload the MyScout and Consent2Go exports as often as you like. New people go onto the roster; people already checked are skipped. Anything that changed since the last upload is listed to check, and anyone in neither file is taken off. The files stay on this computer."
       menu={[
         {
           label: 'Import with column matching',
@@ -228,9 +316,14 @@ export function Intake() {
   const toChoose = people.filter((p) => onRoster(p) && needsSection(p, chosenMap));
   const chosen = people.filter((p) => onRoster(p) && autoSection(p) === null && chosenMap[p.key]);
   const dietaryTodo = people
-    .filter((p) => onRoster(p) && hasDietaryNotes(p) && local.dietaryDone[p.key] !== dietarySignature(p))
+    .filter((p) => onRoster(p) && hasDietaryNotes(p) && !dietaryIsDone(p, local.dietaryDone[p.key]))
     .sort((a, b) => later.indexOf(a.key) - later.indexOf(b.key));
-  const dietaryDone = people.filter((p) => onRoster(p) && hasDietaryNotes(p) && local.dietaryDone[p.key] === dietarySignature(p));
+  const dietaryDone = people.filter((p) => onRoster(p) && hasDietaryNotes(p) && dietaryIsDone(p, local.dietaryDone[p.key]));
+  const changes = Object.entries(local.changes ?? {}).sort(([, a], [, b]) => a.name.localeCompare(b.name));
+  // Only people still off the roster.
+  const removed = Object.entries(local.removed ?? {})
+    .filter(([k]) => regByKey.get(k)?.status !== 'active')
+    .sort(([, a], [, b]) => a.name.localeCompare(b.name));
   const noC2G = people.filter((p) => p.ms && !p.cg);
   const notInMyScout = people.filter((p) => !p.ms && p.cg);
   const nameMatched = people.filter((p) => p.ms && p.link === 'name');
@@ -308,6 +401,8 @@ export function Intake() {
             <div className="tiles intake-tiles">
               <CountTile value={canDiet ? dietaryTodo.length : '–'} label="Dietary to read" tone={canDiet && dietaryTodo.length ? 'warning' : 'success'} />
               <CountTile value={toChoose.length} label="Section to choose" tone={toChoose.length ? 'warning' : 'success'} />
+              <CountTile value={changes.length} label="Changed details" tone={changes.length ? 'warning' : 'success'} />
+              <CountTile value={removed.length} label="Taken off" />
               <CountTile value={local.files.consent2go ? noC2G.length : '–'} label="No Consent2Go yet" />
               <CountTile value={people.length} label="Everyone in the files" />
             </div>
@@ -319,7 +414,7 @@ export function Intake() {
                 <p className="meta">Someone who can edit dietary needs reads these.</p>
               ) : !current ? (
                 <p className="meta">
-                  {dietaryDone.length ? `All ${plural(dietaryDone.length, 'person', 'people')} with dietary notes are done.` : 'No one has dietary notes.'} New
+                  {dietaryDone.length === 1 ? 'The 1 person with dietary notes is done.' : dietaryDone.length ? `All ${dietaryDone.length} people with dietary notes are done.` : 'No one has dietary notes.'} New
                   or changed notes show here after each upload.
                 </p>
               ) : (
@@ -328,6 +423,7 @@ export function Intake() {
                   eventId={event.id}
                   person={current}
                   reg={regByKey.get(current.key)!}
+                  fresh={newDietarySources(current, local.dietaryDone[current.key])}
                   left={dietaryTodo.length}
                   onDone={async (p) => {
                     update((l) => ({
@@ -343,6 +439,73 @@ export function Intake() {
                 />
               )}
             </Section>
+
+            {changes.length > 0 && (
+              <Section title={`Changed since the last upload (${changes.length})`} id="changes">
+                <p className="meta">The roster has been updated to match. Check these look right.</p>
+                <div>
+                  <Button small kind="ghost" onClick={() => reviewed(changes.map(([k]) => k))}>
+                    Mark all as checked
+                  </Button>
+                </div>
+                <ul className="list">
+                  {changes.map(([k, c]) => (
+                    <li key={k} className="row intake-change">
+                      <span className="row-main">
+                        <span className="row-title">{c.name}</span>
+                        <span className="row-meta">{c.memberNumber}</span>
+                        <ul className="intake-change-items">
+                          {c.items.map((i) => (
+                            <li key={i.label}>
+                              <span className="meta">{i.label}:</span> <s>{i.before}</s> → <strong>{i.after}</strong>
+                            </li>
+                          ))}
+                        </ul>
+                      </span>
+                      <span className="row-side">
+                        <Button small onClick={() => reviewed([k])}>
+                          Checked
+                        </Button>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </Section>
+            )}
+
+            {removed.length > 0 && (
+              <Section title={`Taken off the roster (${removed.length})`} id="removed">
+                <p className="meta">They were in an earlier upload but aren’t in MyScout or Consent2Go any more. Put someone back if that’s a mistake; they won’t be taken off again.</p>
+                <div>
+                  <Button
+                    small
+                    kind="ghost"
+                    onClick={() =>
+                      downloadCsv('Taken off the roster.csv', [['Name', 'Membership number', 'Taken off'], ...removed.map(([, r]) => [r.name, r.memberNumber, when(r.at)])])
+                    }
+                  >
+                    <Icon name="download" /> Download the list
+                  </Button>
+                </div>
+                <ul className="list">
+                  {removed.map(([k, r]) => (
+                    <li key={k} className="row">
+                      <span className="row-main">
+                        <span className="row-title">{r.name}</span>
+                        <span className="row-meta">
+                          {r.memberNumber} · taken off {when(r.at)}
+                        </span>
+                      </span>
+                      <span className="row-side">
+                        <Button small kind="ghost" onClick={() => void putBack(k)}>
+                          Put back
+                        </Button>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </Section>
+            )}
 
             <Section title={`Choose a section${toChoose.length ? ` (${toChoose.length})` : ''}`} id="sections">
               <p className="meta">
@@ -507,6 +670,7 @@ function DietaryReview({
   eventId,
   person,
   reg,
+  fresh,
   left,
   onDone,
   onLater,
@@ -514,6 +678,8 @@ function DietaryReview({
   eventId: string;
   person: Linked;
   reg: Registration;
+  /** Notes that are new since this person was last done. */
+  fresh: ('myscout' | 'consent2go')[];
   left: number;
   onDone: (p: Linked) => Promise<void>;
   onLater?: (p: Linked) => void;
@@ -557,7 +723,7 @@ function DietaryReview({
       </div>
       <div className="intake-notes">
         <div className="intake-note">
-          <h4>MyScout</h4>
+          <h4>MyScout {fresh.includes('myscout') && <Badge tone="warning">New</Badge>}</h4>
           {!person.ms ? (
             <p className="meta">Not in MyScout.</p>
           ) : notes.myscout ? (
@@ -567,7 +733,7 @@ function DietaryReview({
           )}
         </div>
         <div className="intake-note">
-          <h4>Consent2Go</h4>
+          <h4>Consent2Go {fresh.includes('consent2go') && <Badge tone="warning">New</Badge>}</h4>
           {!person.cg ? (
             <p className="meta">Not done Consent2Go yet.</p>
           ) : notes.consent2go ? (
@@ -577,6 +743,9 @@ function DietaryReview({
           )}
         </div>
       </div>
+      {fresh.length > 0 && (reg.dietary ?? []).length > 0 && (
+        <p className="meta">Done before. Back because {fresh.map((f) => (f === 'myscout' ? 'MyScout' : 'Consent2Go')).join(' and ')} has something new. What’s already recorded is below: add anything the new note says.</p>
+      )}
       {entries && entries.length > 0 && !(reg.dietary ?? []).length && <p className="meta">Filled in from the notes. Check them against what’s written.</p>}
       {problem && (
         <Notice tone="error">
