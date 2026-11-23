@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import type { DietaryEntryInput } from '../../shared/schemas';
 import { kindForSection, sectionStyle } from '../../shared/sections';
@@ -11,7 +11,7 @@ import type { Where } from '../model';
 import { scanVerb } from '../model';
 import { recordByHand } from '../scan/manual';
 import { useApi } from '../useApi';
-import { Badge, Button, EmptyState, Field, Icon, LoadError, Loading, Menu, PageHeader, Section, Sheet, SkeletonHeader, SkeletonRows, useConfirm, useToast } from '../ui';
+import { Badge, Banner, Button, ButtonLink, Field, Icon, InfoTip, LoadError, Loading, Menu, PageHeader, Section, Sheet, SkeletonHeader, SkeletonRows, useConfirm, useToast } from '../ui';
 import type { MenuItem, Tone } from '../ui';
 import { useEvent } from './EventLayout';
 
@@ -157,75 +157,67 @@ export function Person() {
 
   const setStatus = (status: 'active' | 'withdrawn') => api(path, { method: 'PATCH', body: { status } });
 
+  async function issueCard() {
+    try {
+      await api(`/events/${event.id}/credentials/issue`, { body: { mode: 'missing', registrationIds: [r.id] } });
+      toast('Lanyard issued');
+      await reload();
+    } catch (err) {
+      fail(err);
+    }
+  }
+
+  async function replaceCard() {
+    const ok = await confirm({ title: `Replace ${fullName}'s lanyard?`, body: <p>The current card stops working straight away.</p>, confirm: 'Replace lanyard' });
+    if (!ok) return;
+    try {
+      await api(`/events/${event.id}/credentials/issue`, { body: { mode: 'replace', registrationIds: [r.id] } });
+      toast('New lanyard issued');
+      await reload();
+    } catch (err) {
+      fail(err);
+    }
+  }
+
+  async function withdraw() {
+    const ok = await confirm({
+      title: `Withdraw ${fullName}?`,
+      body: <p>Their card stops scanning. Their records are kept, and you can restore them later.</p>,
+      confirm: 'Withdraw',
+    });
+    if (!ok) return;
+    try {
+      await setStatus('withdrawn');
+      await reload();
+      toast(`${fullName} withdrawn`, {
+        undo: async () => {
+          await setStatus('active');
+          await reload();
+        },
+      });
+    } catch (err) {
+      fail(err);
+    }
+  }
+
+  async function restore() {
+    try {
+      await setStatus('active');
+      await reload();
+      toast(`${fullName} is back on the event`);
+    } catch (err) {
+      fail(err);
+    }
+  }
+
+  // With nothing to mark, Edit details is the header button; otherwise it's first in the menu.
+  const editInHeader = !canMark && data.can.edit;
   const menu: MenuItem[] = [
-    data.can.edit && { label: 'Edit details', to: 'edit' },
+    data.can.edit && !editInHeader && { label: 'Edit details', to: 'edit' },
     data.can.cards && r.shortCode && { label: 'Download lanyard', onSelect: () => void downloadCard() },
-    data.can.cards &&
-      r.status === 'active' &&
-      !r.shortCode && {
-        label: 'Issue lanyard',
-        onSelect: async () => {
-          try {
-            await api(`/events/${event.id}/credentials/issue`, { body: { mode: 'missing', registrationIds: [r.id] } });
-            toast('Lanyard issued. Download it from this menu.');
-            await reload();
-          } catch (err) {
-            fail(err);
-          }
-        },
-      },
-    data.can.cards &&
-      r.shortCode && {
-        label: 'Replace lanyard',
-        onSelect: async () => {
-          const ok = await confirm({ title: `Replace ${fullName}'s lanyard?`, body: <p>The current card stops working straight away.</p>, confirm: 'Replace lanyard' });
-          if (!ok) return;
-          try {
-            await api(`/events/${event.id}/credentials/issue`, { body: { mode: 'replace', registrationIds: [r.id] } });
-            toast('New lanyard issued. Download it from this menu.');
-            await reload();
-          } catch (err) {
-            fail(err);
-          }
-        },
-      },
-    data.can.edit &&
-      (r.status === 'active'
-        ? {
-            label: 'Withdraw from event',
-            onSelect: async () => {
-              const ok = await confirm({
-                title: `Withdraw ${fullName}?`,
-                body: <p>Their card stops scanning. Their records are kept, and you can restore them later.</p>,
-                confirm: 'Withdraw',
-              });
-              if (!ok) return;
-              try {
-                await setStatus('withdrawn');
-                await reload();
-                toast(`${fullName} withdrawn`, {
-                  undo: async () => {
-                    await setStatus('active');
-                    await reload();
-                  },
-                });
-              } catch (err) {
-                fail(err);
-              }
-            },
-          }
-        : {
-            label: 'Restore to event',
-            onSelect: async () => {
-              try {
-                await setStatus('active');
-                await reload();
-                toast(`${fullName} is back on the event`);
-              } catch (err) {
-                fail(err);
-              }
-            },
-          }),
+    data.can.cards && r.status === 'active' && !r.shortCode && { label: 'Issue lanyard', onSelect: () => void issueCard() },
+    data.can.cards && r.shortCode && { label: 'Replace lanyard…', onSelect: () => void replaceCard() },
+    data.can.edit && (r.status === 'active' ? { label: 'Withdraw from event…', onSelect: () => void withdraw() } : { label: 'Restore to event', onSelect: () => void restore() }),
     data.can.edit && {
       label: 'Delete person…',
       danger: true,
@@ -260,6 +252,7 @@ export function Person() {
     const day = new Date(h.at).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: tz });
     days.set(day, [...(days.get(day) ?? []), h]);
   }
+  const anaphylactic = r.dietary?.some((d) => d.category === 'allergy' && d.severity === 'anaphylactic');
 
   return (
     <>
@@ -271,28 +264,43 @@ export function Person() {
             <span>{[r.section, r.kind === 'adult' && r.position, r.groupName].filter(Boolean).join(' · ')}</span>
             {r.status === 'withdrawn' && <Badge tone="error">Withdrawn</Badge>}
             {r.photoConsent === 'no' && <Badge tone="error">No photos</Badge>}
-            {allergy && <Badge tone="error">Allergy</Badge>}
+            {allergy && <Badge tone="error">{anaphylactic ? 'Anaphylactic' : 'Allergy'}</Badge>}
           </>
         }
         primary={
-          canMark && (
+          canMark ? (
             <Button kind="primary" busyLabel="Saving…" onAction={mark}>
               {leaving ? 'Mark as left' : 'Mark as arrived'}
             </Button>
+          ) : (
+            editInHeader && <ButtonLink to="edit">Edit details</ButtonLink>
           )
         }
         menu={menu.length ? menu : undefined}
         menuLabel={`More actions for ${fullName}`}
       />
 
-      <div className="columns">
-        <div className="sections">
+      {r.status === 'withdrawn' && (
+        <Banner
+          tone="warning"
+          action={
+            data.can.edit && (
+              <Button small busyLabel="Restoring…" onAction={restore}>
+                Restore
+              </Button>
+            )
+          }
+        >
+          Withdrawn. Their card doesn’t scan.
+        </Banner>
+      )}
+
+      <div className="columns person-columns">
+        <div className="sections person-main">
           {data.where && (
-            <Section title="Right now" id="now">
-              <div className="panel panel-pad">
-                <RightNow where={data.where} tz={tz} />
-              </div>
-            </Section>
+            <section className="panel person-now" aria-label="Right now">
+              <RightNow where={data.where} tz={tz} />
+            </section>
           )}
 
           {r.dietary && (
@@ -312,8 +320,8 @@ export function Person() {
               ) : (
                 <ul className="list">
                   {r.dietary.map((d, i) => (
-                    <li key={i} className="row">
-                      {d.category === 'allergy' ? <Badge tone="error">Allergy</Badge> : null}
+                    <li key={i} className="row person-row">
+                      {d.category === 'allergy' ? <Badge tone="error">{d.severity === 'anaphylactic' ? 'Anaphylactic' : 'Allergy'}</Badge> : null}
                       <span className="row-main">{describeEntry(d)}</span>
                     </li>
                   ))}
@@ -322,13 +330,13 @@ export function Person() {
             </Section>
           )}
 
-          <Section title="Activities" id="acts">
+          <Section title={data.bookings.length ? `Activities (${data.bookings.length})` : 'Activities'} id="acts">
             {data.bookings.length === 0 ? (
               <p className="meta">Not signed up for any activities.</p>
             ) : (
               <ul className="list">
                 {data.bookings.map((b) => (
-                  <li key={b.activityId} className="row">
+                  <li key={b.activityId} className="row person-row">
                     <span className="row-main">
                       <span className="row-title">{b.name}</span>
                       <span className="row-meta">
@@ -341,82 +349,115 @@ export function Person() {
               </ul>
             )}
           </Section>
-        </div>
 
-        <div className="sections">
-          <LanyardPanel eventId={event.id} registrationId={r.id} section={r.section} shortCode={r.shortCode} canShowQr={!!data.can.cards} />
-
-          <Section title="History" id="history">
+          <Section title={data.history.length ? `History (${data.history.length})` : 'History'} id="history">
             {data.history.length === 0 ? (
-              <EmptyState title="No scans yet" />
+              <p className="meta">No scans yet.</p>
             ) : (
-              [...days].map(([day, items]) => (
-                <div key={day} className="list">
-                  <p className="list-group-heading">{day}</p>
-                  <ol>
-                    {items.map((h) => {
-                      const tag = OUTCOME[h.outcome];
-                      const undoable = can('attendance.correct') && h.outcome !== 'void' && h.outcome !== 'rejected';
-                      return (
-                        <li key={h.id} className={h.outcome === 'accepted' ? 'row' : 'row is-muted'}>
-                          <span className="history-time num">{timeInZone(h.at, tz)}</span>
-                          <span className="row-main">
-                            <span className={h.outcome === 'void' ? 'row-title is-struck' : 'row-title'}>
-                              {scanVerb(h.type, h.direction)} · {h.place}
+              <div className="list person-history">
+                {[...days].map(([day, items]) => (
+                  <div key={day}>
+                    <p className="list-group-heading">{day}</p>
+                    <ol>
+                      {items.map((h) => {
+                        const tag = OUTCOME[h.outcome];
+                        const undoable = can('attendance.correct') && h.outcome !== 'void' && h.outcome !== 'rejected';
+                        return (
+                          <li key={h.id} className={h.outcome === 'accepted' ? 'row person-row' : 'row person-row is-muted'}>
+                            <span className="history-time num">{timeInZone(h.at, tz)}</span>
+                            <span className="row-main">
+                              <span className={h.outcome === 'void' ? 'row-title is-struck' : 'row-title'}>
+                                {scanVerb(h.type, h.direction)} · {h.place}
+                              </span>
+                              <span className="row-meta">
+                                {[h.by && `by ${h.by}`, h.method === 'manual' ? 'by hand' : h.method === 'code' ? 'typed code' : null].filter(Boolean).join(' · ')}
+                              </span>
+                              {tag && (
+                                <span>
+                                  <Badge tone={tag.tone}>{tag.label}</Badge>
+                                </span>
+                              )}
                             </span>
-                            <span className="row-meta">
-                              {[h.by && `by ${h.by}`, h.method === 'manual' ? 'by hand' : h.method === 'code' ? 'typed code' : null].filter(Boolean).join(' · ')}
-                            </span>
-                            {tag && (
-                              <span>
-                                <Badge tone={tag.tone}>{tag.label}</Badge>
+                            {undoable && (
+                              <span className="row-side">
+                                <Menu
+                                  label={`Options for ${scanVerb(h.type, h.direction).toLowerCase()} at ${timeInZone(h.at, tz)}`}
+                                  items={[
+                                    {
+                                      label: 'Undo this scan',
+                                      danger: true,
+                                      onSelect: async () => {
+                                        const ok = await confirm({
+                                          title: 'Undo this scan?',
+                                          body: (
+                                            <p>
+                                              {scanVerb(h.type, h.direction)} at {h.place}, {timeInZone(h.at, tz)}. It stays in the history, marked as undone.
+                                            </p>
+                                          ),
+                                          confirm: 'Undo scan',
+                                          danger: true,
+                                        });
+                                        if (!ok) return;
+                                        try {
+                                          await api(`/events/${event.id}/scans/${h.id}/void`, { body: { reason: 'Undone from the person page' } });
+                                          toast('Scan undone');
+                                          await reload();
+                                        } catch (err) {
+                                          fail(err);
+                                        }
+                                      },
+                                    },
+                                  ]}
+                                />
                               </span>
                             )}
-                          </span>
-                          {undoable && (
-                            <span className="row-side">
-                              <Menu
-                                label={`Options for ${scanVerb(h.type, h.direction).toLowerCase()} at ${timeInZone(h.at, tz)}`}
-                                items={[
-                                  {
-                                    label: 'Undo this scan',
-                                    danger: true,
-                                    onSelect: async () => {
-                                      const ok = await confirm({
-                                        title: 'Undo this scan?',
-                                        body: (
-                                          <p>
-                                            {scanVerb(h.type, h.direction)} at {h.place}, {timeInZone(h.at, tz)}. It stays in the history, marked as undone.
-                                          </p>
-                                        ),
-                                        confirm: 'Undo scan',
-                                        danger: true,
-                                      });
-                                      if (!ok) return;
-                                      try {
-                                        await api(`/events/${event.id}/scans/${h.id}/void`, { body: { reason: 'Undone from the person page' } });
-                                        toast('Scan undone');
-                                        await reload();
-                                      } catch (err) {
-                                        fail(err);
-                                      }
-                                    },
-                                  },
-                                ]}
-                              />
-                            </span>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ol>
-                </div>
-              ))
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  </div>
+                ))}
+              </div>
             )}
           </Section>
+        </div>
 
-          <Section title="Details" id="details">
-            <dl className="panel panel-pad dl">
+        <div className="sections person-side">
+          <LanyardPanel
+            eventId={event.id}
+            registrationId={r.id}
+            section={r.section}
+            shortCode={r.shortCode}
+            canShowQr={!!data.can.cards}
+            actions={
+              data.can.cards &&
+              (r.shortCode ? (
+                <Button small busyLabel="Preparing…" onAction={downloadCard}>
+                  <Icon name="download" size={18} />
+                  Download
+                </Button>
+              ) : (
+                r.status === 'active' && (
+                  <Button small busyLabel="Issuing…" onAction={issueCard}>
+                    Issue lanyard
+                  </Button>
+                )
+              ))
+            }
+          />
+
+          <Section
+            title="Details"
+            id="details"
+            actions={
+              data.can.edit && (
+                <ButtonLink small kind="ghost" to="edit">
+                  Edit
+                </ButtonLink>
+              )
+            }
+          >
+            <dl className="panel person-dl">
               <div>
                 <dt>Name</dt>
                 <dd>
@@ -481,7 +522,7 @@ export function Person() {
         {editingDiet !== null && (
           <>
             <DietaryEditor value={editingDiet} onChange={setEditingDiet} labelPrefix={fullName} />
-            <div className="btn-row">
+            <div className="btn-row sheet-actions">
               <Button
                 kind="primary"
                 busyLabel="Saving…"
@@ -591,71 +632,88 @@ function DetailsForm({ r, back, path, onSaved }: { r: PersonData['registration']
     }
   }
 
+  const adultSection = kindForSection(f.section, event.youthSections ?? []) === 'adult';
+  const extraKeys = Object.keys(r.extra ?? {});
   return (
     <>
       <PageHeader title="Edit details" back={back} summary={name} />
-      <form className="form" onSubmit={submit} noValidate>
-        {failure && (
-          <p className="field-error" role="alert">
-            <Icon name="error" size={16} />
-            {failure}
-          </p>
-        )}
-        <div className="field-pair">
-          <Field id="p-first" label="First name" error={errors.firstName}>
-            <input className="input" value={f.firstName} onChange={set('firstName')} autoComplete="off" />
-          </Field>
-          <Field id="p-last" label="Last name" error={errors.lastName}>
-            <input className="input" value={f.lastName} onChange={set('lastName')} autoComplete="off" />
-          </Field>
-        </div>
-        <Field id="p-pref" label="Goes by" optional hint="Shown on their lanyard instead of their first name.">
-          <input className="input" value={f.preferredName} onChange={set('preferredName')} autoComplete="off" />
-        </Field>
-        <Field id="p-member" label="Membership number" error={errors.memberNumber}>
-          <input className="input" inputMode="numeric" value={f.memberNumber} onChange={set('memberNumber')} autoComplete="off" />
-        </Field>
-        <Field id="p-section" label="Section" hint={`Counts as ${kindForSection(f.section, event.youthSections ?? []) === 'adult' ? 'an adult' : 'youth'} at this camp (Settings › Event details › Youth sections).`}>
-          <select className="select" value={f.section} onChange={set('section')}>
-            {(event.sections.some((x) => x.name === f.section) ? event.sections.map((x) => x.name) : [f.section, ...event.sections.map((x) => x.name)]).map((s) => (
-              <option key={s}>{s}</option>
-            ))}
-          </select>
-        </Field>
-        <Field id="p-group" label="Scout group" optional>
-          <input className="input" value={f.groupName} onChange={set('groupName')} autoComplete="off" />
-        </Field>
-        {kindForSection(f.section, event.youthSections ?? []) === 'adult' && (
-          <Field id="p-position" label="Role" optional hint="For example, Cub Leader, cook, first aider">
-            <input className="input" value={f.position} onChange={set('position')} autoComplete="off" />
-          </Field>
-        )}
-        {r.kind === 'adult' && (
-          <Field id="p-rego" label="Car rego" optional hint="Their car on site, so the camp knows who to contact.">
-            <input className="input" value={f.carRego} maxLength={20} onChange={set('carRego')} autoComplete="off" />
-          </Field>
-        )}
-        {f.photoConsent !== undefined && (
-          <Field id="p-photo" label="Photos">
-            <select className="select" value={f.photoConsent} onChange={set('photoConsent')}>
-              <option value="yes">OK to photograph</option>
-              <option value="no">No photos</option>
-              <option value="unknown">Not recorded</option>
-            </select>
-          </Field>
-        )}
-        {Object.keys(r.extra ?? {}).length > 0 && (
-          <fieldset className="form">
-            <legend className="field-label">From the import</legend>
-            {Object.keys(r.extra ?? {}).map((k, i) => (
-              <Field key={k} id={`p-extra-${i}`} label={k} optional>
-                <input className="input" value={extra[k] ?? ''} onChange={(e) => setExtra({ ...extra, [k]: e.target.value })} autoComplete="off" />
+      <form className="form person-form" onSubmit={submit} noValidate>
+        {failure && <Banner tone="error">{failure}</Banner>}
+        <fieldset className="person-form-group">
+          <legend className="person-form-legend">Name</legend>
+          <div className="person-form-grid">
+            <Field id="p-first" label="First name" error={errors.firstName}>
+              <input className="input" value={f.firstName} onChange={set('firstName')} autoComplete="off" />
+            </Field>
+            <Field id="p-last" label="Last name" error={errors.lastName}>
+              <input className="input" value={f.lastName} onChange={set('lastName')} autoComplete="off" />
+            </Field>
+            <Field id="p-pref" label="Goes by" optional hint="Shown on their lanyard">
+              <input className="input" value={f.preferredName} onChange={set('preferredName')} autoComplete="off" />
+            </Field>
+            <Field id="p-member" label="Membership number" error={errors.memberNumber}>
+              <input className="input" inputMode="numeric" value={f.memberNumber} onChange={set('memberNumber')} autoComplete="off" />
+            </Field>
+          </div>
+        </fieldset>
+        <fieldset className="person-form-group">
+          <legend className="person-form-legend">At camp</legend>
+          <div className="person-form-grid">
+            <Field
+              id="p-section"
+              label="Section"
+              hint={
+                <>
+                  Counts as {adultSection ? 'an adult' : 'youth'}{' '}
+                  <InfoTip label="Which sections count as youth">Set which sections count as youth in Settings › Event details › Youth sections.</InfoTip>
+                </>
+              }
+            >
+              <select className="select" value={f.section} onChange={set('section')}>
+                {(event.sections.some((x) => x.name === f.section) ? event.sections.map((x) => x.name) : [f.section, ...event.sections.map((x) => x.name)]).map((s) => (
+                  <option key={s}>{s}</option>
+                ))}
+              </select>
+            </Field>
+            <Field id="p-group" label="Scout group" optional>
+              <input className="input" value={f.groupName} onChange={set('groupName')} autoComplete="off" />
+            </Field>
+            {adultSection && (
+              <Field id="p-position" label="Role" optional hint="Cub Leader, cook, first aider…">
+                <input className="input" value={f.position} onChange={set('position')} autoComplete="off" />
               </Field>
-            ))}
-            <p className="field-hint">Clear a box to remove that detail.</p>
+            )}
+            {r.kind === 'adult' && (
+              <Field id="p-rego" label="Car rego" optional hint="Their car on site">
+                <input className="input" value={f.carRego} maxLength={20} onChange={set('carRego')} autoComplete="off" />
+              </Field>
+            )}
+            {f.photoConsent !== undefined && (
+              <Field id="p-photo" label="Photos">
+                <select className="select" value={f.photoConsent} onChange={set('photoConsent')}>
+                  <option value="yes">OK to photograph</option>
+                  <option value="no">No photos</option>
+                  <option value="unknown">Not recorded</option>
+                </select>
+              </Field>
+            )}
+          </div>
+        </fieldset>
+        {extraKeys.length > 0 && (
+          <fieldset className="person-form-group">
+            <legend className="person-form-legend">
+              From the import <InfoTip label="About these details">Clear a box to remove that detail.</InfoTip>
+            </legend>
+            <div className="person-form-grid">
+              {extraKeys.map((k, i) => (
+                <Field key={k} id={`p-extra-${i}`} label={k} optional>
+                  <input className="input" value={extra[k] ?? ''} onChange={(e) => setExtra({ ...extra, [k]: e.target.value })} autoComplete="off" />
+                </Field>
+              ))}
+            </div>
           </fieldset>
         )}
-        <div className="btn-row">
+        <div className="btn-row form-actions">
           <Button type="submit" kind="primary" busy={busy} busyLabel="Saving…">
             Save changes
           </Button>
@@ -671,7 +729,21 @@ function DetailsForm({ r, back, path, onSaved }: { r: PersonData['registration']
  * (to scan straight off this page). The QR is a live lanyard, so only people
  * who can print lanyards see it.
  */
-function LanyardPanel({ eventId, registrationId, section, shortCode, canShowQr }: { eventId: string; registrationId: string; section: string; shortCode: string | null; canShowQr: boolean }) {
+function LanyardPanel({
+  eventId,
+  registrationId,
+  section,
+  shortCode,
+  canShowQr,
+  actions,
+}: {
+  eventId: string;
+  registrationId: string;
+  section: string;
+  shortCode: string | null;
+  canShowQr: boolean;
+  actions?: ReactNode;
+}) {
   const { event } = useEvent();
   const style = sectionStyle(event.sections, section);
   const [qr, setQr] = useState<boolean[][] | null>(null);
@@ -694,26 +766,27 @@ function LanyardPanel({ eventId, registrationId, section, shortCode, canShowQr }
       live = false;
     };
   }, [eventId, registrationId, shortCode, canShowQr]);
+  const word = style.word || section;
   return (
-    <Section title="Lanyard" id="lanyard">
-      <div className="panel panel-pad person-lanyard">
-        <span className="person-section" style={{ background: style.bg, color: style.fg }}>
-          {style.word || section}
-        </span>
-        <p className="meta">Section: {section}</p>
-        {!shortCode ? (
-          <p className="meta">No lanyard issued yet.</p>
-        ) : canShowQr ? (
+    <Section title="Lanyard" id="lanyard" actions={actions}>
+      <div className="panel person-lanyard">
+        <div className="person-lanyard-text">
+          <span className="person-section" style={{ background: style.bg, color: style.fg }}>
+            {word}
+          </span>
+          {word.toLowerCase() !== section.toLowerCase() && <p className="meta">Section: {section}</p>}
+          {shortCode ? <p className="code person-code">{shortCode}</p> : <p className="meta">No lanyard issued yet.</p>}
+        </div>
+        {shortCode && canShowQr ? (
           qr ? (
             <svg className="person-qr" viewBox={`-2 -2 ${qr.length + 4} ${qr.length + 4}`} role="img" aria-label={`Lanyard QR code, ${shortCode}`} shapeRendering="crispEdges">
               <rect x={-2} y={-2} width={qr.length + 4} height={qr.length + 4} fill="#FFFFFF" />
               <path d={qr.flatMap((row, y) => row.map((dark, x) => (dark ? `M${x} ${y}h1v1h-1z` : ''))).join('')} fill="#000000" />
             </svg>
           ) : (
-            <p className="meta">{failed ? 'The QR code couldn’t be loaded.' : 'Loading the QR code…'}</p>
+            <p className="meta person-qr-wait">{failed ? 'The QR code couldn’t be loaded.' : 'Loading the QR code…'}</p>
           )
         ) : null}
-        {shortCode && <p className="code person-code">{shortCode}</p>}
       </div>
     </Section>
   );

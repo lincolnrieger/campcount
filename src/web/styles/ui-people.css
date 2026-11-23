@@ -1,1 +1,519 @@
 /* Organiser pages (people): layout for the UI rework. Uses the shared kit (kit.css). */
+
+/* ---------- People › Everyone ---------- */
+.people-list {
+  gap: var(--space-3);
+}
+.people-list > * {
+  min-width: 0;
+}
+.people-list .toolbar > .chips {
+  flex-basis: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.people-list .toolbar-count {
+  margin: 0;
+}
+.people-scroll {
+  max-height: calc(100vh - 17rem);
+  min-height: 18rem;
+}
+.people-table td {
+  height: 2.75rem;
+  padding-top: var(--space-1);
+  padding-bottom: var(--space-1);
+}
+.people-table tbody tr.is-selected {
+  background: var(--brand-tint);
+}
+.people-table .cell-check input,
+.people-row-check {
+  position: relative;
+  z-index: 1;
+  cursor: pointer;
+}
+.people-rows .row {
+  gap: var(--space-3);
+}
+.people-row-check {
+  flex: none;
+  align-self: center;
+}
+.people-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control);
+  color: var(--ink-2);
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+  cursor: pointer;
+}
+.selection-bar .selection-ghost {
+  color: #FFFFFF;
+}
+.selection-bar .selection-ghost:hover {
+  background: rgb(255 255 255 / 0.12);
+}
+@media (max-width: 1023.98px) {
+  .people-list .toolbar > .search {
+    flex: 1 1 10rem;
+  }
+  .people-list .toolbar > .toolbar-end {
+    display: none;
+  }
+  .people-list .toolbar > .chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+}
+
+/* ---------- Person ---------- */
+.person-columns {
+  margin-top: var(--space-2);
+}
+@media (min-width: 1024px) {
+  .person-columns {
+    grid-template-columns: minmax(0, 3fr) minmax(18rem, 2fr);
+  }
+  .person-side {
+    position: sticky;
+    top: var(--space-4);
+  }
+}
+.person-main,
+.person-side {
+  gap: var(--space-5);
+}
+.person-now {
+  padding: var(--space-4) var(--space-5);
+}
+.person-row {
+  min-height: 3rem;
+}
+@media (min-width: 1024px) {
+  .person-history {
+    max-height: min(60vh, 36rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+.person-history .list-group-heading {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.person-history > div + div .list-group-heading {
+  border-top: var(--border-width) solid var(--divider);
+}
+.person-history ol > li + li {
+  border-top: var(--border-width) solid var(--divider);
+}
+.person-lanyard {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+}
+.person-lanyard-text {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+}
+.person-lanyard .person-qr {
+  width: 9.5rem;
+}
+.person-qr-wait {
+  max-width: 9.5rem;
+}
+.person-dl {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: var(--space-1) var(--space-5);
+}
+.person-dl > div {
+  display: grid;
+  grid-template-columns: minmax(8rem, 40%) 1fr;
+  gap: var(--space-3);
+  align-items: baseline;
+  padding: var(--space-2) 0;
+}
+.person-dl > div + div {
+  border-top: var(--border-width) solid var(--divider);
+}
+.person-dl dt {
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+.person-dl dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Edit details */
+.person-form {
+  max-width: 48rem;
+}
+.person-form-group {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  border: var(--border-width) solid var(--divider);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.person-form-legend {
+  float: left;
+  width: 100%;
+  margin-bottom: var(--space-1);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-heavy);
+}
+.person-form-legend + * {
+  clear: both;
+}
+.person-form-grid {
+  display: grid;
+  gap: var(--space-4);
+}
+@media (min-width: 600px) {
+  .person-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: end;
+  }
+}
+.form-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  padding: var(--space-3) 0;
+  background: color-mix(in srgb, var(--canvas) 92%, transparent);
+}
+@media (max-width: 1023.98px) {
+  .form-actions {
+    bottom: var(--tabbar-h, 0px);
+  }
+}
+.field-hint .infotip {
+  vertical-align: -0.3em;
+}
+
+/* ---------- Leader roster ---------- */
+.duty-days {
+  gap: var(--space-5);
+}
+.duty-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  align-items: start;
+  gap: var(--space-3);
+}
+.duty-card {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-3) var(--space-2) var(--space-4);
+  border: var(--border-width) solid var(--divider);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.duty-card.is-empty {
+  border-style: dashed;
+  border-color: var(--warning-border);
+}
+.duty-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.duty-card-title {
+  display: grid;
+  min-width: 0;
+}
+.duty-card-title h3 {
+  font-size: var(--text-base);
+  font-weight: var(--weight-heavy);
+  overflow-wrap: anywhere;
+}
+.duty-notes {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--ink-2);
+  font-size: var(--text-md);
+}
+.duty-nobody {
+  color: var(--warning-fg);
+  font-weight: var(--weight-bold);
+}
+.duty-people {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.duty-people li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 2.25rem;
+  border-top: var(--border-width) solid var(--divider);
+}
+.duty-people li > span:first-child {
+  flex: 1;
+  min-width: 0;
+  font-weight: var(--weight-medium);
+}
+.duty-remove.btn {
+  min-height: 2rem;
+  width: 2rem;
+  padding: 0;
+  color: var(--ink-3);
+}
+.duty-remove.btn:hover {
+  color: var(--error-fg);
+}
+.duty-leaders .row.is-clash {
+  background: var(--warning-bg);
+}
+@media (max-width: 1023.98px) {
+  .duty-section > .toolbar-sticky {
+    position: static;
+  }
+}
+
+/* ---------- Roll sheet ---------- */
+.roll-page {
+  gap: var(--space-4);
+}
+.roll-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-4) var(--space-5);
+}
+.roll-options .field {
+  flex: 1 1 11rem;
+  gap: var(--space-1);
+}
+.roll-options .roll-who {
+  flex: 0 0 auto;
+}
+.roll-sheet .roll td,
+.roll-sheet .roll th {
+  height: auto;
+  padding: var(--space-1) var(--space-3);
+}
+
+/* ---------- Import with column matching ---------- */
+.import-page {
+  gap: var(--space-5);
+}
+.import-source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+.import-source .field-label {
+  margin: 0;
+}
+.import-privacy {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.map-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: var(--space-2) var(--space-4);
+}
+.map-item {
+  display: grid;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  border: var(--border-width) solid var(--divider);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.map-item.is-unset {
+  background: transparent;
+}
+.map-item.is-missing {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+.map-label {
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+}
+.map-item .select {
+  min-height: 2.5rem;
+}
+.map-sample {
+  overflow: hidden;
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.other-columns-legend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+}
+.other-columns-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0 var(--space-4);
+}
+.import-withdraw {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.import-problems {
+  display: grid;
+  gap: var(--space-2);
+}
+.import-problems .problem-list {
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-6);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: var(--text-md);
+}
+.import-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+.import-tabs .row {
+  min-height: 2.75rem;
+}
+.review-item {
+  padding: var(--space-4);
+}
+.review-item.is-done {
+  border-color: var(--success-border);
+}
+.nothing-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-base);
+  font-weight: var(--weight-heavy);
+}
+@media (min-width: 1024px) {
+  .review-list {
+    grid-template-columns: repeat(auto-fill, minmax(26rem, 1fr));
+    align-items: start;
+  }
+}
+
+/* ---------- Dietary editor (admin) ---------- */
+.dietary-editor .dietary-row {
+  min-height: 2.75rem;
+  padding-top: var(--space-1);
+  padding-bottom: var(--space-1);
+}
+.dietary-editor .quick-picks .chip {
+  min-height: 2.25rem;
+}
+.dietary-editor details.more-options > summary {
+  min-height: 2.25rem;
+}
+
+/* ---------- Import & check ---------- */
+.intake {
+  gap: var(--space-5);
+}
+.intake-upload {
+  display: grid;
+  gap: var(--space-3) var(--space-5);
+  align-items: center;
+}
+@media (min-width: 1024px) {
+  .intake-upload {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+.dropzone.intake-drop {
+  display: flex;
+  justify-items: start;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: none;
+  padding: var(--space-4) var(--space-5);
+  text-align: left;
+}
+.intake-drop .icon {
+  flex: none;
+}
+.intake-drop-text {
+  display: grid;
+}
+.intake-sources {
+  margin: 0;
+}
+.intake-sources li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.intake-sources li > .icon {
+  flex: none;
+  color: var(--ink-3);
+}
+.intake-sources li.is-loaded > .icon {
+  color: var(--success-fg);
+}
+.intake-source-text {
+  display: grid;
+  min-width: 0;
+}
+.intake-source-text .meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.intake-sources li.intake-clear {
+  margin: 0;
+  gap: var(--space-1);
+}
+.intake-areas {
+  display: grid;
+  gap: var(--space-1);
+}
+.intake-total {
+  text-align: right;
+}
+.intake-summary {
+  font-weight: var(--weight-medium);
+}
+@media (min-width: 1024px) {
+  .intake-scroll {
+    max-height: min(60vh, 40rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+.intake-diet-head .badge {
+  margin-left: auto;
+}
+.intake-diet .form-actions {
+  background: var(--surface);
+}

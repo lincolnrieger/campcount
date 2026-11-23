@@ -9,7 +9,26 @@ import { MAX_EXTRA_FIELDS } from '../../shared/schemas';
 import type { DietaryEntryInput, ImportRow } from '../../shared/schemas';
 import { ApiFailure, api } from '../api';
 import { DietaryEditor } from '../components/DietaryEditor';
-import { Badge, Button, ButtonLink, Choice, CountTile, Icon, LoadError, Loading, Notice, PageHeader, Section, Skeleton, Stepper, plural, useToast } from '../ui';
+import {
+  Badge,
+  Banner,
+  Button,
+  ButtonLink,
+  Choice,
+  Icon,
+  InfoTip,
+  LoadError,
+  Loading,
+  PageHeader,
+  Section,
+  Segmented,
+  Skeleton,
+  StatStrip,
+  Stepper,
+  Toggle,
+  plural,
+  useToast,
+} from '../ui';
 import { readFirstSheet, readSheets } from '../import/xlsx';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
@@ -189,7 +208,11 @@ export function Import() {
     <PageHeader
       title={`Import from ${SOURCE_NAME[source]}`}
       back={back}
-      summary={source === 'consent2go' ? 'Adds consent, dietary needs and swimming and medication details to people from MyScout, matched on membership number.' : undefined}
+      help={
+        source === 'consent2go'
+          ? 'Adds consent, dietary needs and swimming and medication details to people from MyScout, matched on membership number.'
+          : 'Reads a MyScout export in this browser, matches its columns, then shows what will change before anything is saved.'
+      }
     />
   );
   const steps = source === 'consent2go' ? C2G_STEPS : STEPS;
@@ -210,50 +233,32 @@ export function Import() {
       </>
     );
   const missing = missingRequired(mapping);
+  const reviewedCount = pending.filter((p) => dietary[p.source.row.memberNumber]).length;
 
   return (
     <>
       {header}
-      <div className="sections import">
+      <div className="sections import import-page">
         <Stepper steps={steps.map((s) => STEP_LABEL[s])} current={steps.indexOf(step)} />
-        {error && (
-          <Notice tone="error" title="That didn't work">
-            <p>{error}</p>
-          </Notice>
-        )}
+        {error && <Banner tone="error">{error}</Banner>}
 
         {step === 'file' && (
           <Section title="Choose file" id="file">
-            <fieldset className="source-choice">
-              <legend className="field-label">Where is the file from?</legend>
-              {(['myscout', 'consent2go'] as const).map((s) => (
-                <label key={s} className="source-option">
-                  <input type="radio" name="source" checked={source === s} onChange={() => setSource(s)} />
-                  <span className="choice-text">
-                    {SOURCE_NAME[s]}
-                    <span className="meta">
-                      {s === 'myscout'
-                        ? 'The registration list: who is coming, their section and group. Import this first.'
-                        : 'Activity consent and dietary needs. Each tab is a group. People are matched to MyScout by membership number (Student ID).'}
-                    </span>
-                  </span>
-                </label>
-              ))}
-            </fieldset>
-            <div className="prose">
-              {source === 'myscout' ? (
-                <p>
-                  Use the participant export from MyScout, as an Excel workbook (.xlsx) or a CSV file. Include adults: CampCount works out who is youth and who
-                  is a leader.
-                </p>
-              ) : (
-                <p>
-                  Use the Consent2Go export (.xlsx), with every group’s tab. Section comes from the tab: Joeys, Scouts or Venturers, and everyone else is a
-                  leader. People already registered keep their MyScout name, section and group; Consent2Go adds photo consent, dietary needs, swimming
-                  ability and medication permissions. Anyone not in MyScout yet is added.
-                </p>
-              )}
-              <p className="meta">The file stays on this computer. Only the columns CampCount needs are sent. Parent and emergency contacts are never sent.</p>
+            <div className="import-source">
+              <span className="field-label" id="import-source-label">
+                From
+              </span>
+              <Segmented
+                label="Where is the file from?"
+                value={source}
+                onChange={setSource}
+                options={(['myscout', 'consent2go'] as const).map((s) => ({ value: s, label: SOURCE_NAME[s] }))}
+              />
+              <InfoTip label={`About ${SOURCE_NAME[source]} files`}>
+                {source === 'myscout'
+                  ? 'The registration list: who is coming, their section and group. Import this first. Use the participant export as .xlsx or .csv, adults included: CampCount works out who is youth and who is a leader.'
+                  : 'The Consent2Go export (.xlsx) with every group’s tab. Section comes from the tab: Joeys, Scouts or Venturers, and everyone else is a leader. People already registered keep their MyScout name, section and group; Consent2Go adds photo consent, dietary needs, swimming ability and medication permissions. Anyone not in MyScout yet is added.'}
+              </InfoTip>
             </div>
             <label className="dropzone">
               <Icon name="download" size={24} />
@@ -268,32 +273,40 @@ export function Import() {
                 }}
               />
             </label>
+            <p className="meta import-privacy">
+              <Icon name="lock" size={16} />
+              Read on this computer. Only the columns CampCount needs are sent; parent and emergency contacts never are.
+            </p>
           </Section>
         )}
 
         {step === 'map' && table && (
           <Section title="Match columns" id="map">
             <p className="meta">
-              {fileName}: {plural(table.rows.length, 'person', 'people')}, {plural(table.headers.length, 'column')}. Only the matched columns and any others you
-              choose to keep are used; the rest never leave this computer.
+              {fileName} · {plural(table.rows.length, 'person', 'people')} · {plural(table.headers.length, 'column')}
+              <InfoTip label="What is sent">Only the matched columns and any others you choose to keep are used. The rest never leave this computer.</InfoTip>
             </p>
-            <ul className="list">
+            {missing.length > 0 && <Banner tone="warning">Choose a column for {missing.map((f) => TARGET_FIELDS[f].label).join(', ')}</Banner>}
+            {mapping.dietaryText !== undefined && !reviewing && (
+              <Banner tone="info">
+                {context.data?.dietaryEnabled ? 'Dietary notes will be flagged for an event manager to review.' : 'Dietary needs are off for this event, so that column is ignored.'}
+              </Banner>
+            )}
+            <div className="map-grid">
               {(Object.keys(TARGET_FIELDS) as TargetField[]).map((field) => {
                 const def = TARGET_FIELDS[field];
                 const index = mapping[field];
                 const sample = index === undefined || field === 'dietaryText' ? '' : (table.rows[0]?.[index] ?? '');
+                const unset = index === undefined;
                 return (
-                  <li key={field} className="row map-row">
-                    <span className="row-main">
-                      <label htmlFor={`map-${field}`} className="row-title">
-                        {def.label}
-                        {!def.required && <span className="field-optional"> (optional)</span>}
-                      </label>
-                      {sample && <span className="row-meta">First row: {sample}</span>}
-                    </span>
+                  <div key={field} className={unset && def.required ? 'map-item is-missing' : unset ? 'map-item is-unset' : 'map-item'}>
+                    <label htmlFor={`map-${field}`} className="map-label">
+                      {def.label}
+                      {!def.required && <span className="field-optional"> (optional)</span>}
+                    </label>
                     <select
                       id={`map-${field}`}
-                      className="select map-select"
+                      className="select"
                       value={index ?? ''}
                       onChange={(e) => {
                         const next = { ...mapping };
@@ -309,26 +322,13 @@ export function Import() {
                         </option>
                       ))}
                     </select>
-                  </li>
+                    <span className="map-sample">{sample ? `First row: ${sample}` : ' '}</span>
+                  </div>
                 );
               })}
-            </ul>
+            </div>
             <OtherColumns table={table} mapping={mapping} chosen={extraCols} onChange={setExtraCols} />
-            {mapping.dietaryText !== undefined && !reviewing && (
-              <Notice tone="warning">
-                <p>
-                  {context.data?.dietaryEnabled
-                    ? 'You can import the people. Dietary notes will be flagged for an event manager to review.'
-                    : 'Dietary needs are switched off for this event, so this column is ignored.'}
-                </p>
-              </Notice>
-            )}
-            {missing.length > 0 && (
-              <Notice tone="warning">
-                <p>Choose a column for: {missing.map((f) => TARGET_FIELDS[f].label).join(', ')}.</p>
-              </Notice>
-            )}
-            <div className="btn-row">
+            <div className="btn-row form-actions">
               <Button kind="primary" disabled={missing.length > 0} onClick={() => void check()}>
                 Next
               </Button>
@@ -341,21 +341,23 @@ export function Import() {
           <Section title="Check" id="check">
             {!plan ? (
               <>
-                <p>{plural(valid.length, 'person is', 'people are')} ready to compare with this event's list. Nothing is saved yet.</p>
+                <p>
+                  <strong>{plural(valid.length, 'person', 'people')}</strong> ready to compare with this event. Nothing is saved yet.
+                </p>
                 {source === 'consent2go' && tabs.length > 0 && (
-                  <ul className="list">
+                  <ul className="list import-tabs">
                     {tabs.map((t) => (
                       <li key={t.name} className="row">
                         <span className="row-main">
                           <span className="row-title">{t.name}</span>
-                          <span className="row-meta">{t.skipped ?? plural(t.people, 'person', 'people')}</span>
                         </span>
+                        <span className={t.skipped ? 'meta' : 'row-side'}>{t.skipped ?? plural(t.people, 'person', 'people')}</span>
                       </li>
                     ))}
                   </ul>
                 )}
                 {invalid.length > 0 && <Problems invalid={invalid} />}
-                <div className="btn-row">
+                <div className="btn-row form-actions">
                   <Button kind="primary" busy={busy} busyLabel="Checking…" disabled={valid.length === 0} onClick={() => void preview()}>
                     Next
                   </Button>
@@ -364,29 +366,35 @@ export function Import() {
               </>
             ) : (
               <>
-                <div className={reviewing ? 'tiles import-tiles-4' : 'tiles'}>
-                  <CountTile value={plan.counts.create} label="New" tone="success" />
-                  <CountTile value={plan.counts.update} label="Changed" tone="info" />
-                  <CountTile value={plan.counts.unchanged} label="No change" />
-                  {reviewing && <CountTile value={plan.counts.dietaryPending} label="Dietary to review" tone="warning" />}
-                </div>
+                <StatStrip
+                  items={[
+                    { label: 'New', value: plan.counts.create, tone: 'success' },
+                    { label: 'Changed', value: plan.counts.update, tone: 'info' },
+                    { label: 'No change', value: plan.counts.unchanged },
+                    ...(reviewing ? [{ label: 'Dietary to review', value: plan.counts.dietaryPending, tone: 'warning' as const }] : []),
+                    ...(source === 'myscout' && withdrawMissing ? [{ label: 'To withdraw', value: plan.counts.withdraw, tone: 'error' as const }] : []),
+                  ]}
+                />
                 {invalid.length > 0 && <Problems invalid={invalid} />}
                 {source === 'myscout' && (
-                <Choice
-                  checked={withdrawMissing}
-                  onChange={(e) => {
-                    setWithdrawMissing(e.target.checked);
-                    void preview(e.target.checked);
-                  }}
-                  label={<strong>Mark people not in this file as withdrawn</strong>}
-                  description={`Use this when the file is the complete, current list.${withdrawMissing ? ` ${plural(plan.counts.withdraw, 'person', 'people')} will be withdrawn. Their records are kept.` : ''}`}
-                />
+                  <div className="import-withdraw">
+                    <Toggle
+                      checked={withdrawMissing}
+                      onChange={(v) => {
+                        setWithdrawMissing(v);
+                        void preview(v);
+                      }}
+                      label="Withdraw people not in this file"
+                      hint={withdrawMissing ? `${plural(plan.counts.withdraw, 'person', 'people')} will be withdrawn. Their records are kept.` : undefined}
+                    />
+                    <InfoTip label="When to use this">Use this when the file is the complete, current list.</InfoTip>
+                  </div>
                 )}
                 {plan.counts.update > 0 && (
                   <details className="more-options">
                     <summary>
                       <Icon name="chevron" />
-                      See what changed
+                      See what changed ({plan.counts.update})
                     </summary>
                     <ul className="list import-changes">
                       {plan.rows
@@ -404,7 +412,7 @@ export function Import() {
                     </ul>
                   </details>
                 )}
-                <div className="btn-row">
+                <div className="btn-row form-actions">
                   {reviewing && pending.length > 0 ? (
                     <Button kind="primary" onClick={() => setStep('dietary')}>
                       Next
@@ -430,54 +438,59 @@ export function Import() {
         )}
 
         {step === 'dietary' && plan && (
-          <Section title="Dietary review" id="dietary">
-            <p className="prose">
-              Turn each note into dietary needs. Record food needs only; other medical information stays in {SOURCE_NAME[source]}. The notes themselves are not saved.
-            </p>
+          <Section
+            title={
+              <>
+                Dietary review{' '}
+                <InfoTip label="About dietary review">
+                  Turn each note into dietary needs. Record food needs only; other medical information stays in {SOURCE_NAME[source]}. The notes themselves are not saved.
+                </InfoTip>
+              </>
+            }
+            id="dietary"
+          >
             <NothingToRecord pending={pending} dietary={dietary} onMark={(keys) => setDietary({ ...dietary, ...Object.fromEntries(keys.map((k) => [k, []])) })} onUndo={(keys) => setDietary(Object.fromEntries(Object.entries(dietary).filter(([k]) => !keys.includes(k))))} />
             <ul className="review-list">
               {pending
                 .filter(({ source }) => !(saysNothing(source.dietaryText) && dietary[source.row.memberNumber]?.length === 0))
                 .map(({ source }) => {
-                const key = source.row.memberNumber;
-                const decided = dietary[key];
-                return (
-                  <li key={key} className="panel panel-pad review-item">
-                    <div className="review-head">
-                      <strong>
-                        {source.row.preferredName || source.row.firstName} {source.row.lastName}
-                      </strong>
-                      <span className="meta">
-                        {[source.row.groupName, `member ${key}`].filter(Boolean).join(' · ')}
-                      </span>
-                      {decided && <Badge tone="success">Reviewed</Badge>}
-                    </div>
-                    <blockquote className="source-note">{source.dietaryText || 'The note was removed in the new file.'}</blockquote>
-                    <DietaryEditor value={decided} onChange={(entries) => setDietary({ ...dietary, [key]: entries })} labelPrefix={`${source.row.firstName} ${source.row.lastName}`} />
-                  </li>
-                );
-              })}
+                  const key = source.row.memberNumber;
+                  const decided = dietary[key];
+                  return (
+                    <li key={key} className={decided ? 'panel review-item is-done' : 'panel review-item'}>
+                      <div className="review-head">
+                        <strong>
+                          {source.row.preferredName || source.row.firstName} {source.row.lastName}
+                        </strong>
+                        <span className="meta">{[source.row.groupName, `member ${key}`].filter(Boolean).join(' · ')}</span>
+                        {decided && <Badge tone="success">Reviewed</Badge>}
+                      </div>
+                      <blockquote className="source-note">{source.dietaryText || 'The note was removed in the new file.'}</blockquote>
+                      <DietaryEditor value={decided} onChange={(entries) => setDietary({ ...dietary, [key]: entries })} labelPrefix={`${source.row.firstName} ${source.row.lastName}`} />
+                    </li>
+                  );
+                })}
             </ul>
-            <p className="meta">
-              {pending.filter((p) => dietary[p.source.row.memberNumber]).length} of {pending.length} reviewed. Anyone not reviewed stays flagged for next time.
-            </p>
-            <div className="btn-row">
+            <div className="btn-row form-actions">
               <Button kind="primary" busy={busy} busyLabel="Importing…" onClick={() => void commit()}>
                 Import
               </Button>
               <Button onClick={() => setStep('check')}>Back</Button>
+              <span className="meta import-progress">
+                {reviewedCount} of {pending.length} reviewed
+                <InfoTip label="Not reviewed">Anyone not reviewed stays flagged for next time.</InfoTip>
+              </span>
             </div>
           </Section>
         )}
 
         {step === 'done' && result && (
           <Section title="Done" id="done">
-            <Notice tone="success" title="Import complete">
-              <p>
-                {result.create} added, {result.update} updated, {result.unchanged} unchanged
-                {result.withdraw > 0 && `, ${result.withdraw} withdrawn`}.{invalid.length > 0 && ` ${plural(invalid.length, 'row was', 'rows were')} skipped because of problems.`}
-              </p>
-            </Notice>
+            <Banner tone="success">
+              Import complete: {result.create} added, {result.update} updated, {result.unchanged} unchanged
+              {result.withdraw > 0 && `, ${result.withdraw} withdrawn`}
+              {invalid.length > 0 && `, ${plural(invalid.length, 'row', 'rows')} skipped`}
+            </Banner>
             <div className="btn-row">
               <Button kind="primary" onClick={() => navigate(`${base}/people`)}>
                 View people
@@ -491,30 +504,47 @@ export function Import() {
   );
 }
 
-/** Rows that can't be imported, with a download of the full list. */
+/** Rows that can't be imported: one line, with the list behind a toggle and a download. */
 function Problems({ invalid }: { invalid: PreparedRow[] }) {
+  const [open, setOpen] = useState(false);
   return (
-    <Notice tone="warning" title={`${plural(invalid.length, 'row has', 'rows have')} problems and will be skipped`}>
-      <ul className="problem-list">
-        {invalid.slice(0, 8).map((p) => (
-          <li key={p.where ?? p.line}>
-            {p.where ?? `Line ${p.line}`}
-            {p.row.memberNumber && ` (member ${p.row.memberNumber})`}: {p.errors.join('; ')}
-          </li>
-        ))}
-      </ul>
-      <Button
-        small
-        onClick={() =>
-          downloadCsv('campcount-import-problems.csv', [
-            ['Where', 'Membership number', 'Problem'],
-            ...invalid.map((p) => [p.where ?? `Line ${p.line}`, p.row.memberNumber, p.errors.join('; ')]),
-          ])
+    <div className="import-problems">
+      <Banner
+        tone="warning"
+        action={
+          <>
+            <Button small kind="ghost" aria-expanded={open} onClick={() => setOpen(!open)}>
+              {open ? 'Hide' : 'Show'}
+            </Button>
+            <Button
+              small
+              onClick={() =>
+                downloadCsv('campcount-import-problems.csv', [
+                  ['Where', 'Membership number', 'Problem'],
+                  ...invalid.map((p) => [p.where ?? `Line ${p.line}`, p.row.memberNumber, p.errors.join('; ')]),
+                ])
+              }
+            >
+              <Icon name="download" size={16} />
+              Download
+            </Button>
+          </>
         }
       >
-        Download the list of problems
-      </Button>
-    </Notice>
+        {plural(invalid.length, 'row has', 'rows have')} problems and will be skipped
+      </Banner>
+      {open && (
+        <ul className="problem-list">
+          {invalid.slice(0, 8).map((p) => (
+            <li key={p.where ?? p.line}>
+              {p.where ?? `Line ${p.line}`}
+              {p.row.memberNumber && ` (member ${p.row.memberNumber})`}: {p.errors.join('; ')}
+            </li>
+          ))}
+          {invalid.length > 8 && <li className="meta">and {invalid.length - 8} more in the download</li>}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -531,14 +561,18 @@ function OtherColumns({ table, mapping, chosen, onChange }: { table: { headers: 
   const others = unmatched.filter(({ h }) => !SENSITIVE.test(h));
   const hidden = unmatched.length - others.length;
   if (others.length === 0) return null;
-  const full = chosen.filter((i) => !used.has(i)).length >= MAX_EXTRA_FIELDS;
+  const kept = chosen.filter((i) => !used.has(i)).length;
+  const full = kept >= MAX_EXTRA_FIELDS;
   return (
     <fieldset className="choices other-columns">
-      <legend className="field-label">Other columns to keep (optional)</legend>
-      <p className="field-hint">
-        Tick any column you want on each person's profile, such as a team, patrol, bus or tent, or a MyScout custom field. Up to {MAX_EXTRA_FIELDS}. Only keep what
-        staff need at camp: never medical or contact details.
-      </p>
+      <legend className="field-label other-columns-legend">
+        Other columns to keep <span className="field-optional">(optional, {kept} of {MAX_EXTRA_FIELDS})</span>
+        <InfoTip label="About other columns">
+          Tick any column you want on each person's profile, such as a team, patrol, bus or tent, or a MyScout custom field. Only keep what staff need at camp: never medical or
+          contact details.
+          {hidden > 0 && ` ${plural(hidden, 'column')} that look like contact, medical or personal details can't be kept and stay on this computer.`}
+        </InfoTip>
+      </legend>
       <div className="other-columns-list">
         {others.map(({ h, i }) => {
           const sample = table.rows.find((r) => (r[i] ?? '').trim())?.[i]?.trim() ?? '';
@@ -547,7 +581,7 @@ function OtherColumns({ table, mapping, chosen, onChange }: { table: { headers: 
             <Choice
               key={i}
               label={extraLabel(h, i)}
-              description={sample ? `For example: ${sample.slice(0, 60)}` : 'Empty in this file'}
+              description={sample ? `e.g. ${sample.slice(0, 60)}` : 'Empty in this file'}
               checked={checked}
               disabled={!checked && full}
               onChange={(e) => onChange(e.target.checked ? [...chosen, i] : chosen.filter((x) => x !== i))}
@@ -555,7 +589,7 @@ function OtherColumns({ table, mapping, chosen, onChange }: { table: { headers: 
           );
         })}
       </div>
-      {hidden > 0 && <p className="field-hint">{plural(hidden, 'column')} that look like contact, medical or personal details can't be kept and stay on this computer.</p>}
+      {hidden > 0 && <p className="field-hint">{plural(hidden, 'column')} with personal details hidden</p>}
     </fieldset>
   );
 }
@@ -585,13 +619,15 @@ function NothingToRecord({
   const ticked = open.filter((s) => !unticked.has(s.row.memberNumber));
   return (
     <div className="panel panel-pad nothing-panel">
-      <h3>{plural(matches.length, 'note says', 'notes say')} there's nothing to record</h3>
+      <h3 className="nothing-title">
+        {plural(matches.length, 'note says', 'notes say')} there's nothing to record
+        <InfoTip label="About these notes">
+          These notes are only "Nil", "None", "N/A" or similar, with nothing else written. Untick anyone you want to read in full, then mark the rest. Notes with any other words are
+          never in this list.
+        </InfoTip>
+      </h3>
       {open.length > 0 ? (
         <>
-          <p className="meta">
-            These notes are only "Nil", "None", "N/A" or similar, with nothing else written. Check the list, untick anyone you want to read in full, then mark the
-            rest. Notes with any other words are never in this list.
-          </p>
           <fieldset className="nothing-list">
             <legend className="visually-hidden">Notes that say nothing to record</legend>
             {open.map((s) => {

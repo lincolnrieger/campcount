@@ -25,7 +25,7 @@ import { DietaryEditor } from '../components/DietaryEditor';
 import type { LocalImport, ReadFile, Source } from '../import/intakeFiles';
 import { SOURCE_NAME, clearLocal, emptyLocal, loadLocal, readIntakeFile, saveLocal } from '../import/intakeFiles';
 import { useApi } from '../useApi';
-import { Badge, Button, CountTile, EmptyState, Icon, LoadError, Loading, Notice, PageHeader, Section, plural, useConfirm, useToast } from '../ui';
+import { Badge, Banner, Button, EmptyState, Icon, InfoTip, LoadError, Loading, PageHeader, Section, StatStrip, plural, useConfirm, useRemembered, useToast } from '../ui';
 import { useEvent } from './EventLayout';
 
 interface Registration {
@@ -42,6 +42,9 @@ interface Registration {
   /** Fingerprints of the notes read in Import & check (kept on the roster); ['*'] for checked before that. */
   dietaryChecked?: string[] | null;
 }
+
+/** The work areas below the counts: one shown at a time. */
+type Area = 'dietary' | 'sections' | 'changes' | 'removed' | 'noc2g' | 'matching';
 
 const fail = (err: unknown) => (err instanceof ApiFailure || err instanceof Error ? err.message : 'No connection. Check your signal and try again.');
 const when = (iso: string) =>
@@ -90,6 +93,8 @@ export function Intake() {
   const [summary, setSummary] = useState<string | null>(null);
   /** People put off for now (this visit only): they go to the back of the dietary queue. */
   const [later, setLater] = useState<string[]>([]);
+  const [area, setArea] = useRemembered<Area | null>(`intake:${event.id}:area`, null);
+  const [showProblems, setShowProblems] = useState(false);
   const update = (fn: (l: LocalImport) => LocalImport) =>
     setLocalState((prev) => {
       const next = fn(prev ?? emptyLocal());
@@ -299,7 +304,7 @@ export function Intake() {
     <PageHeader
       title="Import & check"
       back={{ to: `${base}/people`, label: 'People' }}
-      summary="Upload the MyScout and Consent2Go exports as often as you like. New people go onto the roster; people already checked are skipped. Anything that changed since the last upload is listed to check, and anyone in neither file is taken off. The files stay on this computer."
+      help="Upload the MyScout and Consent2Go exports as often as you like. New people go onto the roster; people already checked are skipped. Anything that changed since the last upload is listed to check, and anyone in neither file is taken off. The files stay on this computer."
       menu={[
         {
           label: 'Import with column matching',
@@ -357,216 +362,289 @@ export function Intake() {
   const anyFile = !!(local.files.myscout || local.files.consent2go);
   const current = dietaryTodo[0];
   const canDiet = !!(context.data?.dietaryEnabled && context.data.canEditDietary);
+  const matchingCount = nameMatched.length + notInMyScout.length + unmatched.length;
+
+  // The first area with something to do, unless one was chosen.
+  const firstWithWork: Area = canDiet && dietaryTodo.length ? 'dietary' : toChoose.length ? 'sections' : changes.length ? 'changes' : removed.length ? 'removed' : 'dietary';
+  const shownArea: Area = area ?? firstWithWork;
+  const areaItem = (key: Area, label: string, value: number | string, tone: 'warning' | 'success' | 'neutral' | 'info') => ({
+    label,
+    value,
+    tone,
+    pressed: shownArea === key,
+    onPress: () => setArea(key),
+  });
 
   return (
     <>
       {header}
       <div className="sections intake">
-        {problem && (
-          <Notice tone="error" title="That file couldn’t be used">
-            <p>{problem}</p>
-          </Notice>
-        )}
-        {summary && (
-          <Notice tone="success">
-            <p>{summary}</p>
-          </Notice>
+        {(problem || summary) && (
+          <div className="banners">
+            {problem && (
+              <Banner tone="error" onDismiss={() => setProblem(null)}>
+                That file couldn’t be used: <span className="meta">{problem}</span>
+              </Banner>
+            )}
+            {summary && (
+              <Banner tone="success" onDismiss={() => setSummary(null)}>
+                <span className="intake-summary">{summary}</span>
+              </Banner>
+            )}
+          </div>
         )}
 
-        <Section title="Upload" id="upload">
-          <label className="dropzone">
+        <section className="intake-upload" aria-labelledby="upload-heading">
+          <h2 id="upload-heading" className="visually-hidden">
+            Upload
+          </h2>
+          <label className="dropzone intake-drop">
             <Icon name="download" size={24} />
-            <strong>{busy ? 'Reading and updating the roster…' : 'Choose the MyScout and Consent2Go files'}</strong>
-            <span className="meta">One or both. Each is recognised by its columns, and read on this computer.</span>
-            <input
-              type="file"
-              multiple
-              accept=".xlsx,.csv,.tsv,.txt,text/csv"
-              disabled={busy}
-              onChange={(e) => e.target.files?.length && void upload(e.target.files)}
-            />
+            <span className="intake-drop-text">
+              <strong>{busy ? 'Reading and updating the roster…' : 'Choose the MyScout and Consent2Go files'}</strong>
+              <span className="meta">One or both, .xlsx or .csv. Read on this computer.</span>
+            </span>
+            <input type="file" multiple accept=".xlsx,.csv,.tsv,.txt,text/csv" disabled={busy} onChange={(e) => e.target.files?.length && void upload(e.target.files)} />
           </label>
           <ul className="intake-sources">
             {(['myscout', 'consent2go'] as Source[]).map((s) => {
               const f = local.files[s];
               return (
-                <li key={s}>
-                  <strong>{SOURCE_NAME[s]}</strong>
-                  <span className="meta">
-                    {f ? `${f.fileName}: ${plural(f.people.length, 'person', 'people')} · uploaded ${when(f.at)}` : 'Not uploaded on this computer yet'}
+                <li key={s} className={f ? 'is-loaded' : undefined}>
+                  <Icon name={f ? 'success' : 'circle'} size={18} />
+                  <span className="intake-source-text">
+                    <strong>{SOURCE_NAME[s]}</strong>
+                    <span className="meta">{f ? `${f.fileName} · ${plural(f.people.length, 'person', 'people')} · ${when(f.at)}` : 'Not uploaded on this computer'}</span>
                   </span>
                 </li>
               );
             })}
+            {anyFile && (
+              <li className="intake-clear">
+                <Button small kind="ghost" onClick={() => void forget()}>
+                  Clear from this computer
+                </Button>
+                <InfoTip label="Where the files are kept">The files are kept in this browser only, so you can come back to them.</InfoTip>
+              </li>
+            )}
           </ul>
-          {anyFile && (
-            <div className="intake-clear">
-              <Button small kind="ghost" onClick={() => void forget()}>
-                Clear from this computer
-              </Button>
-              <span className="meta">The files are kept in this browser only, so you can come back to them.</span>
-            </div>
-          )}
-          {problems.length > 0 && (
-            <Notice tone="warning" title="Rows that couldn’t be read">
-              <ul>
+        </section>
+
+        {problems.length > 0 && (
+          <div className="import-problems">
+            <Banner
+              tone="warning"
+              action={
+                <Button small kind="ghost" aria-expanded={showProblems} onClick={() => setShowProblems(!showProblems)}>
+                  {showProblems ? 'Hide' : 'Show'}
+                </Button>
+              }
+            >
+              {plural(problems.length, 'row', 'rows')} couldn’t be read
+            </Banner>
+            {showProblems && (
+              <ul className="problem-list">
                 {problems.map((p, i) => (
                   <li key={i}>
                     {SOURCE_NAME[p.source]}, {p.where}: {p.errors.join('; ')}
                   </li>
                 ))}
               </ul>
-            </Notice>
-          )}
-        </Section>
+            )}
+          </div>
+        )}
 
         {!anyFile ? (
           <EmptyState title="Nothing uploaded yet">Choose the MyScout export, the Consent2Go export, or both.</EmptyState>
         ) : (
           <>
-            <div className="tiles intake-tiles">
-              <CountTile value={canDiet ? dietaryTodo.length : '–'} label="Dietary to read" tone={canDiet && dietaryTodo.length ? 'warning' : 'success'} />
-              <CountTile value={toChoose.length} label="Section to choose" tone={toChoose.length ? 'warning' : 'success'} />
-              <CountTile value={changes.length} label="Changed details" tone={changes.length ? 'warning' : 'success'} />
-              <CountTile value={removed.length} label="Taken off" />
-              <CountTile value={local.files.consent2go ? noC2G.length : '–'} label="No Consent2Go yet" />
-              <CountTile value={people.length} label="Everyone in the files" />
+            <div className="intake-areas">
+              <StatStrip
+                items={[
+                  areaItem('dietary', 'Dietary to read', canDiet ? dietaryTodo.length : '–', canDiet && dietaryTodo.length ? 'warning' : 'success'),
+                  areaItem('sections', 'Section to choose', toChoose.length, toChoose.length ? 'warning' : 'success'),
+                  areaItem('changes', 'Changed details', changes.length, changes.length ? 'warning' : 'success'),
+                  areaItem('removed', 'Taken off', removed.length, 'neutral'),
+                  areaItem('noc2g', 'No Consent2Go yet', local.files.consent2go ? noC2G.length : '–', 'neutral'),
+                  areaItem('matching', 'Matching', matchingCount, 'neutral'),
+                ]}
+              />
+              <p className="meta intake-total">{plural(people.length, 'person', 'people')} in the files</p>
             </div>
 
-            <Section title="Dietary notes" id="dietary">
-              {!context.data?.dietaryEnabled ? (
-                <p className="meta">Dietary needs are switched off for this camp (Settings › Event details).</p>
-              ) : !context.data.canEditDietary ? (
-                <p className="meta">Someone who can edit dietary needs reads these.</p>
-              ) : !current ? (
-                <p className="meta">
-                  {dietaryDone.length === 1 ? 'The 1 person with dietary notes is done.' : dietaryDone.length ? `All ${dietaryDone.length} people with dietary notes are done.` : 'No one has dietary notes.'} New
-                  or changed notes show here after each upload.
-                </p>
-              ) : (
-                <DietaryReview
-                  key={current.key}
-                  eventId={event.id}
-                  person={current}
-                  reg={regByKey.get(current.key)!}
-                  fresh={newDietarySources(current, local.dietaryDone[current.key], regByKey.get(current.key)?.dietaryChecked)}
-                  left={dietaryTodo.length}
-                  onDone={async (p) => {
-                    update((l) => ({
-                      ...l,
-                      dietaryDone: {
-                        ...l.dietaryDone,
-                        [p.key]: dietarySignature(p),
-                      },
-                    }));
-                    await registrations.reload();
-                  }}
-                  onLater={dietaryTodo.length > 1 ? (p) => setLater((l) => [...l.filter((k) => k !== p.key), p.key]) : undefined}
-                />
-              )}
-            </Section>
-
-            {changes.length > 0 && (
-              <Section title={`Changed since the last upload (${changes.length})`} id="changes">
-                <p className="meta">The roster has been updated to match. Check these look right.</p>
-                <div>
-                  <Button small kind="ghost" onClick={() => reviewed(changes.map(([k]) => k))}>
-                    Mark all as checked
-                  </Button>
-                </div>
-                <ul className="list">
-                  {changes.map(([k, c]) => (
-                    <li key={k} className="row intake-change">
-                      <span className="row-main">
-                        <span className="row-title">{c.name}</span>
-                        <span className="row-meta">{c.memberNumber}</span>
-                        <ul className="intake-change-items">
-                          {c.items.map((i) => (
-                            <li key={i.label}>
-                              <span className="meta">{i.label}:</span> <s>{i.before}</s> → <strong>{i.after}</strong>
-                            </li>
-                          ))}
-                        </ul>
-                      </span>
-                      <span className="row-side">
-                        <Button small onClick={() => reviewed([k])}>
-                          Checked
-                        </Button>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </Section>
-            )}
-
-            {removed.length > 0 && (
-              <Section title={`Taken off the roster (${removed.length})`} id="removed">
-                <p className="meta">They were in an earlier upload but aren’t in MyScout or Consent2Go any more. Put someone back if that’s a mistake; they won’t be taken off again.</p>
-                <div>
-                  <Button
-                    small
-                    kind="ghost"
-                    onClick={() =>
-                      downloadCsv('Taken off the roster.csv', [['Name', 'Membership number', 'Taken off'], ...removed.map(([, r]) => [r.name, r.memberNumber, when(r.at)])])
-                    }
+            {shownArea === 'dietary' && (
+              <Section title="Dietary notes" id="dietary">
+                {!context.data?.dietaryEnabled ? (
+                  <p className="meta">Dietary needs are switched off for this camp (Settings › Event details).</p>
+                ) : !context.data.canEditDietary ? (
+                  <p className="meta">Someone who can edit dietary needs reads these.</p>
+                ) : !current ? (
+                  <EmptyState
+                    title={dietaryDone.length === 1 ? 'The 1 person with dietary notes is done' : dietaryDone.length ? `All ${dietaryDone.length} people with dietary notes are done` : 'No one has dietary notes'}
                   >
-                    <Icon name="download" /> Download the list
-                  </Button>
-                </div>
-                <ul className="list">
-                  {removed.map(([k, r]) => (
-                    <li key={k} className="row">
-                      <span className="row-main">
-                        <span className="row-title">{r.name}</span>
-                        <span className="row-meta">
-                          {r.memberNumber} · taken off {when(r.at)}
-                        </span>
-                      </span>
-                      <span className="row-side">
-                        <Button small kind="ghost" onClick={() => void putBack(k)}>
-                          Put back
-                        </Button>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                    New or changed notes show here after each upload.
+                  </EmptyState>
+                ) : (
+                  <DietaryReview
+                    key={current.key}
+                    eventId={event.id}
+                    person={current}
+                    reg={regByKey.get(current.key)!}
+                    fresh={newDietarySources(current, local.dietaryDone[current.key], regByKey.get(current.key)?.dietaryChecked)}
+                    left={dietaryTodo.length}
+                    onDone={async (p) => {
+                      update((l) => ({
+                        ...l,
+                        dietaryDone: {
+                          ...l.dietaryDone,
+                          [p.key]: dietarySignature(p),
+                        },
+                      }));
+                      await registrations.reload();
+                    }}
+                    onLater={dietaryTodo.length > 1 ? (p) => setLater((l) => [...l.filter((k) => k !== p.key), p.key]) : undefined}
+                  />
+                )}
               </Section>
             )}
 
-            <Section title={`Choose a section${toChoose.length ? ` (${toChoose.length})` : ''}`} id="sections">
-              <p className="meta">
-                Joeys, Cubs, Scouts, Venturers, Rovers and Adult Helpers get their section from their MyScout position. Choose one for everyone else. Their
-                MyScout position stays on their profile.
-              </p>
-              {toChoose.length === 0 ? (
-                <p className="meta">Nothing to choose.</p>
-              ) : (
-                <ul className="list">
-                  {toChoose.map((p) => (
-                    <SectionRow key={p.key} person={p} options={sectionNames} current="" onChoose={(s) => void chooseSection(p, s)} />
-                  ))}
-                </ul>
-              )}
-              {chosen.length > 0 && (
-                <details className="intake-more">
-                  <summary>Chosen already ({chosen.length})</summary>
-                  <ul className="list">
-                    {chosen.map((p) => (
-                      <SectionRow key={p.key} person={p} options={sectionNames} current={chosenMap[p.key] ?? rosterSection(p)} onChoose={(s) => void chooseSection(p, s)} />
+            {shownArea === 'changes' && (
+              <Section
+                title={
+                  <>
+                    Changed since the last upload ({changes.length}) <InfoTip label="About changes">The roster has been updated to match. Check these look right.</InfoTip>
+                  </>
+                }
+                id="changes"
+                actions={
+                  changes.length > 0 && (
+                    <Button small kind="ghost" onClick={() => reviewed(changes.map(([k]) => k))}>
+                      Mark all as checked
+                    </Button>
+                  )
+                }
+              >
+                {changes.length === 0 ? (
+                  <EmptyState title="Nothing changed">Changes show here after each upload.</EmptyState>
+                ) : (
+                  <ul className="list intake-scroll">
+                    {changes.map(([k, c]) => (
+                      <li key={k} className="row intake-change">
+                        <span className="row-main">
+                          <span className="row-title">
+                            {c.name} <span className="meta">{c.memberNumber}</span>
+                          </span>
+                          <ul className="intake-change-items">
+                            {c.items.map((i) => (
+                              <li key={i.label}>
+                                <span className="meta">{i.label}:</span> <s>{i.before}</s> → <strong>{i.after}</strong>
+                              </li>
+                            ))}
+                          </ul>
+                        </span>
+                        <span className="row-side">
+                          <Button small onClick={() => reviewed([k])}>
+                            Checked
+                          </Button>
+                        </span>
+                      </li>
                     ))}
                   </ul>
-                </details>
-              )}
-            </Section>
+                )}
+              </Section>
+            )}
 
-            <Section title="No Consent2Go yet" id="noc2g">
-              {!local.files.consent2go ? (
-                <p className="meta">Upload the Consent2Go export to see who hasn’t done it.</p>
-              ) : noC2G.length === 0 ? (
-                <p className="meta">Everyone in MyScout has done Consent2Go.</p>
-              ) : (
-                <>
-                  <div>
+            {shownArea === 'removed' && (
+              <Section
+                title={
+                  <>
+                    Taken off the roster ({removed.length}){' '}
+                    <InfoTip label="About people taken off">
+                      They were in an earlier upload but aren’t in MyScout or Consent2Go any more. Put someone back if that’s a mistake; they won’t be taken off again.
+                    </InfoTip>
+                  </>
+                }
+                id="removed"
+                actions={
+                  removed.length > 0 && (
+                    <Button
+                      small
+                      kind="ghost"
+                      onClick={() =>
+                        downloadCsv('Taken off the roster.csv', [['Name', 'Membership number', 'Taken off'], ...removed.map(([, r]) => [r.name, r.memberNumber, when(r.at)])])
+                      }
+                    >
+                      <Icon name="download" /> Download
+                    </Button>
+                  )
+                }
+              >
+                {removed.length === 0 ? (
+                  <EmptyState title="No one taken off" />
+                ) : (
+                  <ul className="list intake-scroll">
+                    {removed.map(([k, r]) => (
+                      <li key={k} className="row">
+                        <span className="row-main">
+                          <span className="row-title">{r.name}</span>
+                          <span className="row-meta">
+                            {r.memberNumber} · taken off {when(r.at)}
+                          </span>
+                        </span>
+                        <span className="row-side">
+                          <Button small kind="ghost" onClick={() => void putBack(k)}>
+                            Put back
+                          </Button>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Section>
+            )}
+
+            {shownArea === 'sections' && (
+              <Section
+                title={
+                  <>
+                    Choose a section{toChoose.length ? ` (${toChoose.length})` : ''}{' '}
+                    <InfoTip label="About sections">
+                      Joeys, Cubs, Scouts, Venturers, Rovers and Adult Helpers get their section from their MyScout position. Choose one for everyone else. Their MyScout position
+                      stays on their profile.
+                    </InfoTip>
+                  </>
+                }
+                id="sections"
+              >
+                {toChoose.length === 0 ? (
+                  <EmptyState title="Nothing to choose" />
+                ) : (
+                  <ul className="list intake-scroll">
+                    {toChoose.map((p) => (
+                      <SectionRow key={p.key} person={p} options={sectionNames} current="" onChoose={(s) => void chooseSection(p, s)} />
+                    ))}
+                  </ul>
+                )}
+                {chosen.length > 0 && (
+                  <details className="intake-more">
+                    <summary>Chosen already ({chosen.length})</summary>
+                    <ul className="list intake-scroll">
+                      {chosen.map((p) => (
+                        <SectionRow key={p.key} person={p} options={sectionNames} current={chosenMap[p.key] ?? rosterSection(p)} onChoose={(s) => void chooseSection(p, s)} />
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </Section>
+            )}
+
+            {shownArea === 'noc2g' && (
+              <Section
+                title={local.files.consent2go ? `No Consent2Go yet (${noC2G.length})` : 'No Consent2Go yet'}
+                id="noc2g"
+                actions={
+                  local.files.consent2go &&
+                  noC2G.length > 0 && (
                     <Button
                       small
                       kind="ghost"
@@ -577,33 +655,39 @@ export function Intake() {
                         ])
                       }
                     >
-                      <Icon name="download" /> Download the list ({noC2G.length})
+                      <Icon name="download" /> Download ({noC2G.length})
                     </Button>
-                  </div>
-                  <details className="intake-more">
-                    <summary>Show names ({noC2G.length})</summary>
-                    <ul className="list">
-                      {noC2G.map((p) => (
-                        <li key={p.key} className="row">
-                          <span className="row-main">
-                            <span className="row-title">{displayName(p)}</span>
-                            <span className="row-meta">{[p.memberNumber, p.ms?.position, p.ms?.groupName].filter(Boolean).join(' · ')}</span>
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </details>
-                </>
-              )}
-            </Section>
+                  )
+                }
+              >
+                {!local.files.consent2go ? (
+                  <EmptyState title="Consent2Go not uploaded">Upload the Consent2Go export to see who hasn’t done it.</EmptyState>
+                ) : noC2G.length === 0 ? (
+                  <EmptyState title="Everyone in MyScout has done Consent2Go" />
+                ) : (
+                  <ul className="list intake-scroll">
+                    {noC2G.map((p) => (
+                      <li key={p.key} className="row">
+                        <span className="row-main">
+                          <span className="row-title">{displayName(p)}</span>
+                          <span className="row-meta">{[p.memberNumber, p.ms?.position, p.ms?.groupName].filter(Boolean).join(' · ')}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Section>
+            )}
 
-            {(notInMyScout.length > 0 || unmatched.length > 0 || nameMatched.length > 0) && (
+            {shownArea === 'matching' && (
               <Section title="Matching Consent2Go to MyScout" id="matching">
+                {matchingCount === 0 && <EmptyState title="Nothing to check" />}
                 {nameMatched.length > 0 && (
                   <>
-                    <h3 className="intake-subhead">Matched by name ({nameMatched.length})</h3>
-                    <p className="meta">Their Consent2Go Student ID didn’t match a MyScout membership number, but their name did.</p>
-                    <ul className="list">
+                    <h3 className="intake-subhead">
+                      Matched by name ({nameMatched.length}) <InfoTip label="About name matches">Their Consent2Go Student ID didn’t match a MyScout membership number, but their name did.</InfoTip>
+                    </h3>
+                    <ul className="list intake-scroll">
                       {nameMatched.map((p) => (
                         <li key={p.key} className="row">
                           <span className="row-main">
@@ -619,9 +703,10 @@ export function Intake() {
                 )}
                 {notInMyScout.length > 0 && (
                   <>
-                    <h3 className="intake-subhead">In Consent2Go but not MyScout ({notInMyScout.length})</h3>
-                    <p className="meta">Added to the roster from Consent2Go. Check they’ve registered.</p>
-                    <ul className="list">
+                    <h3 className="intake-subhead">
+                      In Consent2Go but not MyScout ({notInMyScout.length}) <InfoTip label="About these people">Added to the roster from Consent2Go. Check they’ve registered.</InfoTip>
+                    </h3>
+                    <ul className="list intake-scroll">
                       {notInMyScout.map((p) => (
                         <li key={p.key} className="row">
                           <span className="row-main">
@@ -636,9 +721,11 @@ export function Intake() {
                 )}
                 {unmatched.length > 0 && (
                   <>
-                    <h3 className="intake-subhead">Couldn’t be matched ({unmatched.length})</h3>
-                    <p className="meta">No usable Student ID, and no one in MyScout or on the roster with this name. Not added.</p>
-                    <ul className="list">
+                    <h3 className="intake-subhead">
+                      Couldn’t be matched ({unmatched.length}){' '}
+                      <InfoTip label="About unmatched people">No usable Student ID, and no one in MyScout or on the roster with this name. Not added.</InfoTip>
+                    </h3>
+                    <ul className="list intake-scroll">
                       {unmatched.map((c, i) => (
                         <li key={i} className="row">
                           <span className="row-main">
@@ -745,8 +832,9 @@ function DietaryReview({
       <div className="intake-diet-head">
         <h3>{displayName(person)}</h3>
         <span className="meta">
-          {[person.memberNumber, reg.section].filter(Boolean).join(' · ')} · {plural(left, 'person', 'people')} to go
+          {[person.memberNumber, reg.section].filter(Boolean).join(' · ')}
         </span>
+        <Badge tone="warning">{plural(left, 'person', 'people')} to go</Badge>
       </div>
       <div className="intake-notes">
         <div className="intake-note">
@@ -771,16 +859,15 @@ function DietaryReview({
         </div>
       </div>
       {fresh.length > 0 && (reg.dietary ?? []).length > 0 && (
-        <p className="meta">Done before. Back because {fresh.map((f) => (f === 'myscout' ? 'MyScout' : 'Consent2Go')).join(' and ')} has something new. What’s already recorded is below: add anything the new note says.</p>
+        <Banner tone="info">
+          Done before: {fresh.map((f) => (f === 'myscout' ? 'MyScout' : 'Consent2Go')).join(' and ')} has something new{' '}
+          <InfoTip label="About this">What’s already recorded is below: add anything the new note says.</InfoTip>
+        </Banner>
       )}
       {entries && entries.length > 0 && !(reg.dietary ?? []).length && <p className="meta">Filled in from the notes. Check them against what’s written.</p>}
-      {problem && (
-        <Notice tone="error">
-          <p>{problem}</p>
-        </Notice>
-      )}
+      {problem && <Banner tone="error">{problem}</Banner>}
       <DietaryEditor value={entries} onChange={setEntries} labelPrefix={displayName(person)} />
-      <div className="btn-row">
+      <div className="btn-row form-actions">
         <Button kind="primary" busy={busy} busyLabel="Saving…" onClick={() => void save()}>
           Save, next person
         </Button>
