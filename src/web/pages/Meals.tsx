@@ -13,16 +13,20 @@ import {
   Button,
   EmptyState,
   Field,
-  FilterTabs,
+  FilterChips,
   Icon,
+  InfoTip,
   LoadError,
   Loading,
   Menu,
   PageHeader,
+  Segmented,
   Sheet,
   SkeletonHeader,
   SkeletonRows,
+  Toolbar,
   useConfirm,
+  useRemembered,
   useToast,
 } from '../ui';
 import { useEvent } from './EventLayout';
@@ -56,7 +60,7 @@ export function Meals() {
   const days = eventDays(event.startsOn, event.endsOn);
   const tz = event.timezone;
   const today = todayInZone(tz);
-  const [day, setDay] = useState<string | null>(null);
+  const [day, setDay] = useRemembered<string | null>(`meals-day:${event.id}`, null);
   const [sheet, setSheet] = useState<'day' | 'one' | null>(null);
   const [editing, setEditing] = useState<Meal | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -100,8 +104,11 @@ export function Meals() {
   const mealDay = (m: Meal) => (m.startsAt ? dayInZone(m.startsAt, tz) : inferDay(m.name, days));
   const noDay = meals.filter((m) => !days.includes(mealDay(m) ?? ''));
   const usedDays = days.filter((d) => meals.some((m) => mealDay(m) === d));
-  const tabs = [...days.map((d) => ({ value: d, label: d === today ? `Today, ${dayLabel(d)}` : dayLabel(d) })), ...(noDay.length ? [{ value: 'none', label: 'No day set' }] : [])];
-  const shownDay = day ?? (days.includes(today) ? today : (usedDays[0] ?? days[0] ?? 'none'));
+  const tabs = [
+    ...days.map((d) => ({ value: d, label: d === today ? `Today, ${dayLabel(d)}` : dayLabel(d), count: meals.filter((m) => mealDay(m) === d).length })),
+    ...(noDay.length ? [{ value: 'none', label: 'No day set', count: noDay.length }] : []),
+  ];
+  const shownDay = day && tabs.some((t) => t.value === day) ? day : days.includes(today) ? today : (usedDays[0] ?? days[0] ?? 'none');
   const shown = (shownDay === 'none' ? noDay : meals.filter((m) => mealDay(m) === shownDay)).sort(
     (x, y) => (x.startsAt ?? '').localeCompare(y.startsAt ?? '') || mealOrder(x.name) - mealOrder(y.name),
   );
@@ -113,6 +120,7 @@ export function Meals() {
       <PageHeader
         title="Meals"
         summary={meals.length > 0 ? `${active} ${active === 1 ? 'meal' : 'meals'}` : undefined}
+        help="Scanners pick meals by day. Open a meal to list what's served, with allergens and dietary alternatives."
         primary={
           manage && (
             <Button kind="primary" onClick={() => setSheet('day')}>
@@ -130,7 +138,7 @@ export function Meals() {
             : undefined
         }
       />
-      <div className="sections">
+      <div className="sections pg-sections">
         {meals.length === 0 ? (
           <EmptyState
             title="No meals yet"
@@ -142,21 +150,23 @@ export function Meals() {
               )
             }
           >
-            Add each meal you want to count. Scanners pick them by day.
+            Add each meal you want to count.
           </EmptyState>
         ) : (
           <>
-            {tabs.length > 1 && <FilterTabs label="Day" value={shownDay} onChange={setDay} options={tabs} />}
-            {shown.length > 0 && (
-              <div className="btn-row meal-expand">
-                <Button small kind="ghost" onClick={() => setExpanded(new Set(shown.map((m) => m.id)))}>
-                  Expand all
-                </Button>
-                <Button small kind="ghost" onClick={() => setExpanded(new Set())}>
-                  Collapse all
-                </Button>
-              </div>
-            )}
+            <Toolbar sticky label="Meals by day">
+              {tabs.length > 1 && <FilterChips label="Day" value={shownDay} onChange={setDay} options={tabs} />}
+              {shown.length > 0 && (
+                <div className="toolbar-end">
+                  <Button small kind="ghost" onClick={() => setExpanded(new Set(shown.map((m) => m.id)))}>
+                    Expand all
+                  </Button>
+                  <Button small kind="ghost" onClick={() => setExpanded(new Set())}>
+                    Collapse all
+                  </Button>
+                </div>
+              )}
+            </Toolbar>
             {shown.length === 0 ? (
               <EmptyState
                 title={`No meals on ${shownDay === 'none' ? 'no day' : dayLabel(shownDay, 'long')}`}
@@ -198,9 +208,13 @@ export function Meals() {
                             {m.name}
                           </button>
                           <span className="row-meta">
-                            {[m.location || null, s && s.expected ? `${s.people} of ${s.expected} served` : s ? `${s.people} served` : null].filter(Boolean).join(' · ') ||
-                              (!m.startsAt && !mealDay(m) ? 'Give it a day so scanners can find it' : '')}
+                            {[m.location || null, s && s.expected ? `${s.people} of ${s.expected} served` : s ? `${s.people} served` : null].filter(Boolean).join(' · ')}
                           </span>
+                          {!m.startsAt && !mealDay(m) && (
+                            <span>
+                              <Badge tone="warning">No day: scanners can't find it</Badge>
+                            </span>
+                          )}
                           {m.menu && <span className="meal-menu-text">{m.menu}</span>}
                           <span className="meal-summary">
                             {sum.items === 0
@@ -402,9 +416,7 @@ function AddDay({
         </select>
       </Field>
       <p className="meta">
-        {todo.length === 0
-          ? 'This day already has breakfast, lunch and dinner.'
-          : `Adds ${todo.map((k) => `${k.kind} (${k.start})`).join(', ')}. You can change the times afterwards.`}
+        {todo.length === 0 ? 'This day already has breakfast, lunch and dinner.' : `Adds ${todo.map((k) => `${k.kind} (${k.start})`).join(', ')}. Change times later.`}
       </p>
       <div className="btn-row">
         <Button type="submit" kind="primary" disabled={todo.length === 0} busy={busy} busyLabel="Adding…">
@@ -472,19 +484,19 @@ function MealForm({
           {failure}
         </p>
       )}
-      <Field id="meal-name" label="Name" hint="For example, Saturday lunch or Morning tea" error={errors.name}>
+      <Field id="meal-name" label="Name" hint="Like Saturday lunch or Morning tea" error={errors.name}>
         <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
       </Field>
-      <Field id="meal-day" label="Day">
-        <select className="select" value={day} onChange={(e) => setDay(e.target.value)}>
-          {days.map((d) => (
-            <option key={d} value={d}>
-              {dayLabel(d, 'long')}
-            </option>
-          ))}
-        </select>
-      </Field>
-      <div className="field-pair">
+      <div className="pg-when">
+        <Field id="meal-day" label="Day">
+          <select className="select" value={day} onChange={(e) => setDay(e.target.value)}>
+            {days.map((d) => (
+              <option key={d} value={d}>
+                {dayLabel(d, 'long')}
+              </option>
+            ))}
+          </select>
+        </Field>
         <Field id="meal-start" label="Starts" error={errors.start}>
           <input className="input" type="time" value={start} onChange={(e) => setStart(e.target.value)} />
         </Field>
@@ -495,14 +507,14 @@ function MealForm({
       <Field id="meal-location" label="Place" optional>
         <input className="input" value={location} onChange={(e) => setLocation(e.target.value)} autoComplete="off" />
       </Field>
-      <Field id="meal-menu" label="Menu" optional hint="What's served, for example Spaghetti bolognese, garden salad, fruit" error={errors.menu}>
+      <Field id="meal-menu" label="Menu" optional hint="Like Spaghetti bolognese, garden salad, fruit" error={errors.menu}>
         <textarea className="textarea" rows={2} maxLength={1000} value={menu} onChange={(e) => setMenu(e.target.value)} />
       </Field>
       <Field
         id="meal-ingredients"
         label="Additional notes"
         optional
-        hint="Anything not covered by the meal’s items. Each item (open the meal) has its own ingredients, allergens and alternatives."
+        hint="Anything the meal's items don't cover."
         error={errors.ingredients}
       >
         <textarea className="textarea" rows={4} maxLength={10000} value={ingredients} onChange={(e) => setIngredients(e.target.value)} />
@@ -571,7 +583,7 @@ function DuplicateMeal({ meal, onDone, onCancel }: { meal: Meal; onDone: (day: s
       <Field id="dup-name" label="Name">
         <input className="input" value={name || suggested(day)} maxLength={80} onChange={(e) => setName(e.target.value)} autoComplete="off" />
       </Field>
-      <p className="meta">Same times, place, menu, notes and items. Scans aren’t copied.</p>
+      <p className="meta">Copies times, place, menu, notes and items. Not scans.</p>
       <div className="btn-row">
         <Button type="submit" kind="primary" busy={busy} busyLabel="Duplicating…">
           Duplicate
@@ -622,9 +634,12 @@ function ImportMeals({ onDone, onCancel }: { onDone: (meals: number) => Promise<
 
   return (
     <div className="form meal-import">
-      <p className="meta">
-        A list of meals, each with name, day (YYYY-MM-DD), start and end (HH:MM), place, menu, notes and items. Items have name, category, ingredients, contains,
-        may_contain, dietary, is_alternative, replaces (another item’s name in the same meal), alternative_for, status and internal_notes.
+      <p className="meta pg-inline-help">
+        A JSON list of meals with their items.
+        <InfoTip label="JSON fields">
+          Meals: name, day (YYYY-MM-DD), start and end (HH:MM), place, menu, notes, items. Items: name, category, ingredients, contains, may_contain, dietary,
+          is_alternative, replaces (another item’s name in the same meal), alternative_for, status, internal_notes.
+        </InfoTip>
       </p>
       <Field id="import-file" label="Choose a file" optional>
         <input
@@ -651,20 +666,24 @@ function ImportMeals({ onDone, onCancel }: { onDone: (meals: number) => Promise<
           }}
         />
       </Field>
-      <fieldset className="choices">
-        <legend className="field-label">Meals already here with the same name and day</legend>
-        <label className="choice">
-          <input type="radio" name="import-mode" checked={mode === 'replace'} onChange={() => (setMode('replace'), setPlan(null))} />
-          <span className="choice-text">
-            Replace their details and items
-            <span className="meta">Scans so far are kept.</span>
-          </span>
-        </label>
-        <label className="choice">
-          <input type="radio" name="import-mode" checked={mode === 'add'} onChange={() => (setMode('add'), setPlan(null))} />
-          <span className="choice-text">Add as new meals</span>
-        </label>
-      </fieldset>
+      <div className="field">
+        <span className="field-label">
+          Same name and day as a meal here
+          <InfoTip label="About replacing">Replace keeps the scans so far, and replaces the meal's details and items.</InfoTip>
+        </span>
+        <Segmented
+          label="Same name and day as a meal here"
+          value={mode}
+          onChange={(v) => {
+            setMode(v);
+            setPlan(null);
+          }}
+          options={[
+            { value: 'replace', label: 'Replace details and items' },
+            { value: 'add', label: 'Add as new' },
+          ]}
+        />
+      </div>
       {problem && (
         <p className="field-error" role="alert">
           <Icon name="error" size={16} />
@@ -686,7 +705,7 @@ function ImportMeals({ onDone, onCancel }: { onDone: (meals: number) => Promise<
             </div>
           )}
           {plan.meals.length > 0 && (
-            <ul className="list">
+            <ul className="list scroll-list pg-plan-list">
               {plan.meals.map((m, i) => (
                 <li key={i} className="row">
                   <span className="row-main">

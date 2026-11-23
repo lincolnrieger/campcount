@@ -7,10 +7,11 @@ import { ApiFailure, api } from '../api';
 import { readFirstSheet } from '../import/xlsx';
 import type { Activity, Meal } from '../model';
 import { useApi } from '../useApi';
-import { Badge, Button, ButtonLink, Choice, CountTile, Icon, LoadError, Loading, Notice, PageHeader, Section, SkeletonRows, Stepper, plural, useToast } from '../ui';
+import { Badge, Banner, Button, ButtonLink, FilterChips, Icon, InfoTip, LoadError, Loading, PageHeader, SkeletonRows, StatStrip, Stepper, Toggle, Toolbar, plural, useToast } from '../ui';
 import { useEvent } from './EventLayout';
 
 type Step = 'file' | 'map' | 'check' | 'done';
+type CheckFilter = 'all' | 'add' | 'problems' | 'skipped';
 const STEPS: Step[] = ['file', 'map', 'check', 'done'];
 const STEP_LABEL: Record<Step, string> = { file: 'Choose file', map: 'Match columns', check: 'Check', done: 'Done' };
 
@@ -41,6 +42,7 @@ export function ProgramImport() {
   const [mealsByName, setMealsByName] = useState(true);
   const [rows, setRows] = useState<ProgramRow[]>([]);
   const [skipDupes, setSkipDupes] = useState(true);
+  const [checkFilter, setCheckFilter] = useState<CheckFilter>('all');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ activities: number; meals: number } | null>(null);
@@ -117,14 +119,18 @@ export function ProgramImport() {
     }
   }
 
-  const header = <PageHeader title="Import programme" back={{ to: `${base}/activities`, label: 'Activities' }} />;
+  const header = (
+    <PageHeader
+      title="Import programme"
+      back={{ to: `${base}/activities`, label: 'Activities' }}
+      help="Activities, meals and programme items (Welcome, Movies) from one spreadsheet. The file is read on this computer; only the rows you import are sent."
+    />
+  );
   if (!can('activities.manage'))
     return (
       <>
         {header}
-        <Notice tone="warning">
-          <p>Only event managers can import a programme.</p>
-        </Notice>
+        <Banner tone="warning">Only event managers can import a programme.</Banner>
       </>
     );
   if (existing.loading && !existing.data)
@@ -144,33 +150,33 @@ export function ProgramImport() {
       </>
     );
 
+  const outcome = (r: ProgramRow): CheckFilter => (r.errors.length ? 'problems' : (isDupe(r) && skipDupes) || (r.kind === 'meal' && !mealsAllowed) ? 'skipped' : 'add');
+  const outcomeCount = (f: CheckFilter) => rows.filter((r) => f === 'all' || outcome(r) === f).length;
+  const checked = rows.filter((r) => checkFilter === 'all' || outcome(r) === checkFilter);
+
   return (
     <>
       {header}
-      <div className="sections">
+      <div className="sections pg-sections">
         <Stepper steps={STEPS.map((s) => STEP_LABEL[s])} current={STEPS.indexOf(step)} />
-        {error && (
-          <Notice tone="error" title="That didn't work">
-            <p>{error}</p>
-          </Notice>
-        )}
+        {error && <Banner tone="error">{error}</Banner>}
 
         {step === 'file' && (
-          <Section title="Choose file" id="file">
-            <div className="prose">
-              <p>
-                Use any spreadsheet with one row per session: at least a name, and ideally a day, start and end time and place. Meals and programme items
-                (Welcome, Movies, Depart) can go in the same file: set Type to Meal or Programme. Put Required in the Booking column for activities people must
-                book. Repeat a row for each session of the same activity.
-              </p>
-              <p className="meta">
-                Days can be dates (5/12/2026), weekdays (Saturday) or "Day 1". Times can be 9:00, 9am or 14:30.{' '}
-                <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(TEMPLATE)}`} download="programme-template.csv">
-                  Download a template
-                </a>
-              </p>
+          <section className="panel panel-pad pg-import-file" aria-labelledby="pi-file-heading">
+            <div className="pg-import-file-head">
+              <h2 id="pi-file-heading" className="pg-panel-title">
+                Choose file
+              </h2>
+              <InfoTip label="What the file needs">
+                One row per session: a name, and ideally day, start, end and place. Set Type to Meal or Programme for those rows. Put Required in Booking for
+                activities people must book. Days: 5/12/2026, Saturday or Day 1. Times: 9:00, 9am or 14:30.
+              </InfoTip>
+              <a className="btn btn-ghost btn-small pg-push" href={`data:text/csv;charset=utf-8,${encodeURIComponent(TEMPLATE)}`} download="programme-template.csv">
+                <Icon name="download" size={18} />
+                Download template
+              </a>
             </div>
-            <label className="dropzone">
+            <label className="dropzone pg-dropzone">
               <Icon name="download" size={24} />
               <strong>{busy ? 'Reading…' : 'Choose a file'}</strong>
               <span className="meta">.xlsx, .csv or tab-separated text</span>
@@ -183,31 +189,32 @@ export function ProgramImport() {
                 }}
               />
             </label>
-          </Section>
+          </section>
         )}
 
         {step === 'map' && table && (
-          <Section title="Match columns" id="map">
-            <p className="meta">
-              {fileName}: {plural(table.rows.length, 'row')}. Choose which column holds each detail.
-            </p>
-            <ul className="list">
+          <section className="pg-import-step" aria-labelledby="pi-map-heading">
+            <div className="section-head">
+              <h2 id="pi-map-heading">Match columns</h2>
+              <span className="meta">
+                {fileName} · {plural(table.rows.length, 'row')}
+              </span>
+            </div>
+            {mapping.name === undefined && <Banner tone="warning">Choose the column with each session's name.</Banner>}
+            <ul className="pg-map">
               {(Object.keys(PROGRAM_FIELDS) as ProgramField[]).map((field) => {
                 const def = PROGRAM_FIELDS[field];
                 const index = mapping[field];
                 const sample = index === undefined ? '' : (table.rows.find((r) => (r[index] ?? '').trim())?.[index] ?? '');
                 return (
-                  <li key={field} className="row map-row">
-                    <span className="row-main">
-                      <label htmlFor={`pmap-${field}`} className="row-title">
-                        {def.label}
-                        {!def.required && <span className="field-optional"> (optional)</span>}
-                      </label>
-                      {sample && <span className="row-meta">For example: {sample}</span>}
-                    </span>
+                  <li key={field} className={index === undefined ? 'pg-map-item' : 'pg-map-item is-set'}>
+                    <label htmlFor={`pmap-${field}`} className="pg-map-label">
+                      {def.label}
+                      {!def.required && <span className="field-optional"> (optional)</span>}
+                    </label>
                     <select
                       id={`pmap-${field}`}
-                      className="select map-select"
+                      className="select"
                       value={index ?? ''}
                       onChange={(e) => {
                         const next = { ...mapping };
@@ -223,29 +230,21 @@ export function ProgramImport() {
                         </option>
                       ))}
                     </select>
+                    <span className="row-meta pg-map-sample">{sample ? `e.g. ${sample}` : ' '}</span>
                   </li>
                 );
               })}
             </ul>
             {mapping.type === undefined && mealsAllowed && (
-              <Choice
-                label="Treat Breakfast, Lunch, Dinner and similar rows as meals"
-                description="So they're counted as meals, not booked like activities."
-                checked={mealsByName}
-                onChange={(e) => setMealsByName(e.target.checked)}
-              />
+              <Toggle label="Treat Breakfast, Lunch, Dinner rows as meals" hint="Counted as meals, not booked like activities." checked={mealsByName} onChange={setMealsByName} />
             )}
-            {mapping.name === undefined && (
-              <Notice tone="warning">
-                <p>Choose the column with each session's name.</p>
-              </Notice>
-            )}
-            <div className="btn-row">
+            <div className="pg-actionbar">
               <Button
                 kind="primary"
                 disabled={mapping.name === undefined}
                 onClick={() => {
                   setRows(prepareProgram(table.rows, mapping, days, { mealsByName: mealsAllowed && mealsByName }));
+                  setCheckFilter('all');
                   setStep('check');
                 }}
               >
@@ -253,35 +252,50 @@ export function ProgramImport() {
               </Button>
               <Button onClick={() => setStep('file')}>Back</Button>
             </div>
-          </Section>
+          </section>
         )}
 
         {step === 'check' && (
-          <Section title="Check" id="check">
-            <div className="tiles">
-              <CountTile value={toSend.filter((r) => r.kind !== 'meal').length} label="Activities and programme" tone="success" />
-              <CountTile value={toSend.filter((r) => r.kind === 'meal').length} label="Meals to add" tone="info" />
-              <CountTile value={problems.length} label="Rows with problems" tone={problems.length ? 'warning' : 'neutral'} />
-            </div>
-            {dupes > 0 && (
-              <Choice
-                label={`Skip ${plural(dupes, 'row')} already in the programme`}
-                description="Same name at the same time as one that's already there."
-                checked={skipDupes}
-                onChange={(e) => setSkipDupes(e.target.checked)}
+          <section className="pg-import-step" aria-labelledby="pi-check-heading">
+            <h2 id="pi-check-heading" className="visually-hidden">
+              Check
+            </h2>
+            <StatStrip
+              items={[
+                { label: 'Activities and programme', value: toSend.filter((r) => r.kind !== 'meal').length, tone: 'success' },
+                { label: 'Meals to add', value: toSend.filter((r) => r.kind === 'meal').length },
+                { label: 'Rows with problems', value: problems.length, tone: problems.length ? 'warning' : undefined, pressed: checkFilter === 'problems', onPress: problems.length ? () => setCheckFilter('problems') : undefined },
+              ]}
+            />
+            {(problems.length > 0 || mealsSkipped > 0) && (
+              <div className="banners">
+                {problems.length > 0 && (
+                  <Banner tone="warning" action={checkFilter !== 'problems' && <Button small onClick={() => setCheckFilter('problems')}>Show them</Button>}>
+                    {plural(problems.length, 'row')} won't be added. <span className="meta">Fix them in the file and choose it again, or add them by hand.</span>
+                  </Banner>
+                )}
+                {mealsSkipped > 0 && <Banner>{plural(mealsSkipped, 'meal')} won't be added: meals are off for this camp, or you can't manage them.</Banner>}
+              </div>
+            )}
+            <Toolbar label="Rows">
+              <FilterChips
+                label="Show rows"
+                value={checkFilter}
+                onChange={setCheckFilter}
+                options={[
+                  { value: 'all', label: 'All', count: outcomeCount('all') },
+                  { value: 'add', label: 'To add', count: outcomeCount('add') },
+                  { value: 'problems', label: 'Problems', count: outcomeCount('problems') },
+                  { value: 'skipped', label: 'Skipped', count: outcomeCount('skipped') },
+                ]}
               />
-            )}
-            {mealsSkipped > 0 && (
-              <Notice tone="info">
-                <p>{plural(mealsSkipped, 'meal')} won't be added: meals are switched off for this camp, or you can't manage them.</p>
-              </Notice>
-            )}
-            {problems.length > 0 && (
-              <Notice tone="warning" title={`${plural(problems.length, 'row')} won't be added`}>
-                <p>Fix these in the file and choose it again, or add them by hand afterwards.</p>
-              </Notice>
-            )}
-            <div className="table-wrap">
+              {dupes > 0 && (
+                <div className="toolbar-end">
+                  <Toggle label={`Skip ${plural(dupes, 'row')} already in the programme`} hint="Same name at the same time." checked={skipDupes} onChange={setSkipDupes} />
+                </div>
+              )}
+            </Toolbar>
+            <div className="table-wrap scroll-list">
               <table className="table">
                 <thead>
                   <tr>
@@ -295,7 +309,14 @@ export function ProgramImport() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r) => {
+                  {checked.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="meta">
+                        No rows here.
+                      </td>
+                    </tr>
+                  )}
+                  {checked.map((r) => {
                     const dupe = r.errors.length === 0 && isDupe(r);
                     return (
                       <tr key={r.line}>
@@ -315,7 +336,7 @@ export function ProgramImport() {
                             </>
                           )}
                         </td>
-                        <td>{describeWhen(r)}</td>
+                        <td className="pg-nowrap">{describeWhen(r)}</td>
                         <td className="only-desktop">{r.location}</td>
                         <td>
                           {r.errors.length ? (
@@ -335,30 +356,31 @@ export function ProgramImport() {
                 </tbody>
               </table>
             </div>
-            <div className="btn-row">
+            <div className="pg-actionbar">
               <Button kind="primary" disabled={toSend.length === 0} busy={busy} busyLabel="Importing…" onClick={() => void importNow()}>
                 Import {plural(toSend.length, 'session')}
               </Button>
               <Button onClick={() => setStep('map')}>Back</Button>
             </div>
-          </Section>
+          </section>
         )}
 
         {step === 'done' && result && (
-          <Section title="Done" id="done">
-            <Notice tone="success" title="Programme imported">
-              <p>
-                Added {plural(result.activities, 'activity', 'activities')}
-                {result.meals ? ` and ${plural(result.meals, 'meal')}` : ''}.
-              </p>
-            </Notice>
+          <section className="pg-import-step" aria-labelledby="pi-done-heading">
+            <h2 id="pi-done-heading" className="visually-hidden">
+              Done
+            </h2>
+            <Banner tone="success">
+              Programme imported. <span className="meta">Added {plural(result.activities, 'activity', 'activities')}
+              {result.meals ? ` and ${plural(result.meals, 'meal')}` : ''}.</span>
+            </Banner>
             <div className="btn-row">
               <ButtonLink to={`${base}/schedule`} kind="primary">
                 Open the schedule
               </ButtonLink>
               <ButtonLink to={`${base}/activities`}>View activities</ButtonLink>
             </div>
-          </Section>
+          </section>
         )}
       </div>
     </>

@@ -8,11 +8,12 @@ import type { TeamEvent } from '../model';
 import { useApi } from '../useApi';
 import {
   Badge,
+  Banner,
   Button,
-  Choice,
   EmptyState,
   ErrorSummary,
   Field,
+  FilterChips,
   Icon,
   LoadError,
   Loading,
@@ -20,12 +21,15 @@ import {
   Notice,
   PageHeader,
   SearchField,
-  Section,
   Sheet,
   SkeletonRows,
+  StatStrip,
+  Toggle,
+  Toolbar,
   plural,
   useConfirm,
   useToast,
+  useWide,
 } from '../ui';
 import { useEvent } from './EventLayout';
 
@@ -55,13 +59,30 @@ export function TeamEvents() {
   const { data, error, loading, reload } = useApi<{ teamEvents: TeamEvent[]; canManage: boolean }>(`/events/${event.id}/team-events`);
   const [adding, setAdding] = useState(false);
   const navigate = useNavigate();
+  const wide = useWide();
   const editable = can('activities.manage') && (event.status === 'draft' || event.status === 'open');
   const add = editable && (
     <Button kind="primary" onClick={() => setAdding(true)}>
+      <Icon name="plus" />
       Add team event
     </Button>
   );
-  const header = <PageHeader title="Teams" summary="Events people enter as a team, like soccer or basketball. Participants make and join teams from their lanyard link or the sign-up kiosk." primary={add} />;
+  const list = data?.teamEvents ?? [];
+  const header = (
+    <PageHeader
+      title="Teams"
+      summary={list.length > 0 ? plural(list.length, 'team event') : undefined}
+      help="Events people enter as a team, like soccer or basketball. Participants make and join teams from their lanyard link or the sign-up kiosk."
+      primary={add}
+    />
+  );
+  const stats = (te: TeamEvent) => {
+    const people = te.teams.reduce((n, t) => n + t.members.length, 0);
+    const short = te.teams.filter((t) => t.members.length < te.minSize).length;
+    return { people, short };
+  };
+  const status = (te: TeamEvent) =>
+    te.status === 'cancelled' ? <Badge>Cancelled</Badge> : <Badge tone={te.registrationOpen ? 'success' : 'neutral'}>{te.registrationOpen ? 'Registration open' : 'Registration closed'}</Badge>;
 
   let body;
   if (loading && !data)
@@ -74,15 +95,65 @@ export function TeamEvents() {
   else if (!data || data.teamEvents.length === 0)
     body = (
       <EmptyState title="No team events yet" actions={add}>
-        Add one for each sport or game. Set how many people a team needs, then open registration when you're ready.
+        Add one for each sport or game, then open registration.
       </EmptyState>
+    );
+  else if (wide)
+    body = (
+      <div className="table-wrap">
+        <table className="table pg-table">
+          <thead>
+            <tr>
+              <th scope="col">Team event</th>
+              <th scope="col">When</th>
+              <th scope="col">Place</th>
+              <th scope="col">Team size</th>
+              <th scope="col" className="cell-num">
+                Teams
+              </th>
+              <th scope="col" className="cell-num">
+                People
+              </th>
+              <th scope="col" className="cell-num">
+                Short
+              </th>
+              <th scope="col">
+                <span className="visually-hidden">Status</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.teamEvents.map((te) => {
+              const { people, short } = stats(te);
+              return (
+                <tr key={te.id} className={te.status === 'cancelled' ? 'row-link is-muted' : 'row-link'}>
+                  <td>
+                    <Link to={te.id} className="cell-link">
+                      {te.name}
+                    </Link>
+                  </td>
+                  <td className="pg-nowrap">{when(te, event.timezone)}</td>
+                  <td className="meta">{te.location}</td>
+                  <td className="meta">{sizeRule(te)}</td>
+                  <td className="cell-num num">
+                    {te.teams.length}
+                    {te.maxTeams !== null ? `/${te.maxTeams}` : ''}
+                  </td>
+                  <td className="cell-num num">{people}</td>
+                  <td className="cell-num num">{short > 0 ? <Badge tone="warning">{short}</Badge> : ''}</td>
+                  <td>{status(te)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     );
   else
     body = (
       <ul className="list">
         {data.teamEvents.map((te) => {
-          const people = te.teams.reduce((n, t) => n + t.members.length, 0);
-          const short = te.teams.filter((t) => t.members.length < te.minSize).length;
+          const { people, short } = stats(te);
           return (
             <li key={te.id} className="row row-large row-link">
               <span className="row-main">
@@ -98,7 +169,7 @@ export function TeamEvents() {
                   {short > 0 ? ` · ${short} short of players` : ''}
                 </span>
               </span>
-              {te.status === 'cancelled' ? <Badge>Cancelled</Badge> : <Badge tone={te.registrationOpen ? 'success' : 'neutral'}>{te.registrationOpen ? 'Registration open' : 'Registration closed'}</Badge>}
+              {status(te)}
               <span className="row-chevron">
                 <Icon name="chevron" />
               </span>
@@ -220,52 +291,51 @@ function TeamEventForm({ initial, submitLabel, onSave, onCancel }: { initial?: T
       <Field id="te-name" label="Name" error={errors['te-name']}>
         <input className="input" value={form.name} onChange={(e) => set('name', e.target.value)} autoComplete="off" />
       </Field>
-      <Field id="te-day" label="Day">
-        <select className="select" value={form.day} onChange={(e) => set('day', e.target.value)}>
-          <option value="">No set time</option>
-          {days.map((d) => (
-            <option key={d} value={d}>
-              {dayLabel(d, 'long')}
-            </option>
-          ))}
-        </select>
-      </Field>
-      {form.day && (
-        <div className="field-pair">
-          <Field id="te-start" label="Start">
-            <input className="input" type="time" value={form.start} onChange={(e) => set('start', e.target.value)} />
-          </Field>
-          <Field id="te-end" label="End" optional error={errors['te-end']}>
-            <input className="input" type="time" value={form.end} onChange={(e) => set('end', e.target.value)} />
-          </Field>
-        </div>
-      )}
+      <div className="pg-when">
+        <Field id="te-day" label="Day">
+          <select className="select" value={form.day} onChange={(e) => set('day', e.target.value)}>
+            <option value="">No set time</option>
+            {days.map((d) => (
+              <option key={d} value={d}>
+                {dayLabel(d, 'long')}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {form.day && (
+          <>
+            <Field id="te-start" label="Start">
+              <input className="input" type="time" value={form.start} onChange={(e) => set('start', e.target.value)} />
+            </Field>
+            <Field id="te-end" label="End" optional error={errors['te-end']}>
+              <input className="input" type="time" value={form.end} onChange={(e) => set('end', e.target.value)} />
+            </Field>
+          </>
+        )}
+      </div>
       <Field id="te-place" label="Place" optional>
         <input className="input" value={form.location} onChange={(e) => set('location', e.target.value)} autoComplete="off" />
       </Field>
-      <div className="field-pair">
-        <Field id="te-min" label="Fewest per team" hint="Teams under this show as short." error={errors['te-min']}>
+      <div className="pg-numbers">
+        <Field id="te-min" label="Min per team" hint="Fewer shows as short." error={errors['te-min']}>
           <input className="input" inputMode="numeric" value={form.minSize} onChange={(e) => set('minSize', digits(e.target.value))} />
         </Field>
-        <Field id="te-max" label="Most per team" optional hint="Blank for no limit." error={errors['te-max']}>
+        <Field id="te-max" label="Max per team" optional hint="Blank: no limit." error={errors['te-max']}>
           <input className="input" inputMode="numeric" value={form.maxSize} onChange={(e) => set('maxSize', digits(e.target.value))} />
         </Field>
+        <Field id="te-teams" label="Max teams" optional hint="Blank: no limit." error={errors['te-teams']}>
+          <input className="input" inputMode="numeric" value={form.maxTeams} onChange={(e) => set('maxTeams', digits(e.target.value))} />
+        </Field>
       </div>
-      <Field id="te-teams" label="Most teams" optional hint="Blank for no limit." error={errors['te-teams']}>
-        <input className="input activity-capacity" inputMode="numeric" value={form.maxTeams} onChange={(e) => set('maxTeams', digits(e.target.value))} />
-      </Field>
       <Field id="te-notes" label="Notes for participants" optional>
         <textarea className="textarea" rows={2} value={form.description} onChange={(e) => set('description', e.target.value)} />
       </Field>
-      <fieldset className="choices">
-        <legend className="visually-hidden">Registration</legend>
-        <Choice
-          label="Registration open"
-          description="Participants can make a team or join one from their lanyard link and the sign-up kiosk. Close it to lock the teams."
-          checked={form.registrationOpen}
-          onChange={(e) => set('registrationOpen', e.target.checked)}
-        />
-      </fieldset>
+      <Toggle
+        label="Registration open"
+        hint="Participants make and join teams from their lanyard link and the kiosk. Close it to lock the teams."
+        checked={form.registrationOpen}
+        onChange={(v) => set('registrationOpen', v)}
+      />
       <div className="btn-row">
         <Button type="submit" kind="primary" busy={busy} busyLabel="Saving…">
           {submitLabel}
@@ -275,6 +345,8 @@ function TeamEventForm({ initial, submitLabel, onSave, onCancel }: { initial?: T
     </form>
   );
 }
+
+type TeamShow = 'all' | 'short' | 'ready' | 'full';
 
 type Panel = { kind: 'edit' } | { kind: 'team'; teamId: string | null; name: string } | { kind: 'add'; teamId: string } | null;
 
@@ -288,6 +360,9 @@ export function TeamEventPage() {
   const { data, error, loading, reload } = useApi<{ teamEvents: TeamEvent[]; canManage: boolean }>(`/events/${event.id}/team-events`);
   const roster = useApi<{ everyone: { id: string; name: string; groupName: string }[] }>(`/events/${event.id}/activities/${teamEventId}/attendance`);
   const [panel, setPanel] = useState<Panel>(null);
+  const [q, setQ] = useState('');
+  const [show, setShow] = useState<TeamShow>('all');
+  const [regoBusy, setRegoBusy] = useState(false);
   const manager = can('activities.manage');
   const editable = event.status === 'draft' || event.status === 'open';
   const back = manager ? { to: `${base}/teams`, label: 'Teams' } : { to: `${base}/activities/${teamEventId}`, label: 'Check-ins' };
@@ -313,9 +388,7 @@ export function TeamEventPage() {
     return (
       <>
         <PageHeader title="Team event" back={back} />
-        <Notice tone="error">
-          <p>This team event has been deleted.</p>
-        </Notice>
+        <Banner tone="error">This team event has been deleted.</Banner>
       </>
     );
 
@@ -332,6 +405,17 @@ export function TeamEventPage() {
   const onTeam = new Set(te.teams.flatMap((t) => t.members.map((m) => m.registrationId)));
   const people = te.teams.reduce((n, t) => n + t.members.length, 0);
   const full = te.maxTeams !== null && te.teams.length >= te.maxTeams;
+  const stateOf = (t: TeamEvent['teams'][number]): TeamShow => {
+    const tone = teamState(t.members.length, te).tone;
+    return tone === 'warning' ? 'short' : tone === 'success' ? 'ready' : 'full';
+  };
+  const counts = { short: 0, ready: 0, full: 0 };
+  for (const t of te.teams) counts[stateOf(t) as 'short' | 'ready' | 'full']++;
+  const searching = q.trim() !== '';
+  const shownTeams = te.teams
+    .filter((t) => show === 'all' || stateOf(t) === show)
+    .map((t) => ({ team: t, members: searching && !matchesSearch(q, t.name) ? t.members.filter((m) => matchesSearch(q, m.name, m.groupName)) : t.members }))
+    .filter(({ team, members }) => !searching || matchesSearch(q, team.name) || members.length > 0);
 
   return (
     <>
@@ -374,40 +458,76 @@ export function TeamEventPage() {
         ]}
         menuLabel={`More actions for ${te.name}`}
       />
-      <div className="sections">
-        <div className={te.registrationOpen ? 'team-rego is-open' : 'team-rego'}>
-          <p>
-            <strong>Registration {te.registrationOpen ? 'open' : 'closed'}.</strong>{' '}
-            {te.registrationOpen ? 'Participants can make and join teams.' : 'Only the event team can change teams.'} {plural(te.teams.length, 'team')}, {plural(people, 'person', 'people')}.
-          </p>
-          {manager && editable && (
-            <Button
-              small
-              busyLabel="Saving…"
-              onAction={() => act(() => api(`${path}/team-events/${te.id}`, { method: 'PATCH', body: { registrationOpen: !te.registrationOpen } }), te.registrationOpen ? 'Registration closed' : 'Registration open')}
-            >
-              {te.registrationOpen ? 'Close registration' : 'Open registration'}
-            </Button>
+      <div className="sections pg-sections">
+        <StatStrip
+          items={[
+            { label: te.maxTeams !== null ? `Teams of ${te.maxTeams}` : 'Teams', value: te.teams.length, tone: full ? 'warning' : undefined },
+            { label: 'People', value: people },
+            { label: 'Ready', value: counts.ready, tone: 'success', pressed: show === 'ready', onPress: counts.ready ? () => setShow(show === 'ready' ? 'all' : 'ready') : undefined },
+            { label: 'Short of players', value: counts.short, tone: counts.short ? 'warning' : undefined, pressed: show === 'short', onPress: counts.short ? () => setShow(show === 'short' ? 'all' : 'short') : undefined },
+          ]}
+        />
+        <Toolbar sticky label="Find teams and people">
+          {te.teams.length > 0 && <SearchField id="team-q" label="Find a person or team" value={q} onChange={setQ} slash />}
+          {te.teams.length > 1 && (
+            <FilterChips
+              label="Show"
+              value={show}
+              onChange={setShow}
+              options={[
+                { value: 'all', label: 'All', count: te.teams.length },
+                { value: 'short', label: 'Short', count: counts.short },
+                { value: 'ready', label: 'Ready', count: counts.ready },
+                { value: 'full', label: 'Full', count: counts.full },
+              ]}
+            />
           )}
-        </div>
+          <div className="toolbar-end">
+            {manager && editable ? (
+              <Toggle
+                label="Registration open"
+                hint={te.registrationOpen ? 'Participants make and join teams' : 'Only staff change teams'}
+                checked={te.registrationOpen}
+                disabled={regoBusy}
+                onChange={async (open) => {
+                  setRegoBusy(true);
+                  await act(() => api(`${path}/team-events/${te.id}`, { method: 'PATCH', body: { registrationOpen: open } }), open ? 'Registration open' : 'Registration closed');
+                  setRegoBusy(false);
+                }}
+              />
+            ) : (
+              <Badge tone={te.registrationOpen ? 'success' : 'neutral'}>{te.registrationOpen ? 'Registration open' : 'Registration closed'}</Badge>
+            )}
+          </div>
+        </Toolbar>
 
         {te.teams.length === 0 ? (
-          <EmptyState title="No teams yet">{te.registrationOpen ? 'Teams appear here as participants make them. You can add teams too.' : 'Add teams here, or open registration so participants can make their own.'}</EmptyState>
+          <EmptyState title="No teams yet">{te.registrationOpen ? 'Teams appear here as participants make them.' : 'Add teams, or open registration so participants make their own.'}</EmptyState>
+        ) : shownTeams.length === 0 ? (
+          <EmptyState
+            title={searching ? `No one matches "${q}"` : 'No teams here'}
+            actions={
+              <Button
+                onClick={() => {
+                  setQ('');
+                  setShow('all');
+                }}
+              >
+                Clear filters
+              </Button>
+            }
+          />
         ) : (
-          <div className="team-grid">
-            {te.teams.map((t) => {
+          <div className="pg-team-grid">
+            {shownTeams.map(({ team: t, members }) => {
               const st = teamState(t.members.length, te);
+              const teamFull = te.maxSize !== null && t.members.length >= te.maxSize;
               return (
-                <Section
-                  key={t.id}
-                  id={`team-${t.id}`}
-                  level={2}
-                  title={
-                    <>
+                <section key={t.id} className="pg-team" aria-labelledby={`team-${t.id}-heading`}>
+                  <div className="pg-team-head">
+                    <h2 id={`team-${t.id}-heading`}>
                       {t.name} <span className="team-count num">{te.maxSize !== null ? `${t.members.length}/${te.maxSize}` : t.members.length}</span>
-                    </>
-                  }
-                  actions={
+                    </h2>
                     <span className="team-actions">
                       {t.locked && <Badge>Locked{t.joinCode ? ` · code ${t.joinCode}` : ''}</Badge>}
                       <Badge tone={st.tone}>{st.text}</Badge>
@@ -415,7 +535,7 @@ export function TeamEventPage() {
                         <Menu
                           label={`More actions for ${t.name}`}
                           items={[
-                            !(te.maxSize !== null && t.members.length >= te.maxSize) && { label: 'Add person', onSelect: () => setPanel({ kind: 'add', teamId: t.id }) },
+                            !teamFull && { label: 'Add person', onSelect: () => setPanel({ kind: 'add', teamId: t.id }) },
                             { label: 'Rename team', onSelect: () => setPanel({ kind: 'team', teamId: t.id, name: t.name }) },
                             {
                               label: 'Delete team…',
@@ -434,44 +554,42 @@ export function TeamEventPage() {
                         />
                       )}
                     </span>
-                  }
-                >
+                  </div>
                   {t.members.length === 0 ? (
-                    <p className="meta">Nobody yet.</p>
+                    <p className="meta pg-team-empty">Nobody yet.</p>
                   ) : (
-                    <ul className="list">
-                      {t.members.map((m) => (
-                        <li key={m.registrationId} className="row">
+                    <ul className="pg-team-members">
+                      {members.map((m) => (
+                        <li key={m.registrationId} className={searching && matchesSearch(q, m.name, m.groupName) ? 'is-match' : undefined}>
                           <span className="row-main">
                             <span className="row-title">{m.name}</span>
                             <span className="row-meta">{[m.section, m.groupName].filter(Boolean).join(' · ')}</span>
                           </span>
                           {editable && (
-                            <span className="row-side">
-                              <Button
-                                small
-                                kind="ghost"
-                                aria-label={`Take ${m.name} off ${t.name}`}
-                                busyLabel="Removing…"
-                                onAction={() => act(() => api(`${path}/teams/${t.id}/members/${m.registrationId}`, { method: 'DELETE' }), `${m.name} taken off ${t.name}`)}
-                              >
-                                Remove
-                              </Button>
-                            </span>
+                            <Button
+                              small
+                              kind="ghost"
+                              aria-label={`Take ${m.name} off ${t.name}`}
+                              busyLabel="Removing…"
+                              onAction={() => act(() => api(`${path}/teams/${t.id}/members/${m.registrationId}`, { method: 'DELETE' }), `${m.name} taken off ${t.name}`)}
+                            >
+                              Remove
+                            </Button>
                           )}
                         </li>
                       ))}
+                      {searching && members.length < t.members.length && <li className="meta pg-team-more">and {plural(t.members.length - members.length, 'other')}</li>}
                     </ul>
                   )}
-                  {editable && !(te.maxSize !== null && t.members.length >= te.maxSize) && (
-                    <div>
+                  {editable && !teamFull && (
+                    <div className="pg-team-foot">
                       <Button small kind="ghost" onClick={() => setPanel({ kind: 'add', teamId: t.id })}>
                         <Icon name="plus" />
-                        Add person
+                        Add person<span className="visually-hidden"> to {t.name}</span>
                       </Button>
                     </div>
                   )}
-                </Section>
+                </section>
               );
             })}
           </div>

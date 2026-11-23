@@ -9,9 +9,9 @@ import { matchesSearch, searchRank } from '../../shared/search';
 import { dayInZone, dayLabel, timeInZone, timeRange } from '../../shared/time';
 import {
   Badge,
+  Banner,
   Button,
   ButtonLink,
-  CountTile,
   EmptyState,
   Icon,
   LoadError,
@@ -20,10 +20,11 @@ import {
   Notice,
   PageHeader,
   SearchField,
-  Segmented,
   Sheet,
   SkeletonHeader,
   SkeletonRows,
+  StatStrip,
+  Toolbar,
   useConfirm,
   useToast,
 } from '../ui';
@@ -254,6 +255,19 @@ export function ActivityRoster() {
       <Badge tone="warning">To come</Badge>
     ) : null;
 
+  const placesLeft = a.capacity !== null ? Math.max(0, a.capacity - booked.length) : null;
+  const capacityHelp =
+    a.capacity !== null
+      ? `${a.capacity} places. When it's full, people can't book themselves.${
+          a.trackSignOut
+            ? a.capacityPolicy === 'block'
+              ? ` Check-ins stop at ${a.capacity} here at once.`
+              : ` More than ${a.capacity} here at once can still be checked in, with a warning.`
+            : ''
+        }`
+      : undefined;
+  const canAdd = data.canCheckIn || data.canBook;
+
   return (
     <>
       <PageHeader
@@ -266,6 +280,7 @@ export function ActivityRoster() {
             {a.status === 'cancelled' && <Badge tone="neutral">Cancelled</Badge>}
           </>
         }
+        help={capacityHelp}
         primary={
           canScan && (
             <ButtonLink to={`/events/${event.id}/scan/activity/${a.id}`} kind="primary">
@@ -277,69 +292,72 @@ export function ActivityRoster() {
         menu={menu}
         menuLabel={`More actions for ${a.name}`}
       />
-      <div className="sections">
-        {a.status === 'cancelled' && (
-          <Notice tone="warning">
-            <p>This activity is cancelled. It doesn't show on scanners or the sign-up kiosk.</p>
-          </Notice>
-        )}
-        {a.instructions && (
-          <Notice title="Instructions for leaders">
-            <p className="pre-line">{a.instructions}</p>
-          </Notice>
+      <div className="sections pg-sections">
+        {(a.status === 'cancelled' || a.instructions) && (
+          <div className="banners">
+            {a.status === 'cancelled' && (
+              <Banner
+                tone="warning"
+                action={
+                  manage &&
+                  !teams && (
+                    <Button small onAction={() => changeStatus('active')} busyLabel="Restoring…">
+                      Restore
+                    </Button>
+                  )
+                }
+              >
+                Cancelled. <span className="meta">Not on scanners or the sign-up kiosk.</span>
+              </Banner>
+            )}
+            {a.instructions && (
+              <details className="pg-instructions" open={a.instructions.length <= 240}>
+                <summary>
+                  <Icon name="clipboard" size={18} />
+                  Instructions for leaders
+                  <Icon name="down" size={16} />
+                </summary>
+                <p className="pre-line">{a.instructions}</p>
+              </details>
+            )}
+          </div>
         )}
 
-        <div className="tiles">
-          <CountTile value={a.capacity ? `${booked.length}/${a.capacity}` : booked.length} label={a.capacity ? 'Places booked' : 'Booked'} />
-          <CountTile value={hereCount} label={a.trackSignOut ? 'Here now' : 'Checked in'} tone="success" />
-          <CountTile value={toCome.length} label="To come" tone="warning" />
-        </div>
-        {a.capacity !== null && (
-          <p className="meta">
-            {booked.length >= a.capacity ? (
-              <Badge tone="warning">Full</Badge>
-            ) : (
-              <Badge tone="success">{`${a.capacity - booked.length} ${a.capacity - booked.length === 1 ? 'place' : 'places'} left`}</Badge>
-            )}{' '}
-            {a.capacity} places. When it's full, people can't book themselves.
-            {a.trackSignOut &&
-              (a.capacityPolicy === 'block'
-                ? ` Check-ins stop at ${a.capacity} here at once.`
-                : ` More than ${a.capacity} here at once can still be checked in, with a warning.`)}
-          </p>
-        )}
+        <StatStrip
+          items={[
+            { label: 'To come', value: toCome.length, tone: toCome.length ? 'warning' : undefined, pressed: show === 'tocome', onPress: () => setShow('tocome') },
+            { label: a.trackSignOut ? 'Here now' : 'Checked in', value: hereCount, tone: 'success', pressed: show === 'here', onPress: () => setShow('here') },
+            { label: 'Everyone', value: involved.size, pressed: show === 'all', onPress: () => setShow('all'), hint: 'Booked, or checked in at some point' },
+            a.capacity !== null
+              ? { label: placesLeft === 0 ? `Full: ${a.capacity} places` : `Places left of ${a.capacity}`, value: placesLeft === 0 ? booked.length : placesLeft!, tone: placesLeft === 0 ? 'warning' : undefined, hint: capacityHelp }
+              : { label: 'Booked', value: booked.length },
+          ]}
+        />
 
-        <div className="toolbar">
-          <Segmented
-            label="Show"
-            value={show}
-            onChange={setShow}
-            options={[
-              { value: 'tocome', label: `To come (${toCome.length})` },
-              { value: 'here', label: `Here (${hereCount})` },
-              { value: 'all', label: 'All' },
-            ]}
-          />
-          {(data.canCheckIn || data.canBook) && (
-            <Button onClick={() => setAdding(true)}>
-              <Icon name="plus" />
-              Add someone
-            </Button>
+        <Toolbar sticky label="Find people">
+          {data.people.length > 0 && <SearchField id="activity-q" label="Search this list" value={q} onChange={setQ} slash />}
+          {canAdd && (
+            <div className="toolbar-end">
+              <Button onClick={() => setAdding(true)}>
+                <Icon name="plus" />
+                Add someone
+              </Button>
+            </div>
           )}
-        </div>
-        {data.people.length > 12 && <SearchField id="activity-q" label="Search this list" value={q} onChange={setQ} />}
+        </Toolbar>
 
         {shown.length === 0 ? (
-          <EmptyState title={q ? `No one matches "${q}"` : show === 'tocome' ? 'Everyone booked is here' : show === 'here' ? 'No one is here right now' : 'No one yet'}>
-            {!q && show === 'all' && (data.canCheckIn || data.canBook) ? 'Use Add someone to book or sign in a walk-in.' : undefined}
-          </EmptyState>
+          <EmptyState
+            title={q ? `No one matches "${q}"` : show === 'tocome' ? 'Everyone booked is here' : show === 'here' ? 'No one is here right now' : 'No one yet'}
+            actions={q ? <Button onClick={() => setQ('')}>Clear search</Button> : undefined}
+          />
         ) : (
-          <ul className="list activity-list">
+          <ul className="pg-people activity-list" aria-label={show === 'tocome' ? 'To come' : show === 'here' ? 'Here' : 'Everyone'}>
             {shown.map((p) => {
               const out = p.present && a.trackSignOut;
               const done = p.visits > 0 && !a.trackSignOut;
               return (
-                <li key={p.id} className="row">
+                <li key={p.id} className="row pg-person">
                   <span className="row-main">
                     <span className="row-title">{p.name}</span>
                     <span className="row-meta">{[p.section, p.groupName, p.swimming ? `Swimming: ${p.swimming}` : null].filter(Boolean).join(' · ')}</span>
@@ -400,7 +418,7 @@ export function ActivityRoster() {
         {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
         <SearchField id="walkin-q" label="Anyone on camp: type a name" value={find} onChange={setFind} autoFocus />
         {find.trim() === '' ? (
-          <p className="meta">{data.canBook ? 'Add someone to the list of people to come, or check in a walk-in now.' : 'Check in a walk-in.'}</p>
+          <p className="meta">{data.canBook ? 'Book them to come, or check in a walk-in.' : 'Check in a walk-in.'}</p>
         ) : walkIns.length === 0 ? (
           <p className="meta">No one else on camp matches "{find}".</p>
         ) : (
@@ -485,7 +503,7 @@ function MoveSheet({
 
   return (
     <Sheet open title={`Move ${person.name}`} onClose={onClose}>
-      <p className="meta">Their booking for {from.name} moves to the one you choose. The place limit doesn't stop you here.</p>
+      <p className="meta">Moves their booking from {from.name}. The place limit doesn't apply.</p>
       {failure && (
         <Notice tone="error">
           <p>{failure}</p>
