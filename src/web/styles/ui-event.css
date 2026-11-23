@@ -239,7 +239,7 @@
   justify-content: space-between;
   gap: var(--space-2);
 }
-.feature-row .toggle-text .meta {
+.settings-panel .toggle-text .meta {
   font-weight: var(--weight-regular);
 }
 .save-bar {
@@ -471,4 +471,25 @@
   margin-bottom: var(--space-2);
   font-size: var(--text-lg);
   font-weight: var(--weight-heavy);
+}
+
+/* ---------- Stations, Copy event ---------- */
+.stations-list .row-side {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.copy-form {
+  gap: var(--space-4);
+}
+.copy-ends {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-1);
+  min-height: var(--control);
+  font-weight: var(--weight-bold);
+}
+.copy-ends .meta {
+  font-weight: var(--weight-regular);
 }
