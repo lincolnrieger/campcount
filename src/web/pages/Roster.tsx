@@ -11,6 +11,7 @@ import {
   EmptyState,
   LoadError,
   Loading,
+  Notice,
   PageHeader,
   SearchField,
   SkeletonRows,
@@ -101,16 +102,8 @@ export function Roster() {
           </ButtonLink>
         )
       }
-      menu={[
-        can('activities.manage') && { label: 'Links for everyone (type a membership number)', to: 'share' },
-        can('roster.import') && { label: 'Import & check (MyScout and Consent2Go)', to: 'import' },
-        { label: 'Leader roster', to: 'leader-roster' },
-        can('event.configure') && { label: 'Design lanyards', to: 'lanyards' },
-        can('credentials.manage') && active.length > 0 && { label: withoutCard > 0 ? `Print lanyards (${withoutCard} new)` : 'Print lanyards', to: 'lanyards/print' },
-        can('credentials.manage') && active.length > 0 && { label: 'Participant links', to: 'links' },
-        active.length > 0 && { label: 'Print roll sheet', to: 'roll-sheet' },
-        can('roster.edit') && all.length > 0 && !selecting && { label: 'Select people to delete…', onSelect: () => setSelecting(true), danger: true },
-      ]}
+      // Import, lanyards, the leader roster, the roll sheet and links are in the navigation (People, Links & sign-up).
+      menu={[can('roster.edit') && all.length > 0 && !selecting && { label: 'Select people to delete…', onSelect: () => setSelecting(true), danger: true }]}
       menuLabel="More people actions"
     />
   );
@@ -153,6 +146,13 @@ export function Roster() {
   return (
     <>
       {header}
+      {can('credentials.manage') && withoutCard > 0 && (
+        <Notice tone="info">
+          <p>
+            {withoutCard === 1 ? '1 person doesn’t' : `${withoutCard} people don’t`} have a lanyard yet. <Link to="lanyards/print">Issue and print lanyards</Link>
+          </p>
+        </Notice>
+      )}
       {all.length === 0 ? (
         <EmptyState
           title="No one on this event yet"

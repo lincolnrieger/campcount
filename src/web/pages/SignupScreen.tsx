@@ -25,7 +25,7 @@ export function SignupScreen() {
   // Which posters to print: null means none chosen yet; printing waits for the render.
   const [printing, setPrinting] = useState<string[] | null>(null);
   const tz = event.timezone;
-  const back = { to: `${base}/activities`, label: 'Activities' };
+  const back = { to: `${base}/links`, label: 'Links' };
 
   useEffect(() => {
     if (!printing) return;

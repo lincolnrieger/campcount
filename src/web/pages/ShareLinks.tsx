@@ -44,7 +44,7 @@ export function ShareLinks() {
   const [features, setFeatures] = useState<LinkFeature[]>([...LINK_FEATURES]);
   const [failure, setFailure] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const back = { to: `${base}/people`, label: 'People' };
+  const back = { to: `${base}/links`, label: 'Links' };
   if (!can('activities.manage')) return <Navigate to={back.to} replace />;
 
   const header = (

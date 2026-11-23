@@ -38,7 +38,7 @@ export function ParticipantLinks() {
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [query, setQuery] = useState('');
   const [group, setGroup] = useState('');
-  const back = { to: `${base}/people`, label: 'People' };
+  const back = { to: `${base}/links`, label: 'Links' };
 
   const load = useCallback(async () => {
     try {

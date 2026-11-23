@@ -17,7 +17,7 @@ const ANY = 'any';
 
 /** Activities: the programme, one day at a time. Each row opens the activity's page. */
 export function Activities() {
-  const { event, can, base } = useEvent();
+  const { event, can } = useEvent();
   const { data, error, loading, reload } = useApi<{ activities: Activity[] }>(`/events/${event.id}/activities`);
   const live = useApi<{ contexts: LiveContext[] }>(can('reports.view') && event.status !== 'draft' ? `/events/${event.id}/live` : null);
   const [q, setQ] = useState('');
@@ -37,17 +37,6 @@ export function Activities() {
           </ButtonLink>
         )
       }
-      menu={
-        manager
-          ? [
-              { label: 'Import programme', to: 'import' },
-              { label: 'Schedule view', to: `${base}/schedule` },
-              event.features.selfSignup && { label: 'Sign-up kiosk and posters', to: 'signup' },
-              event.features.selfSignup && { label: 'Booking links for emails', to: 'links' },
-            ]
-          : undefined
-      }
-      menuLabel="More activity actions"
     />
   );
 

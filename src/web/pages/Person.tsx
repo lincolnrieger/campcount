@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import type { DietaryEntryInput } from '../../shared/schemas';
-import { kindForSection } from '../../shared/sections';
+import { kindForSection, sectionStyle } from '../../shared/sections';
 import { dayInZone, dayLabel, timeInZone, timeRange } from '../../shared/time';
 import { ApiFailure, api } from '../api';
 import { DietaryEditor, describeEntry } from '../components/DietaryEditor';
@@ -268,7 +268,7 @@ export function Person() {
         back={back}
         summary={
           <>
-            <span>{[r.groupName, r.kind === 'adult' ? r.position || 'Leader' : r.section].filter(Boolean).join(' · ')}</span>
+            <span>{[r.section, r.kind === 'adult' && r.position, r.groupName].filter(Boolean).join(' · ')}</span>
             {r.status === 'withdrawn' && <Badge tone="error">Withdrawn</Badge>}
             {r.photoConsent === 'no' && <Badge tone="error">No photos</Badge>}
             {allergy && <Badge tone="error">Allergy</Badge>}
@@ -344,6 +344,8 @@ export function Person() {
         </div>
 
         <div className="sections">
+          <LanyardPanel eventId={event.id} registrationId={r.id} section={r.section} shortCode={r.shortCode} canShowQr={!!data.can.cards} />
+
           <Section title="History" id="history">
             {data.history.length === 0 ? (
               <EmptyState title="No scans yet" />
@@ -427,9 +429,15 @@ export function Person() {
                 <dd>{r.memberNumber || 'Not a member'}</dd>
               </div>
               <div>
-                <dt>{r.kind === 'adult' ? 'Role' : 'Section'}</dt>
-                <dd>{r.kind === 'adult' ? r.position || 'Leader' : r.section}</dd>
+                <dt>Section</dt>
+                <dd>{r.section}</dd>
               </div>
+              {r.kind === 'adult' && (
+                <div>
+                  <dt>Role</dt>
+                  <dd>{r.position || 'Leader'}</dd>
+                </div>
+              )}
               {r.kind === 'adult' && (
                 <div>
                   <dt>Car rego</dt>
@@ -655,5 +663,58 @@ function DetailsForm({ r, back, path, onSaved }: { r: PersonData['registration']
         </div>
       </form>
     </>
+  );
+}
+
+/**
+ * Their section, as on their lanyard, and their lanyard's QR code on screen
+ * (to scan straight off this page). The QR is a live lanyard, so only people
+ * who can print lanyards see it.
+ */
+function LanyardPanel({ eventId, registrationId, section, shortCode, canShowQr }: { eventId: string; registrationId: string; section: string; shortCode: string | null; canShowQr: boolean }) {
+  const { event } = useEvent();
+  const style = sectionStyle(event.sections, section);
+  const [qr, setQr] = useState<boolean[][] | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (!canShowQr || !shortCode) return;
+    let live = true;
+    void (async () => {
+      try {
+        const res = await api<{ cards: { qr: string }[] }>(`/events/${eventId}/credentials/print`, { body: { registrationIds: [registrationId], view: true } });
+        const value = res.cards[0]?.qr;
+        if (!value) return;
+        const { qrModules } = await import('../lanyards/render');
+        if (live) setQr(qrModules(value));
+      } catch {
+        if (live) setFailed(true);
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [eventId, registrationId, shortCode, canShowQr]);
+  return (
+    <Section title="Lanyard" id="lanyard">
+      <div className="panel panel-pad person-lanyard">
+        <span className="person-section" style={{ background: style.bg, color: style.fg }}>
+          {style.word || section}
+        </span>
+        <p className="meta">Section: {section}</p>
+        {!shortCode ? (
+          <p className="meta">No lanyard issued yet.</p>
+        ) : canShowQr ? (
+          qr ? (
+            <svg className="person-qr" viewBox={`-2 -2 ${qr.length + 4} ${qr.length + 4}`} role="img" aria-label={`Lanyard QR code, ${shortCode}`} shapeRendering="crispEdges">
+              <rect x={-2} y={-2} width={qr.length + 4} height={qr.length + 4} fill="#FFFFFF" />
+              <path d={qr.flatMap((row, y) => row.map((dark, x) => (dark ? `M${x} ${y}h1v1h-1z` : ''))).join('')} fill="#000000" />
+            </svg>
+          ) : (
+            <p className="meta">{failed ? 'The QR code couldn’t be loaded.' : 'Loading the QR code…'}</p>
+          )
+        ) : null}
+        {shortCode && <p className="code person-code">{shortCode}</p>}
+      </div>
+    </Section>
   );
 }

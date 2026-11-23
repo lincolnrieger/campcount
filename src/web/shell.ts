@@ -1,6 +1,36 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import type { EventStatus } from '../shared/schemas';
 
+/** A page under a section. `also`: other paths that count as this page (sub-pages). */
+export interface NavPage {
+  to: string;
+  label: string;
+  also?: string[];
+}
+/** One section of an event: where its name goes, and the pages under it (if any). */
+export interface NavSection {
+  to: string;
+  label: string;
+  icon?: string;
+  children?: NavPage[];
+}
+
+/**
+ * Which section and page a path is in: the longest matching path wins, so
+ * people/lanyards/print is Lanyards, not People. `rel` is the path inside
+ * the event, without a leading slash ('' is Home).
+ */
+export function activeNav(sections: NavSection[], rel: string): { section: string | null; page: string | null } {
+  let best = { section: null as string | null, page: null as string | null, len: -1 };
+  const hit = (path: string) => (path === '' ? rel === '' : rel === path || rel.startsWith(`${path}/`));
+  for (const s of sections) {
+    if (hit(s.to) && s.to.length > best.len) best = { section: s.to, page: null, len: s.to.length };
+    for (const c of s.children ?? [])
+      for (const path of [c.to, ...(c.also ?? [])]) if (hit(path) && path.length >= best.len) best = { section: s.to, page: c.to, len: path.length };
+  }
+  return { section: best.section, page: best.page };
+}
+
 /**
  * What the app frame needs to know about the current page: inside an event,
  * the event and the sections this person can open (sidebar on computers,
@@ -11,7 +41,8 @@ export interface ShellEvent {
   name: string;
   status: EventStatus;
   isDemo: boolean;
-  sections: { to: string; label: string }[];
+  /** The event's sections (groups in the sidebar), each with the pages under it. */
+  sections: NavSection[];
   /** '' on the event's own site, '/events/<id>' on the main site. */
   base: string;
 }

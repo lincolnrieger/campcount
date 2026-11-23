@@ -651,9 +651,12 @@ rosterRoutes.post('/credentials/print', async (c) => {
   const eventId = c.req.param('eventId')!;
   requirePermission(c, 'credentials.manage', { eventId });
   const user = requireUser(c);
-  const { registrationIds } = await parseBody(c, z.strictObject({ registrationIds: z.array(z.uuid()).max(2000).optional() }));
+  const { registrationIds, view } = await parseBody(
+    c,
+    z.strictObject({ registrationIds: z.array(z.uuid()).max(2000).optional(), /** Shown on screen (a person's page), not printed. */ view: z.boolean().optional() }),
+  );
   const cards = await activeCards(c, eventId, registrationIds);
-  await auditStatementRun(c, { action: 'credentials.print', eventId, userId: user.userId, count: cards.length });
+  await auditStatementRun(c, { action: view ? 'credentials.view' : 'credentials.print', eventId, userId: user.userId, count: cards.length });
   return c.json({ cards });
 });
 
