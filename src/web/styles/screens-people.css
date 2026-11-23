@@ -132,11 +132,6 @@
 }
 
 /* ---------- Roll sheet ---------- */
-.choices-inline {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-5);
-}
 .roll-title {
   margin-bottom: var(--space-3);
 }

@@ -287,3 +287,27 @@
     position: static;
   }
 }
+
+/* ---------- Roll sheet ---------- */
+.roll-page {
+  gap: var(--space-4);
+}
+.roll-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-4) var(--space-5);
+}
+.roll-options .field {
+  flex: 1 1 11rem;
+  gap: var(--space-1);
+}
+.roll-options .roll-who {
+  flex: 0 0 auto;
+}
+.roll-sheet .roll td,
+.roll-sheet .roll th {
+  height: auto;
+  padding: var(--space-1) var(--space-3);
+}
