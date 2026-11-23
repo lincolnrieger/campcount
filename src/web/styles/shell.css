@@ -350,6 +350,11 @@
   body {
     background: #fff;
   }
+  /* The sidebar is hidden, so its grid column goes too: the page gets the full width. */
+  .shell,
+  .shell:has(.sidebar) {
+    display: block !important;
+  }
   .page {
     padding: 0;
     max-width: none;
