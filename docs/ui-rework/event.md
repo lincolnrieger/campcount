@@ -139,3 +139,26 @@ Routes, API calls, permission checks and behaviour stay the same; only layout an
 ## View as (`components/ViewAs.tsx`)
 
 Used from Account and Demo camps (admin tools in other areas). Left alone: not one of this area's pages.
+
+## Verification (after the rework)
+
+Checked in Chromium at 1280×900 and 390×844 against a local demo camp, with a scripted run that clicks through
+each item above (no console errors from these pages):
+
+- Home: filters from the summary counts (plus the new At activities count), section filter, Show everyone, `/` to
+  search, mark Arrived by hand, refresh, Show all, person link. Draft: steps with counts, step links, Open event.
+  Activity leader view (via View as): the Activities pointer.
+- Reports: groups, Still signed in / Scans to check filters, name search, Sign everyone out (reason check, save),
+  Close event confirm, Close and Reopen (on a copied camp), Downloads (CSV download), Side Quest tab when on,
+  remembered tab.
+- Settings: every card, Cancel event / Return to draft (on a copied camp), status-locked Event details.
+- Event details: validation, feature switch, Ctrl+S save, Save button, contact email, Cancel.
+- Sections: duplicate-name check, add and remove an added section, lanyard word save, Ctrl+S, Leaders youth locked.
+- Banner: upload, preview, remove.
+- Staff: role chips, search, change role, resend invite (demo accounts answer 409, as before), add someone new as
+  activity leader (with activity), remove from event. Picking an existing account: the demo has no spare
+  accounts, so the list shows "Everyone with an account is already on this event"; that code is unchanged.
+- Stations: set up (validation, pairing code), edit, stop, Reopen, delete, Delete finished; not-open notice.
+- Copy event: switches, copy runs and opens the new camp.
+- Links hub, Links for everyone (presets, New link, parts, on/off switch and menu, copy, rename, new address,
+  delete), Participant links (search, group and section filters, Clear, copy, Download CSV, Copy all).
