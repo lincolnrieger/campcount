@@ -145,6 +145,44 @@ describe('Super Splash Side Quest', () => {
     await grant(scanner.id, 'scanner', c.eventId);
     expect((await api(`/events/${c.eventId}/side-quest`, { cookie: scanner.cookie })).status).toBe(403);
   });
+
+  it('lists who collected whom for staff, and lets managers take collections away and put them back', async () => {
+    const c = await camp();
+    const ava = phone();
+    await ava.open(c.token('Ava'));
+    const benCollect = await ava.open(c.token('Ben'));
+    expect(benCollect.body.collect.friend.sectionColour).toMatch(/^#[0-9A-F]{6}$/i);
+    await ava.open(c.token('Cal'));
+    const ben = phone();
+    await ben.open(c.token('Ben'));
+    await ben.open(c.token('Ava'));
+
+    const list = async () => json(await api(`/events/${c.eventId}/side-quest/collections`, { cookie: c.manager.cookie }));
+    const before = await list();
+    expect(before).toMatchObject({ enabled: true, canRemove: true });
+    expect(before.collections).toHaveLength(3);
+    const id = (first: string) => (before.people as { id: string; name: string }[]).find((p) => p.name.startsWith(first))!.id;
+    expect(before.people.map((p: { name: string }) => p.name).sort()).toEqual(['Ava Splash', 'Ben Splash', 'Cal Splash']);
+
+    // Take away Ava's collection of Cal, then undo it.
+    const res = await json(
+      await api(`/events/${c.eventId}/side-quest/collections/remove`, { cookie: c.manager.cookie, body: { pairs: [{ collectorId: id('Ava'), collectedId: id('Cal') }] } }),
+    );
+    expect(res.removed).toHaveLength(1);
+    expect((await list()).collections).toHaveLength(2);
+    expect((await api(`/events/${c.eventId}/side-quest/collections/restore`, { cookie: c.manager.cookie, body: { items: res.removed } })).status).toBe(200);
+    expect((await list()).collections).toHaveLength(3);
+    // Ava's own page counts it again.
+    expect((await ava.open(c.token('Ava'), { claim: true })).body.sideQuest.collected).toBe(2);
+
+    // Staff who can only see reports can look but not take away.
+    const viewer = await createUser();
+    await grant(viewer.id, 'scanner', c.eventId);
+    expect((await api(`/events/${c.eventId}/side-quest/collections`, { cookie: viewer.cookie })).status).toBe(403);
+    expect(
+      (await api(`/events/${c.eventId}/side-quest/collections/remove`, { cookie: viewer.cookie, body: { pairs: [{ collectorId: id('Ava'), collectedId: id('Ben') }] } })).status,
+    ).toBe(403);
+  });
 });
 
 describe('the phone owner page', () => {

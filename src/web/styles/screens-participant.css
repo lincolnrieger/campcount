@@ -667,8 +667,12 @@ button.pp-state.is-booked {
   font-size: var(--text-md);
 }
 
-/* ---------- Collecting someone ---------- */
-.pp-splash {
+/* ---------- Collecting someone ----------
+ * Their card lands in your collection: a still, deep-water page, one ring
+ * spreading behind the card, the card settling into place, then the count.
+ * No confetti; milestones get a second ring and a gold edge.
+ */
+.pp-collect {
   position: fixed;
   inset: 0;
   z-index: var(--z-overlay);
@@ -676,106 +680,170 @@ button.pp-state.is-booked {
   place-items: center;
   padding: var(--space-5);
   overflow: auto;
-  background:
-    radial-gradient(circle at 50% 38%, rgb(255 255 255 / 0.12) 0 18%, transparent 18.5% 30%, rgb(255 255 255 / 0.08) 30.5% 31.5%, transparent 32% 46%, rgb(255 255 255 / 0.06) 46.5% 47.5%, transparent 48%),
-    var(--pp-lagoon);
+  background: linear-gradient(180deg, #004B7A 0%, #003A60 100%);
   color: #FFFFFF;
   text-align: center;
 }
-.pp-splash-body {
+.pp-collect-body {
   display: grid;
   justify-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
   width: 100%;
-  max-width: 26rem;
+  max-width: 24rem;
 }
-.pp-splash-kicker {
+.pp-collect-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 15rem;
+  margin-bottom: var(--space-3);
+}
+.pp-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 11rem;
+  height: 11rem;
+  margin: -5.5rem 0 0 -5.5rem;
+  border: 2px solid rgb(255 255 255 / 0.5);
+  border-radius: 50%;
+  opacity: 0;
+  animation: pp-ring 1400ms cubic-bezier(0.1, 0.6, 0.3, 1) 260ms both;
+}
+.pp-ring-2 {
+  border-color: rgb(255 201 60 / 0.6);
+  animation-delay: 520ms;
+}
+@keyframes pp-ring {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.6);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.1);
+  }
+}
+.pp-card {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  width: 8.5rem;
+  height: 12.5rem;
+  border-radius: 12px;
+  background: #FFFFFF;
+  color: var(--pp-ink);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.2) inset, 0 18px 40px rgb(0 20 40 / 0.45);
+  overflow: hidden;
+  transform: rotate(-3deg);
+  animation: pp-card-in 620ms cubic-bezier(0.2, 0.9, 0.25, 1.15) both;
+}
+.is-milestone .pp-card {
+  outline: 3px solid var(--pp-sun);
+  outline-offset: 3px;
+}
+.pp-card-band {
+  padding: 0.4rem 0.5rem;
+  background: var(--card);
+  color: var(--card-fg);
+  font-size: 0.75rem;
   font-weight: var(--weight-heavy);
-  color: var(--pp-pool);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
-.pp-splash h1 {
-  font-size: 1.75rem;
+.pp-card-name {
+  display: grid;
+  place-items: center;
+  padding: 0 var(--space-2);
+  font-family: var(--pp-display);
+  font-size: 2rem;
+  line-height: 0.95;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+.pp-card-no {
+  padding: 0 0 0.6rem;
+  color: var(--pp-ink-2);
+  font-size: 0.8125rem;
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.04em;
+}
+@keyframes pp-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2.5rem) rotate(-9deg) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(-3deg);
+  }
+}
+.pp-collect-kicker {
+  color: rgb(255 255 255 / 0.7);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.pp-collect h1 {
+  font-size: 1.625rem;
   font-weight: var(--weight-heavy);
   line-height: 1.2;
 }
-.pp-splash-count {
-  display: grid;
-  justify-items: center;
-  font-weight: var(--weight-heavy);
-  font-size: 1.25rem;
+.pp-collect-count {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  color: rgb(255 255 255 / 0.85);
+  font-weight: var(--weight-bold);
 }
-.pp-splash-count .pp-num {
+.pp-collect-count .pp-num {
   font-family: var(--pp-display);
-  font-size: clamp(6rem, 34vw, 9rem);
+  font-size: 4rem;
   font-weight: 400;
-  line-height: 0.85;
-  color: var(--pp-sun);
+  line-height: 0.9;
+  color: #FFFFFF;
 }
-.pp-splash-of {
-  font-weight: var(--weight-medium);
-}
-.pp-rank-big {
-  font-size: 1.125rem;
-  padding: var(--space-2) var(--space-4);
+.pp-collect-rank {
+  padding: 0.25rem 0.75rem;
+  border: 1px solid rgb(255 255 255 / 0.35);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
 }
 .pp-splash-quest {
   width: 100%;
+  margin-top: var(--space-2);
   text-align: left;
 }
 .pp-splash-hint {
   font-size: var(--text-md);
-  color: var(--pp-pool);
+  color: rgb(255 255 255 / 0.75);
 }
-.pp-splash .pp-btn {
+.pp-collect .pp-btn {
   margin-top: var(--space-4);
 }
 .pp-link-light {
   color: #FFFFFF;
   font-weight: var(--weight-bold);
 }
-.pp-splash-body > * {
-  animation: pp-rise 420ms cubic-bezier(0.2, 0, 0, 1) both;
+/* Words follow the card in, quietly. */
+.pp-collect-body > :not(.pp-collect-stage) {
+  animation: pp-fade-up 360ms ease-out both;
+  animation-delay: 420ms;
 }
-.pp-splash-body > :nth-child(2) { animation-delay: 60ms; }
-.pp-splash-body > :nth-child(3) { animation-delay: 120ms; }
-.pp-splash-body > :nth-child(4) { animation-delay: 220ms; }
-.pp-splash-body > :nth-child(5) { animation-delay: 320ms; }
-.pp-splash-body > :nth-child(n + 6) { animation-delay: 400ms; }
-@keyframes pp-rise {
+.pp-collect-body > :nth-child(3) {
+  animation-delay: 480ms;
+}
+.pp-collect-body > :nth-child(n + 4) {
+  animation-delay: 560ms;
+}
+@keyframes pp-fade-up {
   from {
     opacity: 0;
-    transform: translateY(12px) scale(0.98);
-  }
-}
-/* Milestones only: water drops fall once. */
-.pp-drops {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-.pp-drops span {
-  position: absolute;
-  top: -2rem;
-  left: calc(var(--i) * 5.6% + 1%);
-  width: 0.75rem;
-  height: 1.1rem;
-  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
-  background: var(--pp-sun);
-  opacity: 0.9;
-  animation: pp-drop 1.8s cubic-bezier(0.3, 0, 0.6, 1) forwards;
-  animation-delay: calc(var(--i) * 45ms);
-}
-.pp-drops span:nth-child(3n) {
-  background: #FFFFFF;
-}
-.pp-drops span:nth-child(3n + 1) {
-  background: var(--pp-pool);
-}
-@keyframes pp-drop {
-  to {
-    transform: translateY(110vh) rotate(25deg);
-    opacity: 0.2;
+    transform: translateY(6px);
   }
 }
 
@@ -823,12 +891,12 @@ button.pp-state.is-booked {
 
 @media (prefers-reduced-motion: reduce) {
   .pp-live,
-  .pp-splash-body > *,
-  .pp-drops span,
+  .pp-collect-body > *,
+  .pp-card,
   .pp-sheet {
     animation: none;
   }
-  .pp-drops {
+  .pp-ring {
     display: none;
   }
 }
@@ -1209,7 +1277,7 @@ button.pp-state.is-booked {
 }
 .pp-pass :focus-visible,
 .pp-quest :focus-visible,
-.pp-splash :focus-visible {
+.pp-collect :focus-visible {
   outline-color: #FFFFFF;
 }
 /* Nothing focused ends up under the tab bar (bottom on phones, top on computers). */

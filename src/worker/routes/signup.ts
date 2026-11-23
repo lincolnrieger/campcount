@@ -388,7 +388,7 @@ publicSignupRoutes.post('/identify', async (c) => {
       return c.json({
         collect: {
           fresh,
-          friend: { firstName: person.firstName, section: person.section, kind: person.kind, sectionWord: styleOf(person).word },
+          friend: { firstName: person.firstName, section: person.section, kind: person.kind, sectionWord: styleOf(person).word, sectionColour: styleOf(person).bg },
           owner: { firstName: owner.firstName },
           standing: await standing(c.env.DB, person.event.id, owner.registrationId),
         },

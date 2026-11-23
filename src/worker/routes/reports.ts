@@ -44,6 +44,101 @@ reportRoutes.get('/side-quest', async (c) => {
   return c.json({ enabled: ev.feature_side_quest === 1, ...(await leaderboard(c.env.DB, eventId)) });
 });
 
+/**
+ * Every Side Quest collection (who collected whom, and when), with the names
+ * of the people in it, for the staff Side Quest page: the full leaderboard,
+ * who has made friends with whom, and spotting ones that look made up.
+ */
+reportRoutes.get('/side-quest/collections', async (c) => {
+  const eventId = c.req.param('eventId')!;
+  const principal = requirePermission(c, 'reports.view', { eventId });
+  const ev = await event(c, eventId);
+  const [rows, people] = await Promise.all([
+    c.env.DB.prepare(`SELECT collector_id, collected_id, created_at FROM side_quest_collections WHERE event_id = ? ORDER BY created_at LIMIT 20000`)
+      .bind(eventId)
+      .all<{ collector_id: string; collected_id: string; created_at: string }>(),
+    c.env.DB.prepare(
+      `SELECT r.id, p.first_name, p.preferred_name, p.last_name, r.section, r.group_name, r.kind, r.status FROM registrations r JOIN people p ON p.id = r.person_id
+        WHERE r.event_id = ? AND r.id IN (SELECT collector_id FROM side_quest_collections WHERE event_id = ?1 UNION SELECT collected_id FROM side_quest_collections WHERE event_id = ?1)`,
+    )
+      .bind(eventId)
+      .all<{ id: string; first_name: string; preferred_name: string; last_name: string; section: string; group_name: string; kind: string; status: string }>(),
+  ]);
+  return c.json({
+    enabled: ev.feature_side_quest === 1,
+    canRemove: can(principal, 'event.configure', { eventId }),
+    players: (await c.env.DB.prepare(`SELECT count(*) AS n FROM registrations WHERE event_id = ? AND status = 'active'`).bind(eventId).first<{ n: number }>())?.n ?? 0,
+    people: people.results.map((p) => ({
+      id: p.id,
+      name: `${p.preferred_name || p.first_name} ${p.last_name}`.trim(),
+      section: p.section,
+      groupName: p.group_name,
+      kind: p.kind,
+      active: p.status === 'active',
+    })),
+    collections: rows.results.map((r) => ({ collectorId: r.collector_id, collectedId: r.collected_id, at: r.created_at })),
+  });
+});
+
+const collectionPairs = z.array(z.strictObject({ collectorId: z.uuid(), collectedId: z.uuid() })).min(1).max(500);
+
+/** Take away collections that shouldn't count (a photo of a lanyard, a stack of spare cards). */
+reportRoutes.post('/side-quest/collections/remove', async (c) => {
+  const eventId = c.req.param('eventId')!;
+  requirePermission(c, 'event.configure', { eventId });
+  const user = requireUser(c);
+  const { pairs } = await parseBody(c, z.strictObject({ pairs: collectionPairs }));
+  const removed = await c.env.DB.batch(
+    pairs.map((p) =>
+      c.env.DB.prepare(`DELETE FROM side_quest_collections WHERE event_id = ? AND collector_id = ? AND collected_id = ? RETURNING created_at`).bind(eventId, p.collectorId, p.collectedId),
+    ),
+  );
+  const gone = pairs
+    .map((p, i) => ({ ...p, at: (removed[i]?.results?.[0] as { created_at?: string } | undefined)?.created_at }))
+    .filter((p): p is typeof p & { at: string } => !!p.at);
+  await auditStatement(c.env.DB, {
+    actor: { type: 'user', id: user.userId },
+    action: 'side_quest.remove',
+    eventId,
+    targetType: 'event',
+    targetId: eventId,
+    detail: { count: gone.length },
+  }).run();
+  return c.json({ removed: gone });
+});
+
+/** Put back collections just taken away (Undo). Only between people still on this camp. */
+reportRoutes.post('/side-quest/collections/restore', async (c) => {
+  const eventId = c.req.param('eventId')!;
+  requirePermission(c, 'event.configure', { eventId });
+  const user = requireUser(c);
+  const { items } = await parseBody(
+    c,
+    z.strictObject({ items: z.array(z.strictObject({ collectorId: z.uuid(), collectedId: z.uuid(), at: z.iso.datetime() })).min(1).max(500) }),
+  );
+  await c.env.DB.batch(
+    items.map((p) =>
+      c.env.DB.prepare(
+        `INSERT INTO side_quest_collections (event_id, collector_id, collected_id, created_at)
+         SELECT ?1, ?2, ?3, ?4
+          WHERE ?2 <> ?3
+            AND EXISTS (SELECT 1 FROM registrations WHERE id = ?2 AND event_id = ?1)
+            AND EXISTS (SELECT 1 FROM registrations WHERE id = ?3 AND event_id = ?1)
+         ON CONFLICT (collector_id, collected_id) DO NOTHING`,
+      ).bind(eventId, p.collectorId, p.collectedId, p.at),
+    ),
+  );
+  await auditStatement(c.env.DB, {
+    actor: { type: 'user', id: user.userId },
+    action: 'side_quest.restore',
+    eventId,
+    targetType: 'event',
+    targetId: eventId,
+    detail: { count: items.length },
+  }).run();
+  return c.json({ ok: true });
+});
+
 /** Where everyone is right now: on or off site, which activity, and where they were last scanned. */
 reportRoutes.get('/whereabouts', async (c) => {
   const eventId = c.req.param('eventId')!;
