@@ -5,7 +5,7 @@ import { clockInZone, dayInZone, dayLabel, eventDays, zonedIso } from '../../sha
 import { ApiFailure, api } from '../api';
 import type { Activity } from '../model';
 import { useApi } from '../useApi';
-import { Button, Choice, ErrorSummary, Field, Icon, LoadError, Loading, Notice, PageHeader, SkeletonHeader, SkeletonRows, useToast } from '../ui';
+import { Banner, Button, ErrorSummary, Field, InfoTip, LoadError, Loading, Notice, PageHeader, Segmented, SkeletonHeader, SkeletonRows, Toggle, useToast } from '../ui';
 import { useEvent } from './EventLayout';
 
 interface FormState {
@@ -78,8 +78,6 @@ function ActivityForm({ initial, submitLabel, onSave, onCancel }: { initial: For
   const [busy, setBusy] = useState(false);
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((f) => ({ ...f, [k]: v }));
   const timed = form.day !== '';
-  // Advanced options start open when this activity already uses one.
-  const advanced = Boolean(initial.capacity || !initial.trackSignOut || !initial.allowRepeat || initial.signupOpen || initial.bookingRequired);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -117,104 +115,99 @@ function ActivityForm({ initial, submitLabel, onSave, onCancel }: { initial: For
   const summary = [errors.name && { id: 'act-name', message: errors.name }, errors.end && { id: 'act-end', message: errors.end }].filter(Boolean) as { id: string; message: string }[];
 
   return (
-    <form className="form" onSubmit={submit} noValidate>
+    <form className="pg-edit" onSubmit={submit} noValidate>
       <ErrorSummary errors={summary} />
       {failure && summary.length === 0 && (
         <Notice tone="error">
           <p>{failure}</p>
         </Notice>
       )}
-      <Field id="act-name" label="Name" error={errors.name}>
-        <input className="input" value={form.name} onChange={(e) => set('name', e.target.value)} autoComplete="off" />
-      </Field>
-      <Field id="act-day" label="Day">
-        <select className="select" value={form.day} onChange={(e) => set('day', e.target.value)}>
-          <option value="">No set time (runs all camp)</option>
-          {days.map((d) => (
-            <option key={d} value={d}>
-              {dayLabel(d, 'long')}
-            </option>
-          ))}
-        </select>
-      </Field>
-      {timed && (
-        <div className="field-pair">
-          <Field id="act-start" label="Start">
-            <input
-              className="input"
-              type="time"
-              value={form.start}
-              onChange={(e) => {
-                // Keep the same length when the start moves.
-                const length = form.end ? minutesBetween(form.start, form.end) : 90;
-                setForm({ ...form, start: e.target.value, end: form.end ? addMinutes(e.target.value, Math.max(15, length)) : '' });
-              }}
-            />
+      <div className="pg-edit-grid">
+        <section className="panel panel-pad pg-edit-main" aria-labelledby="act-details-heading">
+          <h2 id="act-details-heading" className="pg-panel-title">
+            Details
+          </h2>
+          <Field id="act-name" label="Name" error={errors.name}>
+            <input className="input" value={form.name} onChange={(e) => set('name', e.target.value)} autoComplete="off" />
           </Field>
-          <Field id="act-end" label="End" optional error={errors.end}>
-            <input className="input" type="time" value={form.end} onChange={(e) => set('end', e.target.value)} />
+          <div className="pg-when">
+            <Field id="act-day" label="Day">
+              <select className="select" value={form.day} onChange={(e) => set('day', e.target.value)}>
+                <option value="">No set time (runs all camp)</option>
+                {days.map((d) => (
+                  <option key={d} value={d}>
+                    {dayLabel(d, 'long')}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            {timed && (
+              <>
+                <Field id="act-start" label="Start">
+                  <input
+                    className="input"
+                    type="time"
+                    value={form.start}
+                    onChange={(e) => {
+                      // Keep the same length when the start moves.
+                      const length = form.end ? minutesBetween(form.start, form.end) : 90;
+                      setForm({ ...form, start: e.target.value, end: form.end ? addMinutes(e.target.value, Math.max(15, length)) : '' });
+                    }}
+                  />
+                </Field>
+                <Field id="act-end" label="End" optional error={errors.end}>
+                  <input className="input" type="time" value={form.end} onChange={(e) => set('end', e.target.value)} />
+                </Field>
+              </>
+            )}
+          </div>
+          <Field id="act-place" label="Place" optional>
+            <input className="input" value={form.location} onChange={(e) => set('location', e.target.value)} autoComplete="off" />
           </Field>
-        </div>
-      )}
-      <Field id="act-place" label="Place" optional>
-        <input className="input" value={form.location} onChange={(e) => set('location', e.target.value)} autoComplete="off" />
-      </Field>
-      <Field id="act-ins" label="Instructions for leaders" optional hint="Shown on the activity's page and scanner.">
-        <textarea className="textarea" rows={3} value={form.instructions} onChange={(e) => set('instructions', e.target.value)} />
-      </Field>
+          <Field id="act-ins" label="Instructions for leaders" optional hint="On the activity's page and scanner.">
+            <textarea className="textarea" rows={3} value={form.instructions} onChange={(e) => set('instructions', e.target.value)} />
+          </Field>
+        </section>
 
-      <details className="more-options" open={advanced}>
-        <summary>
-          <Icon name="chevron" />
-          More options
-        </summary>
-        <div className="form">
-          <Field id="act-cap" label="Capacity" optional hint="Leave blank for no limit.">
+        <section className="panel panel-pad pg-edit-side" aria-labelledby="act-options-heading">
+          <h2 id="act-options-heading" className="pg-panel-title">
+            Options
+          </h2>
+          <Field id="act-cap" label="Capacity" optional hint="Blank for no limit.">
             <input className="input activity-capacity" inputMode="numeric" value={form.capacity} onChange={(e) => set('capacity', e.target.value.replace(/\D/g, ''))} />
           </Field>
-          <fieldset className="choices">
-            <legend className="visually-hidden">Activity options</legend>
-            {form.capacity && (
-              <Choice
-                label="Refuse sign-ins when full"
-                description="If off, the leader sees a warning but the sign-in still counts."
-                checked={form.capacityPolicy === 'block'}
-                onChange={(e) => set('capacityPolicy', e.target.checked ? 'block' : 'warn')}
+          {form.capacity && (
+            <div className="field">
+              <span className="field-label" id="act-full-label">
+                When full
+                <InfoTip label="About when full">Warn: the leader sees a warning but the sign-in still counts. Refuse: sign-ins stop at the capacity.</InfoTip>
+              </span>
+              <Segmented
+                label="When full"
+                value={form.capacityPolicy}
+                onChange={(v) => set('capacityPolicy', v)}
+                options={[
+                  { value: 'warn', label: 'Warn' },
+                  { value: 'block', label: 'Refuse sign-ins' },
+                ]}
               />
-            )}
-            <Choice
-              label="Sign people out as well as in"
-              description="Shows who is at the activity right now. Needed for capacity limits."
-              checked={form.trackSignOut}
-              onChange={(e) => set('trackSignOut', e.target.checked)}
-            />
-            <Choice
-              label="Allow repeat visits"
-              description="If off, a second visit is flagged as already done."
-              checked={form.allowRepeat}
-              onChange={(e) => set('allowRepeat', e.target.checked)}
-            />
+            </div>
+          )}
+          <fieldset className="pg-toggles">
+            <legend className="visually-hidden">Activity options</legend>
+            <Toggle label="Sign out as well as in" hint="Shows who's there now. Needed for capacity." checked={form.trackSignOut} onChange={(v) => set('trackSignOut', v)} />
+            <Toggle label="Allow repeat visits" hint="Off: a second visit is flagged." checked={form.allowRepeat} onChange={(v) => set('allowRepeat', v)} />
             {event.features.selfSignup && (
               <>
-                <Choice
-                  label="Open for self sign-up"
-                  description="Listed on the sign-up kiosk and session posters. The capacity is the number of places."
-                  checked={form.signupOpen}
-                  onChange={(e) => set('signupOpen', e.target.checked)}
-                />
-                <Choice
-                  label="Booking required"
-                  description="The leader sees a warning when someone who hasn't booked is scanned in."
-                  checked={form.bookingRequired}
-                  onChange={(e) => set('bookingRequired', e.target.checked)}
-                />
+                <Toggle label="Open for self sign-up" hint="On the kiosk and posters. Capacity is the places." checked={form.signupOpen} onChange={(v) => set('signupOpen', v)} />
+                <Toggle label="Booking required" hint="Warns when someone not booked is scanned in." checked={form.bookingRequired} onChange={(v) => set('bookingRequired', v)} />
               </>
             )}
           </fieldset>
-        </div>
-      </details>
+        </section>
+      </div>
 
-      <div className="btn-row">
+      <div className="pg-actionbar">
         <Button type="submit" kind="primary" busy={busy} busyLabel="Saving…">
           {submitLabel}
         </Button>
@@ -250,9 +243,7 @@ export function ActivityEdit() {
     return (
       <>
         <PageHeader title={title} back={{ to: base, label: 'Activities' }} />
-        <Notice tone="warning">
-          <p>Only event managers can change activities, and only while the event is a draft or open.</p>
-        </Notice>
+        <Banner tone="warning">Only event managers can change activities, and only while the event is a draft or open.</Banner>
       </>
     );
   if (sourceId && list.loading && !list.data)
@@ -273,15 +264,13 @@ export function ActivityEdit() {
     return (
       <>
         <PageHeader title={title} back={{ to: base, label: 'Activities' }} />
-        <Notice tone="error">
-          <p>This activity has been deleted.</p>
-        </Notice>
+        <Banner tone="error">This activity has been deleted.</Banner>
       </>
     );
 
   return (
     <>
-      <PageHeader title={title} back={back} summary={mode === 'copy' ? `Same settings as ${source!.name}, starting when it ends. Change anything you need.` : undefined} />
+      <PageHeader title={title} back={back} summary={mode === 'copy' ? `Copy of ${source!.name}, starting when it ends` : undefined} />
       <ActivityForm
         initial={mode === 'edit' ? toForm(source!, event.timezone) : mode === 'copy' ? nextSession(source!, event.timezone) : EMPTY}
         submitLabel={mode === 'edit' ? 'Save changes' : mode === 'copy' ? 'Add session' : 'Add activity'}

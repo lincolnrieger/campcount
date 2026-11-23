@@ -10,18 +10,24 @@ import {
   Badge,
   Button,
   ButtonLink,
+  Banner,
   EmptyState,
   Field,
-  FilterTabs,
+  FilterChips,
   Icon,
+  InfoTip,
   LoadError,
   Loading,
   PageHeader,
+  Popover,
   Segmented,
   Sheet,
   SkeletonRows,
+  Toggle,
+  Toolbar,
   plural,
   useConfirm,
+  useRemembered,
   useToast,
   useWide,
 } from '../ui';
@@ -84,6 +90,8 @@ function layout(items: Item[]): Map<string, { lane: number; lanes: number }> {
   return out;
 }
 
+type Kind = 'activity' | 'meal' | 'program';
+
 type Drag = { key: string; mode: 'move' | 'resize'; day: string; start: number; end: number; moved: boolean };
 
 /**
@@ -109,6 +117,8 @@ export function Schedule() {
   const [adding, setAdding] = useState<{ day: string; start: number } | null>(null);
   const today = todayInZone(tz);
   const [phoneDay, setPhoneDay] = useState(days.includes(today) ? today : days[0]!);
+  const [kinds, setKinds] = useRemembered<Kind[]>(`schedule-kinds:${event.id}`, []);
+  const [showCancelled, setShowCancelled] = useRemembered(`schedule-cancelled:${event.id}`, true);
   const gridRef = useRef<HTMLDivElement>(null);
   const pointer = useRef<{ x: number; y: number; offset: number; length: number; pointerId: number } | null>(null);
   /** A drag just ended: swallow the click that follows it. */
@@ -136,10 +146,14 @@ export function Schedule() {
     ];
   }, [acts.data, meals.data, tz, days]);
 
-  const timed = items.filter((i) => i.day);
-  const untimed = items.filter((i) => !i.day);
-  const firstHour = Math.min(7, ...timed.map((i) => Math.floor(i.start / 60)));
-  const lastHour = Math.max(21, ...timed.map((i) => Math.ceil(i.end / 60)));
+  const kindOf = (i: Item): Kind => (i.kind === 'meal' ? 'meal' : i.program ? 'program' : 'activity');
+  const visibleItems = items.filter((i) => (kinds.length === 0 || kinds.includes(kindOf(i))) && (showCancelled || !i.cancelled));
+  // The hours fit everything, shown or not, so filtering doesn't make the grid jump.
+  const allTimed = items.filter((i) => i.day);
+  const timed = visibleItems.filter((i) => i.day);
+  const untimed = visibleItems.filter((i) => !i.day);
+  const firstHour = Math.min(7, ...allTimed.map((i) => Math.floor(i.start / 60)));
+  const lastHour = Math.max(21, ...allTimed.map((i) => Math.ceil(i.end / 60)));
   const top = firstHour * 60;
   const height = (lastHour - firstHour) * 60 * PX;
   const shownDays = wide ? days : [phoneDay];
@@ -268,13 +282,36 @@ export function Schedule() {
     );
 
   const sel = items.find((i) => i.key === selected) ?? null;
+  const kindCount = (k: Kind) => items.filter((i) => kindOf(i) === k && (showCancelled || !i.cancelled)).length;
+  const kindOptions = (
+    [
+      { value: 'activity', label: 'Activities' },
+      { value: 'meal', label: 'Meals' },
+      { value: 'program', label: 'Programme' },
+    ] as { value: Kind; label: string }[]
+  )
+    .map((o) => ({ ...o, count: kindCount(o.value) }))
+    .filter((o) => o.count > 0 || kinds.includes(o.value));
+  const filters = (
+    <>
+      {kindOptions.length > 1 && <FilterChips multi label="Show" value={kinds} onChange={setKinds} options={kindOptions} />}
+      {items.some((i) => i.cancelled) && <Toggle label="Cancelled" checked={showCancelled} onChange={setShowCancelled} />}
+    </>
+  );
   const placed = (it: Item) => (drag?.key === it.key ? { ...it, day: drag.day, start: drag.start, end: drag.end } : it);
 
   return (
     <>
       <PageHeader
         title="Schedule"
-        summary={`${plural(timed.length, 'session')} across ${plural(days.length, 'day')}`}
+        summary={`${plural(allTimed.length, 'session')} across ${plural(days.length, 'day')}`}
+        help={
+          editable
+            ? wide
+              ? 'Drag a session to move it, or drag its bottom edge to change its length. Click a session for details, or an empty space to add one.'
+              : 'Tap a session to change its time or open it. Tap an empty space to add one.'
+            : undefined
+        }
         primary={
           manageActivities && (
             <ButtonLink to={`${base}/activities/import`} kind="primary">
@@ -284,15 +321,43 @@ export function Schedule() {
         }
         menu={[manageActivities && { label: 'Add activity', to: `${base}/activities/new` }, { label: 'Print schedule', onSelect: () => window.print() }]}
       />
-      <div className="sections">
-        <p className="meta no-print">
-          {editable
-            ? wide
-              ? 'Drag a session to move it, or drag its bottom edge to change its length. Click a session for details, or an empty space to add one.'
-              : 'Tap a session to change its time or open it. Tap an empty space to add one.'
-            : 'This event is closed, so the schedule is read-only.'}
-        </p>
-        {!wide && <FilterTabs label="Day" value={phoneDay} onChange={setPhoneDay} options={days.map((d) => ({ value: d, label: d === today ? `Today, ${dayLabel(d)}` : dayLabel(d) }))} />}
+      <div className="sections pg-sections">
+        {!editable && <Banner>The event is closed, so the schedule is read-only.</Banner>}
+        {items.length > 0 && (
+          <Toolbar label="Schedule filters">
+            {!wide && (
+              <div className="pg-toolbar-first">
+                <FilterChips
+                  label="Day"
+                  value={phoneDay}
+                  onChange={setPhoneDay}
+                  options={days.map((d) => ({ value: d, label: d === today ? `Today, ${dayLabel(d)}` : dayLabel(d), count: timed.filter((i) => i.day === d).length }))}
+                />
+              </div>
+            )}
+            {wide ? (
+              filters
+            ) : (
+              <Popover button={kinds.length || !showCancelled ? 'Filters on' : 'Filters'} label="Schedule filters">
+                {filters}
+              </Popover>
+            )}
+            <div className="toolbar-end schedule-key" aria-label="Key">
+              <span>
+                <span className="schedule-swatch schedule-activity" aria-hidden="true" /> Activity
+              </span>
+              <span>
+                <span className="schedule-swatch schedule-meal" aria-hidden="true" /> Meal
+              </span>
+              <span>
+                <span className="schedule-swatch schedule-program" aria-hidden="true" /> Programme
+              </span>
+              <span>
+                <span className="schedule-swatch is-cancelled" aria-hidden="true" /> Cancelled
+              </span>
+            </div>
+          </Toolbar>
+        )}
 
         {items.length === 0 ? (
           <EmptyState
@@ -308,14 +373,17 @@ export function Schedule() {
               )
             }
           >
-            Import the programme from a spreadsheet, or add activities one at a time.
+            Import it from a spreadsheet, or add activities one at a time.
           </EmptyState>
         ) : (
           <div className="schedule-wrap">
             {untimed.length > 0 && (
               <section className="schedule-tray" aria-labelledby="tray-heading">
-                <h2 id="tray-heading">No set time</h2>
-                <p className="meta">{wide && editable ? 'Drag one onto the schedule to give it a time.' : 'Tap one to give it a time.'}</p>
+                <div className="pg-tray-head">
+                  <h2 id="tray-heading">No set time</h2>
+                  <span className="meta num">{untimed.length}</span>
+                  <InfoTip label="About no set time">{wide && editable ? 'Drag one onto the schedule to give it a time.' : 'Tap one to give it a time.'}</InfoTip>
+                </div>
                 <ul>
                   {untimed.map((it) => (
                     <li key={it.key}>
@@ -379,7 +447,8 @@ export function Schedule() {
                           <button
                             key={it.key}
                             type="button"
-                            className={`schedule-item schedule-${it.program ? 'program' : it.kind}${it.cancelled ? ' is-cancelled' : ''}${lifted ? ' is-lifted' : ''}${it.end - it.start <= 30 ? ' is-short' : ''}`}
+                            className={`schedule-item schedule-${it.program ? 'program' : it.kind}${it.cancelled ? ' is-cancelled' : ''}${lifted ? ' is-lifted' : ''}${it.end - it.start <= 30 ? ' is-short' : ''}${lane.lanes >= 3 ? ' is-narrow' : ''}`}
+                            title={`${it.name}\n${label(it.start)}${it.openEnded ? '' : `–${label(it.end)}`}${it.location ? `\n${it.location}` : ''}`}
                             style={{
                               top: (it.start - top) * PX,
                               height: Math.max((it.end - it.start) * PX, 22),
@@ -413,11 +482,6 @@ export function Schedule() {
             </div>
           </div>
         )}
-        <p className="meta schedule-key no-print">
-          <span className="schedule-swatch schedule-activity" aria-hidden="true" /> Activity <span className="schedule-swatch schedule-meal" aria-hidden="true" /> Meal{' '}
-          <span className="schedule-swatch schedule-program" aria-hidden="true" /> Programme{' '}
-          <span className="schedule-swatch is-cancelled" aria-hidden="true" /> Cancelled
-        </p>
       </div>
 
       <Sheet open={sel !== null} title={sel?.name ?? ''} onClose={() => setSelected(null)}>
@@ -584,7 +648,7 @@ function SessionPanel({
               </Field>
             </div>
           )}
-          <div className="btn-row">
+          <div>
             <Button type="submit" kind="primary">
               Save time
             </Button>

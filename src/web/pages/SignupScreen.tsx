@@ -6,7 +6,8 @@ import { placesLeft } from '../components/SignupPanel';
 import type { SignupSession } from '../components/SignupPanel';
 import { useApi } from '../useApi';
 import { dayInZone, dayLabel, timeRange } from '../../shared/time';
-import { Badge, Button, EmptyState, Icon, LoadError, Loading, Notice, PageHeader, Section, Skeleton, SkeletonRows, useConfirm, useToast } from '../ui';
+import { Badge, Banner, Button, EmptyState, Icon, InfoTip, LoadError, Loading, PageHeader, SearchField, SelectionBar, Skeleton, SkeletonRows, Toolbar, plural, useConfirm, useToast } from '../ui';
+import { matchesSearch } from '../../shared/search';
 import { useEvent } from './EventLayout';
 
 interface SignupInfo {
@@ -24,6 +25,8 @@ export function SignupScreen() {
   const signup = useApi<SignupInfo>(manage ? `/events/${event.id}/signup` : null);
   // Which posters to print: null means none chosen yet; printing waits for the render.
   const [printing, setPrinting] = useState<string[] | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [q, setQ] = useState('');
   const tz = event.timezone;
   const back = { to: `${base}/links`, label: 'Links' };
 
@@ -42,9 +45,7 @@ export function SignupScreen() {
     return (
       <>
         <PageHeader title="Sign-up kiosk" back={back} />
-        <Notice tone="warning">
-          <p>Only event managers can set up the sign-up kiosk.</p>
-        </Notice>
+        <Banner tone="warning">Only event managers can set up the sign-up kiosk.</Banner>
       </>
     );
   if (signup.loading && !signup.data)
@@ -66,6 +67,15 @@ export function SignupScreen() {
   const sessions = data.sessions;
   const when = (s: SignupSession) => (s.startsAt ? `${dayLabel(dayInZone(s.startsAt, tz), 'long')}, ${timeRange(s.startsAt, s.endsAt, tz)}` : 'Any time');
   const toPrint = sessions.filter((s) => printing?.includes(s.id));
+  const shown = sessions.filter((s) => matchesSearch(q, s.name, s.location));
+  const pickedIds = sessions.filter((s) => picked.has(s.id)).map((s) => s.id);
+  const togglePick = (id: string, on: boolean) =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
 
   return (
     <>
@@ -73,7 +83,8 @@ export function SignupScreen() {
         <PageHeader
           title="Sign-up kiosk"
           back={back}
-          summary="People book activity sessions by scanning their lanyard at a tablet, or from a poster at the activity."
+          summary={data.enabled ? plural(sessions.length, 'session') + ' open for sign-up' : undefined}
+          help="People book activity sessions by scanning their lanyard at a tablet at camp HQ, or from a poster at the activity."
           menu={
             data.enabled
               ? [
@@ -101,7 +112,7 @@ export function SignupScreen() {
               : undefined
           }
         />
-        <div className="sections">
+        <div className="sections pg-sections">
           {!data.enabled ? (
             <EmptyState
               title="Activity sign-up is switched off"
@@ -126,23 +137,27 @@ export function SignupScreen() {
                 )
               }
             >
-              Turn it on to let people book sessions themselves.
+              Turn it on so people can book sessions themselves.
             </EmptyState>
           ) : (
             <>
-              <Section title="Kiosk" id="kiosk">
-                <div className="panel panel-pad kiosk-share">
-                  <div className="kiosk-qr">
-                    <QrCode value={data.link} size="100%" label="Sign-up kiosk QR code" />
+              <section className="panel pg-kiosk" aria-labelledby="kiosk-heading">
+                <div className="pg-kiosk-qr">
+                  <QrCode value={data.link} size="100%" label="Sign-up kiosk QR code" />
+                </div>
+                <div className="pg-kiosk-main">
+                  <div className="pg-tray-head">
+                    <h2 id="kiosk-heading" className="pg-panel-title">
+                      Kiosk
+                    </h2>
+                    <InfoTip label="About the kiosk">Open it on a tablet at camp HQ. People scan their lanyard, or type its code, and book. It goes back to the start after 90 seconds.</InfoTip>
                   </div>
-                  <div className="stack">
-                    <p>Open this on a tablet at camp HQ. People scan their lanyard, or type its code, and book. It goes back to the start after 90 seconds.</p>
-                    <div className="field">
-                      <label htmlFor="kiosk-link" className="field-label">
-                        Kiosk link
-                      </label>
-                      <input id="kiosk-link" className="input" readOnly value={data.link} onFocus={(e) => e.target.select()} />
-                    </div>
+                  <div className="field">
+                    <label htmlFor="kiosk-link" className="visually-hidden">
+                      Kiosk link
+                    </label>
+                    <input id="kiosk-link" className="input" readOnly value={data.link} onFocus={(e) => e.target.select()} />
+                  </div>
                     <div className="btn-row">
                       <a className="btn btn-primary" href={data.link} target="_blank" rel="noreferrer">
                         Open kiosk<span className="visually-hidden"> (opens in a new tab)</span>
@@ -161,48 +176,72 @@ export function SignupScreen() {
                         Copy link
                       </Button>
                     </div>
-                  </div>
                 </div>
-              </Section>
+              </section>
 
-              <Section
-                title="Session posters"
-                id="posters"
-                actions={
-                  sessions.length > 1 && (
+              <section className="pg-import-step" aria-labelledby="posters-heading">
+                <div className="section-head">
+                  <div className="pg-tray-head">
+                    <h2 id="posters-heading">Session posters</h2>
+                    <InfoTip label="About posters">Put a poster at each activity. Scanning it opens the kiosk with that session chosen; people then scan their lanyard to book.</InfoTip>
+                  </div>
+                  {sessions.length > 1 && (
                     <Button onClick={() => setPrinting(sessions.map((s) => s.id))}>
                       <Icon name="print" />
                       Print all
                     </Button>
-                  )
-                }
-              >
+                  )}
+                </div>
                 {sessions.length === 0 ? (
                   <EmptyState title="No sessions open for sign-up">
-                    Open an activity on the <Link to={`${base}/activities`}>Activities</Link> tab, choose Edit activity, and tick "Open for self sign-up".
+                    Open an activity's Edit page on <Link to={`${base}/activities`}>Activities</Link> and turn on Open for self sign-up.
                   </EmptyState>
                 ) : (
                   <>
-                    <p className="meta">Put a poster at each activity. Scanning it opens the kiosk with that session chosen; people then scan their lanyard to book.</p>
-                    <ul className="list">
-                      {sessions.map((s) => (
-                        <li key={s.id} className="row">
-                          <span className="row-main">
-                            <span className="row-title">{s.name}</span>
-                            <span className="row-meta">{[when(s), s.location || null].filter(Boolean).join(' · ')}</span>
-                          </span>
-                          <Badge tone={s.full ? 'neutral' : 'success'}>{placesLeft(s)}</Badge>
-                          <span className="row-side">
-                            <Button small onClick={() => setPrinting([s.id])}>
-                              Print<span className="visually-hidden"> poster for {s.name}</span>
-                            </Button>
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
+                    {sessions.length > 8 && (
+                      <Toolbar label="Find sessions">
+                        <SearchField id="poster-q" label="Find a session" value={q} onChange={setQ} slash />
+                      </Toolbar>
+                    )}
+                    {shown.length === 0 ? (
+                      <EmptyState title={`No sessions match "${q}"`} actions={<Button onClick={() => setQ('')}>Clear search</Button>} />
+                    ) : (
+                      <ul className="list scroll-list">
+                        {shown.map((s) => (
+                          <li key={s.id} className={picked.has(s.id) ? 'row is-highlight' : 'row'}>
+                            <input
+                              type="checkbox"
+                              className="pg-check"
+                              aria-label={`Choose ${s.name}, ${when(s)}`}
+                              checked={picked.has(s.id)}
+                              onChange={(e) => togglePick(s.id, e.target.checked)}
+                            />
+                            <span className="row-main">
+                              <span className="row-title">{s.name}</span>
+                              <span className="row-meta">{[when(s), s.location || null].filter(Boolean).join(' · ')}</span>
+                            </span>
+                            <span className="pg-places">
+                              <Badge tone={s.full ? 'neutral' : 'success'}>{placesLeft(s)}</Badge>
+                            </span>
+                            <span className="row-side">
+                              <Button small onClick={() => setPrinting([s.id])}>
+                                <Icon name="print" size={18} />
+                                Print<span className="visually-hidden"> poster for {s.name}</span>
+                              </Button>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <SelectionBar count={pickedIds.length} noun={pickedIds.length === 1 ? 'session chosen' : 'sessions chosen'} onClear={() => setPicked(new Set())}>
+                      <Button small kind="primary" onClick={() => setPrinting(pickedIds)}>
+                        <Icon name="print" size={18} />
+                        Print {pickedIds.length === 1 ? 'poster' : `${pickedIds.length} posters`}
+                      </Button>
+                    </SelectionBar>
                   </>
                 )}
-              </Section>
+              </section>
             </>
           )}
         </div>

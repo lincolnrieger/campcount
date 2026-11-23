@@ -4,7 +4,7 @@ import type { MealCategory, MealItem, MealItemInput } from '../../shared/mealIte
 import { ALLERGENS, DIETARY_TAGS, MEAL_CATEGORIES } from '../../shared/mealItems';
 import { ApiFailure, api } from '../api';
 import type { Meal } from '../model';
-import { Badge, Button, Choice, Field, Icon, Menu, Notice, Sheet, useConfirm, useToast } from '../ui';
+import { Badge, Button, Choice, Field, Icon, Menu, Notice, Sheet, Toggle, useConfirm, useToast } from '../ui';
 
 const fail = (err: unknown) => (err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.');
 
@@ -193,12 +193,14 @@ export function MealItemsPanel({
             <Icon name="plus" /> Add item
           </Button>
           <Button small onClick={() => setCopying(true)}>
-            Copy items from another meal
+            <Icon name="copy" /> Copy from another meal
           </Button>
         </div>
       )}
-      {section('Served to everyone', main, manage ? 'Nothing yet. Add items, copy them from another meal, or import meals (JSON).' : 'Nothing listed yet.')}
-      {section('Dietary alternatives', alts, 'No alternatives.')}
+      <div className="pg-mi-columns">
+        {section('Served to everyone', main, manage ? 'Nothing yet. Add items, or copy them from another meal.' : 'Nothing listed yet.')}
+        {section('Dietary alternatives', alts, 'No alternatives.')}
+      </div>
       {meal.ingredients && (
         <section className="mi-section">
           <h4>Additional notes</h4>
@@ -341,7 +343,7 @@ function ItemForm({
           <p>{problem}</p>
         </Notice>
       )}
-      <Field id="mi-name" label="Name" hint="For example, Drakes white bread rolls 6pk">
+      <Field id="mi-name" label="Name" hint="Like Drakes white bread rolls 6pk">
         <input className="input" value={f.name} maxLength={200} onChange={(e) => set('name', e.target.value)} autoComplete="off" />
       </Field>
       <div className="field-pair">
@@ -359,18 +361,13 @@ function ItemForm({
           </select>
         </Field>
       </div>
-      <Field id="mi-ingredients" label="Ingredients list" optional hint="As on the pack. Line breaks are kept.">
+      <Field id="mi-ingredients" label="Ingredients list" optional hint="As on the pack.">
         <textarea className="textarea" rows={5} maxLength={5000} value={f.ingredients} onChange={(e) => set('ingredients', e.target.value)} />
       </Field>
       <LabelPicker id="mi-contains" label="Contains" value={f.contains} options={allergens} onChange={(v) => set('contains', v)} />
       <LabelPicker id="mi-may" label="May contain" value={f.mayContain} options={allergens} onChange={(v) => set('mayContain', v)} />
       <LabelPicker id="mi-dietary" label="Suitable for" value={f.dietary} options={tags} onChange={(v) => set('dietary', v)} />
-      <Choice
-        label="This is a dietary alternative"
-        description="Not served to everyone: a substitute for the people who need it."
-        checked={f.isAlternative}
-        onChange={(e) => set('isAlternative', e.target.checked)}
-      />
+      <Toggle label="Dietary alternative" hint="A substitute for the people who need it, not served to everyone." checked={f.isAlternative} onChange={(v) => set('isAlternative', v)} />
       {f.isAlternative && (
         <>
           <Field id="mi-replaces" label="Replaces" optional>
@@ -388,14 +385,14 @@ function ItemForm({
           <LabelPicker
             id="mi-for"
             label="Who it’s for"
-            hint="Dietary needs or allergies, e.g. gluten free, sesame"
+            hint="Like gluten free, sesame"
             value={f.alternativeFor}
             options={[...tags, ...allergens]}
             onChange={(v) => set('alternativeFor', v)}
           />
         </>
       )}
-      <Field id="mi-notes" label="Staff notes" optional hint="Quantities, supplier, “check brand”… Never shown to participants.">
+      <Field id="mi-notes" label="Staff notes" optional hint="Never shown to participants.">
         <textarea className="textarea" rows={2} maxLength={2000} value={f.internalNotes} onChange={(e) => set('internalNotes', e.target.value)} />
       </Field>
       <div className="btn-row">
