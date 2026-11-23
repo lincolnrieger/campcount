@@ -47,7 +47,7 @@ export function Events() {
   }, [data, me, landNavigate]);
   const canCreate = me?.kind === 'user' && me.platformPermissions.includes('platform.events.create');
   const [q, setQ] = useState('');
-  const [showPast, setShowPast] = useState(false);
+  const [show, setShow] = useState<'current' | 'all' | 'past'>('current');
 
   const create = canCreate && (
     <ButtonLink to="/events/new" kind="primary">
@@ -94,10 +94,11 @@ export function Events() {
               {past.length > 0 && !q && (
                 <FilterChips
                   label="Show"
-                  value={showPast ? 'past' : 'current'}
-                  onChange={(v) => setShowPast(v === 'past')}
+                  value={show}
+                  onChange={setShow}
                   options={[
                     { value: 'current', label: 'Current', count: now.length + soon.length },
+                    { value: 'all', label: 'All', count: now.length + soon.length + past.length },
                     { value: 'past', label: 'Past', count: past.length },
                   ]}
                 />
@@ -105,14 +106,14 @@ export function Events() {
             </Toolbar>
           )}
           {q && matching.length === 0 && <EmptyState title={`No events match "${q}"`}>Try a name or place.</EmptyState>}
-          {(!showPast || q) && (
+          {(show !== 'past' || q) && (
             <>
               <EventList title="Happening now" id="now" events={now} />
               <EventList title="Coming up" id="soon" events={soon} />
             </>
           )}
-          {past.length > 0 && (showPast || q) && <EventList title="Past events" id="past" events={past} />}
-          {!q && now.length === 0 && soon.length === 0 && !showPast && <EmptyState title="No current events" />}
+          {past.length > 0 && (show !== 'current' || q) && <EventList title="Past events" id="past" events={past} />}
+          {!q && now.length === 0 && soon.length === 0 && show === 'current' && <EmptyState title="No current events" />}
         </div>
       )}
     </>
