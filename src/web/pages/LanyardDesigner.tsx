@@ -15,7 +15,7 @@ import { loadFonts } from '../lanyards/fonts';
 import type { RenderContext } from '../lanyards/render';
 import { ImageCache, SAMPLE_PERSON, designFonts, renderToCanvas } from '../lanyards/render';
 import { useDesignEditor } from '../lanyards/useDesign';
-import { Button, Icon, IconButton, LoadError, Loading, Notice, PageHeader, Segmented, useConfirm, useToast } from '../ui';
+import { Banner, Button, Icon, IconButton, InfoTip, LoadError, Loading, PageHeader, Segmented, Toggle, useConfirm, useToast } from '../ui';
 import type { IconName } from '../ui';
 import { useEvent } from './EventLayout';
 import { LanyardTabs } from './LanyardPrint';
@@ -138,12 +138,8 @@ export function LanyardDesigner() {
 
   const header = (
     <>
-      <PageHeader
-        title="Lanyards"
-        back={{ to: `${base}/people`, label: 'People' }}
-        summary={<SaveStatus state={ed.save.state} message={ed.save.message} onRetry={ed.retrySave} editable={editable} />}
-      />
-      <LanyardTabs base={base} current="design" />
+      <PageHeader title="Lanyards" back={{ to: `${base}/people`, label: 'People' }} help={<DesignerHelp />} />
+      <LanyardTabs base={base} current="design" end={<SaveStatus state={ed.save.state} message={ed.save.message} onRetry={ed.retrySave} editable={editable} />} />
     </>
   );
   if (ed.loadError && !design)
@@ -164,6 +160,11 @@ export function LanyardDesigner() {
   const card = cardSize(design.format, design.orientation);
   const el = design[side].elements.find((e) => e.id === selected) ?? null;
   const warnings = designWarnings(design);
+  const firstProblem = warnings.find((w) => w.level === 'error') ?? warnings[0];
+  const goToWarning = (w: (typeof warnings)[number]) => {
+    if (w.side) setSide(w.side);
+    setSelected(w.elementId ?? null);
+  };
 
   async function onFile(file: File | undefined) {
     if (!file || !design) return;
@@ -187,12 +188,26 @@ export function LanyardDesigner() {
   return (
     <div className="studio-page">
       {header}
-      {!editable && (
-        <Notice tone="info">
-          <p>{event.status === 'draft' || event.status === 'open' ? 'You can look at the design but not change it.' : 'This camp is closed, so its lanyard design can’t be changed. You can still print.'}</p>
-        </Notice>
-      )}
-      <p className="studio-small-screen only-phone">The designer works best on a computer or tablet. You can preview the card here and print from the Print tab.</p>
+      <div className="banners studio-banners">
+        {!editable && <Banner tone="info">{event.status === 'draft' || event.status === 'open' ? 'View only: you can look at the design but not change it.' : 'This camp is closed, so its design can’t be changed. You can still print.'}</Banner>}
+        {firstProblem && (
+          <Banner
+            tone={firstProblem.level === 'error' ? 'error' : 'warning'}
+            action={
+              <Button small onClick={() => goToWarning(firstProblem)}>
+                {firstProblem.elementId ? 'Fix' : 'Details'}
+              </Button>
+            }
+          >
+            {firstProblem.level === 'error' ? 'Not ready to print: ' : 'Check: '}
+            <span className="meta">{firstProblem.message}</span>
+            {warnings.length > 1 && <span className="meta"> (+{warnings.length - 1} more)</span>}
+          </Banner>
+        )}
+        <div className="only-phone">
+          <Banner tone="info">Best on a computer or tablet. You can still preview here.</Banner>
+        </div>
+      </div>
 
       <div className="studio">
         {/* ---------- Left: add things, and layers ---------- */}
@@ -211,7 +226,9 @@ export function LanyardDesigner() {
                 <AddButton icon="noPhoto" label="No-photo mark" onClick={() => add(makeElement(design, 'marker'))} />
               </div>
               <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp" className="visually-hidden" tabIndex={-1} aria-hidden="true" onChange={(e) => void onFile(e.target.files?.[0])} />
-              <h3 className="studio-label">Details that fill in for each person</h3>
+              <h3 className="studio-label studio-label-tip">
+                Person details <InfoTip label="About person details">Fills in for each person: their name, section, code and so on.</InfoTip>
+              </h3>
               <div className="studio-chips">
                 {FIELD_IDS.map((f) => (
                   <button key={f} type="button" className="chip" onClick={() => add(makeElement(design, 'field', f))}>
@@ -300,15 +317,10 @@ export function LanyardDesigner() {
           />
           <div className="studio-footer">
             <PreviewPicker eventId={event.id} sections={event.sections} canList={can('roster.view')} value={preview} onChange={setPreview} />
-            {event.features.photo && (
-              <label className="choice studio-inline-choice">
-                <input type="checkbox" checked={noPhotos} onChange={(e) => setNoPhotos(e.target.checked)} />
-                <span className="choice-text">Show as someone without photo consent</span>
-              </label>
-            )}
-            <p className="meta studio-hint">
-              {CARD_FORMATS[design.format].label}, {design.orientation}. Drag to move, use the corners to resize. Hold Shift to keep the shape, Alt to stop snapping.
-            </p>
+            {event.features.photo && <Toggle checked={noPhotos} onChange={setNoPhotos} label="No photo consent" />}
+            <span className="meta studio-hint">
+              {CARD_FORMATS[design.format].label}, {design.orientation}
+            </span>
           </div>
         </section>
 
@@ -349,10 +361,7 @@ export function LanyardDesigner() {
               editable={editable}
               brand={event.brandColor}
               warnings={warnings}
-              onWarning={(w) => {
-                if (w.side) setSide(w.side);
-                if (w.elementId) setSelected(w.elementId);
-              }}
+              onWarning={goToWarning}
               onChange={(d) => change(d)}
               onReset={async () => {
                 const ok = await confirm({ title: 'Start the design again?', body: <p>The card goes back to CampCount’s starting design. You can undo this.</p>, confirm: 'Start again' });
@@ -391,8 +400,22 @@ function AddButton({ icon, label, onClick }: { icon: IconName; label: string; on
   );
 }
 
+/** How to use the designer, behind the (i) by the title. */
+function DesignerHelp() {
+  return (
+    <>
+      Design the front and back of every lanyard. Drag to move, use the corners to resize. Hold Shift to keep the shape, Alt to stop snapping. Keys: arrows nudge (Shift for 5 mm), Delete removes, Ctrl+D duplicates, Ctrl+Z undoes, Esc deselects.
+    </>
+  );
+}
+
 function SaveStatus({ state, message, onRetry, editable }: { state: string; message: string | null; onRetry: () => void; editable: boolean }) {
-  if (!editable) return <span>Design the front and back of every lanyard.</span>;
+  if (!editable)
+    return (
+      <span className="save-status">
+        <Icon name="eye" size={16} /> View only
+      </span>
+    );
   return (
     <span className="save-status" aria-live="polite">
       {state === 'saving' && 'Saving…'}
@@ -501,10 +524,15 @@ function Num({ id, label, value, onChange, step = 0.5, min, max, unit = 'mm', di
   );
 }
 
-function PanelGroup({ title, children }: { title?: string; children: ReactNode }) {
+function PanelGroup({ title, tip, children }: { title?: string; tip?: ReactNode; children: ReactNode }) {
   return (
     <div className="studio-section">
-      {title && <h3 className="studio-subheading">{title}</h3>}
+      {title && (
+        <h3 className="studio-subheading">
+          {title}
+          {tip && <InfoTip label={`About ${title.toLowerCase()}`}>{tip}</InfoTip>}
+        </h3>
+      )}
       {children}
     </div>
   );
@@ -556,13 +584,33 @@ function ElementPanel({
           <Icon name="close" />
         </IconButton>
       </div>
+      {editable && (
+        <div className="studio-arrange" role="toolbar" aria-label="Arrange">
+          <IconButton label="Bring forward" onClick={() => onAction('forward')}>
+            <Icon name="forward" />
+          </IconButton>
+          <IconButton label="Send backward" onClick={() => onAction('backward')}>
+            <Icon name="backward" />
+          </IconButton>
+          <IconButton label="Duplicate" onClick={() => onAction('duplicate')}>
+            <Icon name="copy" />
+          </IconButton>
+          <IconButton label="Delete" className="icon-btn-danger" onClick={() => onAction('delete')}>
+            <Icon name="trash" />
+          </IconButton>
+        </div>
+      )}
       {locked && (
-        <Notice tone="info">
-          <p>This is locked so it can’t be moved by accident.</p>
-          <Button small onClick={() => onAction('unlock')}>
-            <Icon name="unlock" size={16} /> Unlock
-          </Button>
-        </Notice>
+        <Banner
+          tone="info"
+          action={
+            <Button small onClick={() => onAction('unlock')}>
+              <Icon name="unlock" size={16} /> Unlock
+            </Button>
+          }
+        >
+          Locked
+        </Banner>
       )}
 
       {el.type === 'text' && (
@@ -572,7 +620,7 @@ function ElementPanel({
               Words
             </label>
             <textarea id="prop-text" ref={textRef} className="textarea" rows={2} value={el.text} disabled={!editable} onChange={(e) => onSet({ text: e.target.value } as Partial<TextElement>)} maxLength={400} />
-            <p className="meta">Add a detail that fills in for each person:</p>
+            <span className="studio-label">Insert a person detail</span>
             <div className="studio-chips">
               {FIELD_IDS.map((f) => (
                 <button key={f} type="button" className="chip chip-small" disabled={!editable} onClick={() => insert(f)}>
@@ -620,13 +668,10 @@ function ElementPanel({
                 AA<span className="visually-hidden"> Capital letters</span>
               </button>
             </div>
-            <label className="choice">
-              <input type="checkbox" checked={el.wrap} disabled={!editable} onChange={(e) => onSet({ wrap: e.target.checked } as Partial<TextElement>)} />
-              <span className="choice-text">
-                Wrap onto more lines
-                <span className="meta">Otherwise long words shrink to fit on one line.</span>
-              </span>
-            </label>
+            <div className="studio-tip-row">
+              <Toggle checked={el.wrap} disabled={!editable} onChange={(v) => onSet({ wrap: v } as Partial<TextElement>)} label="Wrap onto more lines" />
+              <InfoTip label="About wrapping">Otherwise long words shrink to fit on one line.</InfoTip>
+            </div>
           </PanelGroup>
           <PanelGroup>
             <ColourField label="Colour" value={el.colour} section="text" extra={brand} onChange={(v) => editable && onSet({ colour: v } as Partial<TextElement>)} />
@@ -665,7 +710,7 @@ function ElementPanel({
 
       {el.type === 'image' && (
         <>
-          <PanelGroup>
+          <PanelGroup title="Fit" tip={el.fit === 'cover' ? 'Fills the box, trimming the edges if the shapes differ.' : 'Shows the whole image inside the box.'}>
             <Segmented
               label="Fit"
               value={el.fit}
@@ -675,7 +720,6 @@ function ElementPanel({
                 { value: 'cover', label: 'Fill the box' },
               ]}
             />
-            <p className="meta">{el.fit === 'cover' ? 'Fills the box, trimming the edges if the shapes differ.' : 'Shows the whole image inside the box.'}</p>
           </PanelGroup>
           <PanelGroup>
             <div className="studio-row">
@@ -693,12 +737,18 @@ function ElementPanel({
 
       {el.type === 'qr' && (
         <PanelGroup>
-          <p className="meta">Each person’s own QR code goes here. It always prints black on white, so every phone can scan it. Keep it at least 15 mm wide.</p>
+          <p className="meta studio-tip-row">
+            Each person’s own QR code. Keep it 15 mm or wider.
+            <InfoTip label="About the QR code">It always prints black on white, so every phone can scan it.</InfoTip>
+          </p>
         </PanelGroup>
       )}
       {el.type === 'marker' && (
         <PanelGroup>
-          <p className="meta">For people without photo consent, the mark you choose under Card settings appears here. Everyone else’s card shows nothing in this spot.</p>
+          <p className="meta studio-tip-row">
+            Shows the no-photo mark for people without consent.
+            <InfoTip label="About the no-photo mark">Choose the mark under Card settings (click an empty part of the card). Everyone else’s card shows nothing in this spot.</InfoTip>
+          </p>
         </PanelGroup>
       )}
 
@@ -721,24 +771,6 @@ function ElementPanel({
         )}
       </PanelGroup>
 
-      {editable && (
-        <PanelGroup title="Arrange">
-          <div className="studio-row studio-arrange">
-            <IconButton label="Bring forward" onClick={() => onAction('forward')}>
-              <Icon name="forward" />
-            </IconButton>
-            <IconButton label="Send backward" onClick={() => onAction('backward')}>
-              <Icon name="backward" />
-            </IconButton>
-            <IconButton label="Duplicate" onClick={() => onAction('duplicate')}>
-              <Icon name="copy" />
-            </IconButton>
-            <IconButton label="Delete" className="icon-btn-danger" onClick={() => onAction('delete')}>
-              <Icon name="trash" />
-            </IconButton>
-          </div>
-        </PanelGroup>
-      )}
     </div>
   );
 }
@@ -817,7 +849,8 @@ function CardPanel({
       <PanelGroup title="Ready to print?">
         {warnings.length === 0 ? (
           <p className="studio-ok">
-            <Icon name="success" size={18} /> Looks good. Every card has a name, a QR code and a typed code.
+            <Icon name="success" size={18} /> Looks good
+            <InfoTip label="About the check">Every card has a name, a QR code and a typed code.</InfoTip>
           </p>
         ) : (
           <ul className="studio-warnings">
@@ -836,7 +869,7 @@ function CardPanel({
           </ul>
         )}
       </PanelGroup>
-      <PanelGroup title="Size">
+      <PanelGroup title="Size" tip="Changing size stretches what’s on the card to fit. Undo if you don’t like it.">
         <fieldset className="size-options" disabled={!editable}>
           <legend className="visually-hidden">Card size</legend>
           {CARD_FORMAT_KEYS.map((f) => (
@@ -861,7 +894,6 @@ function CardPanel({
             ]}
           />
         )}
-        <p className="meta">Changing size stretches what’s on the card to fit. Undo if you don’t like it.</p>
       </PanelGroup>
       <PanelGroup>
         <ColourField
@@ -873,9 +905,16 @@ function CardPanel({
       </PanelGroup>
       {photo && (
         <PanelGroup title="No photo consent">
-          <label htmlFor="marker" className="studio-label">
-            How their card is marked
-          </label>
+          <span className="studio-label studio-label-tip">
+            <label htmlFor="marker">How their card is marked</label>
+            <InfoTip label="About the mark">
+              {marker.photoMarker === 'black_border' || marker.photoMarker === 'colour_border'
+                ? 'A thick frame around the edge of both sides.'
+                : marker.photoMarker === 'none'
+                  ? 'Nothing extra. Photographers check the list instead.'
+                  : 'Shown where you put the No-photo mark.'}
+            </InfoTip>
+          </span>
           <select id="marker" className="select select-small" value={marker.photoMarker} disabled={!editable} onChange={(e) => void onMarker({ photoMarker: e.target.value as PhotoMarker })}>
             {PHOTO_MARKERS.map((m) => (
               <option key={m} value={m}>
@@ -883,28 +922,18 @@ function CardPanel({
               </option>
             ))}
           </select>
-          <p className="meta">
-            {marker.photoMarker === 'black_border' || marker.photoMarker === 'colour_border'
-              ? 'A thick frame around the edge of both sides.'
-              : marker.photoMarker === 'none'
-                ? 'Nothing extra. Photographers check the list instead.'
-                : 'Shown where you put the No-photo mark.'}
-          </p>
           {marker.photoMarker === 'colour_border' && (
             <ColourField label="Border colour" value={marker.photoMarkerColour} onChange={(v) => editable && v.startsWith('#') && void onMarker({ photoMarkerColour: v })} />
           )}
           {(marker.photoMarker === 'black_border' || marker.photoMarker === 'colour_border' || marker.photoMarker === 'none') && (
-            <label className="choice">
-              <input type="checkbox" checked={marker.photoMarkerLabel} disabled={!editable} onChange={(e) => void onMarker({ photoMarkerLabel: e.target.checked })} />
-              <span className="choice-text">Also print “No photos” where the No-photo mark is</span>
-            </label>
+            <Toggle checked={marker.photoMarkerLabel} disabled={!editable} onChange={(v) => void onMarker({ photoMarkerLabel: v })} label="Print “No photos” at the mark" />
           )}
         </PanelGroup>
       )}
       {editable && (
         <PanelGroup>
           <Button small kind="ghost" onClick={onReset}>
-            Start the design again
+            <Icon name="undo" size={16} /> Start the design again
           </Button>
         </PanelGroup>
       )}

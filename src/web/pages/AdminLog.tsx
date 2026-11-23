@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { ApiFailure, api } from '../api';
-import { Badge, Button, EmptyState, Loading, Notice, PageHeader, SearchField, Segmented, SkeletonRows } from '../ui';
+import { Badge, Banner, Button, EmptyState, Icon, Loading, PageHeader, SearchField, Segmented, SkeletonRows, Toolbar, useRemembered } from '../ui';
 import type { Tone } from '../ui';
 import type { EventSummary } from '../types';
 import { useApi } from '../useApi';
@@ -138,10 +138,10 @@ const OUTCOME: Record<string, { label: string; tone: Tone } | undefined> = {
 /** Admin › Activity log: every scan and every change, newest first, as plain sentences. */
 export function AdminLog() {
   const events = useApi<{ events: EventSummary[] }>('/events');
-  const [eventId, setEventId] = useState('');
-  const [kind, setKind] = useState<'all' | 'scans' | 'changes'>('all');
-  const [q, setQ] = useState('');
-  const [query, setQuery] = useState('');
+  const [eventId, setEventId] = useRemembered('log:event', '');
+  const [kind, setKind] = useRemembered<'all' | 'scans' | 'changes'>('log:kind', 'all');
+  const [q, setQ] = useRemembered('log:q', '');
+  const [query, setQuery] = useState(q.trim());
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [next, setNext] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -176,13 +176,23 @@ export function AdminLog() {
   const timeOf = (iso: string) => new Date(iso).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', second: '2-digit', timeZone: 'Australia/Adelaide' });
   const days = new Map<string, Entry[]>();
   for (const e of entries ?? []) days.set(dayOf(e.at), [...(days.get(dayOf(e.at)) ?? []), e]);
+  const filtered = Boolean(eventId || q || kind !== 'all');
+  // A camp remembered from earlier that no longer exists: don't filter by it.
+  useEffect(() => {
+    if (eventId && events.data && !events.data.events.some((e) => e.id === eventId)) setEventId('');
+  }, [eventId, events.data, setEventId]);
 
   return (
     <>
-      <PageHeader title="Activity log" back={{ to: '/admin', label: 'Admin' }} summary="Every scan and every change. Times are Adelaide time." />
-      <div className="sections">
-        <div className="toolbar">
-          <SearchField id="log-q" label="Search person, place, staff member or action" value={q} onChange={setQ} />
+      <PageHeader
+        title="Activity log"
+        back={{ to: '/admin', label: 'Admin' }}
+        summary={entries ? `${entries.length}${next ? '+' : ''} entries · Adelaide time` : 'Adelaide time'}
+        help="Every scan and every change, newest first."
+      />
+      <div className="pf-stack">
+        <Toolbar sticky label="Filter the log">
+          <SearchField id="log-q" label="Search person, place, staff member or action" placeholder="Search the log" value={q} onChange={setQ} slash />
           <select className="select" aria-label="Camp" value={eventId} onChange={(e) => setEventId(e.target.value)}>
             <option value="">All camps</option>
             {events.data?.events.map((e) => (
@@ -201,21 +211,40 @@ export function AdminLog() {
               { value: 'changes', label: 'Changes' },
             ]}
           />
-        </div>
+          {filtered && (
+            <div className="toolbar-end">
+              <Button
+                small
+                kind="ghost"
+                onClick={() => {
+                  setQ('');
+                  setEventId('');
+                  setKind('all');
+                }}
+              >
+                Clear filters
+              </Button>
+            </div>
+          )}
+        </Toolbar>
         {error && (
-          <Notice tone="error" title="Couldn't load the log">
-            <p>{error}</p>
-            <Button
-              small
-              busyLabel="Trying again…"
-              onAction={async () => {
-                setError(null);
-                await load(entries && entries.length ? next : null).catch(() => setError('Check your signal and try again.'));
-              }}
-            >
-              Try again
-            </Button>
-          </Notice>
+          <Banner
+            tone="error"
+            action={
+              <Button
+                small
+                busyLabel="Trying again…"
+                onAction={async () => {
+                  setError(null);
+                  await load(entries && entries.length ? next : null).catch(() => setError('Check your signal and try again.'));
+                }}
+              >
+                Try again
+              </Button>
+            }
+          >
+            Couldn't load the log. <span className="meta">{error}</span>
+          </Banner>
         )}
         {!entries && !error && (
           <Loading what="the log">
@@ -223,72 +252,79 @@ export function AdminLog() {
           </Loading>
         )}
         {entries && entries.length === 0 && <EmptyState title={`Nothing recorded${query ? ` matching "${query}"` : ''}`}>{query ? 'Try another search.' : undefined}</EmptyState>}
-        {entries &&
-          [...days].map(([day, items]) => (
-            <div key={day} className="list">
-              <h2 className="list-group-heading">{day}</h2>
-              <ol>
-                {items.map((e) => {
-                  const outcome = e.kind === 'scan' ? OUTCOME[e.outcome] : undefined;
-                  const detail = e.kind === 'change' ? describeDetail(e) : null;
-                  return (
-                    <li key={e.id} className={outcome ? 'row is-muted' : 'row'}>
-                      <time className="history-time num" dateTime={e.at}>
-                        {timeOf(e.at)}
-                      </time>
-                      <span className="row-main">
-                        {e.kind === 'scan' ? (
-                          <span>
-                            <strong>{e.registrationId && e.eventId ? <Link className="log-person" to={`/events/${e.eventId}/people/${e.registrationId}`}>{e.person}</Link> : e.person}</strong>{' '}
-                            {scanVerb(e.contextType, e.direction).toLowerCase()}{' '}
-                            {e.contextType === 'meal' ? 'at' : e.contextType === 'site' ? 'at the' : e.direction === 'in' ? 'to' : 'of'} {e.contextType === 'site' ? 'gate' : e.place}
-                          </span>
-                        ) : (
-                          <span>
-                            <strong>{e.actor || 'Someone'}</strong> {ACTIONS[e.action] ?? e.action.replace(/[._]/g, ' ')} {e.target}
-                          </span>
-                        )}
-                        <span className="row-meta">
-                          {[
-                            e.kind === 'scan'
-                              ? [
-                                  e.actor ? `scanned by ${e.actor}` : 'scanned',
-                                  e.method === 'manual' ? 'by hand' : e.method === 'code' ? 'typed code' : e.method === 'correction' ? 'correction' : null,
-                                  e.note || null,
-                                ]
-                                  .filter(Boolean)
-                                  .join(', ')
-                              : detail,
-                            !eventId ? e.eventName : null,
+        {entries && entries.length > 0 && (
+          <div className="list pf-log">
+            {[...days].map(([day, items]) => (
+              <section key={day} aria-label={day}>
+                <h2 className="list-group-heading pf-log-day">
+                  {day} <span className="pf-group-count">{items.length}</span>
+                </h2>
+                <ol>
+                  {items.map((e) => {
+                    const outcome = e.kind === 'scan' ? OUTCOME[e.outcome] : undefined;
+                    const detail = e.kind === 'change' ? describeDetail(e) : null;
+                    const meta = [
+                      e.kind === 'scan'
+                        ? [
+                            e.actor ? `scanned by ${e.actor}` : 'scanned',
+                            e.method === 'manual' ? 'by hand' : e.method === 'code' ? 'typed code' : e.method === 'correction' ? 'correction' : null,
+                            e.note || null,
                           ]
                             .filter(Boolean)
-                            .join(' · ')}
+                            .join(', ')
+                        : detail,
+                      !eventId ? e.eventName : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ');
+                    return (
+                      <li key={e.id} className={outcome ? 'pf-log-row is-muted' : 'pf-log-row'}>
+                        <time className="pf-log-time num" dateTime={e.at}>
+                          {timeOf(e.at)}
+                        </time>
+                        <span className={e.kind === 'scan' ? 'pf-log-kind pf-log-kind-scan' : 'pf-log-kind'} aria-hidden="true">
+                          <Icon name={e.kind === 'scan' ? 'scan' : 'clipboard'} size={16} />
+                        </span>
+                        <span className="pf-log-text">
+                          {e.kind === 'scan' ? (
+                            <span>
+                              <strong>{e.registrationId && e.eventId ? <Link className="log-person" to={`/events/${e.eventId}/people/${e.registrationId}`}>{e.person}</Link> : e.person}</strong>{' '}
+                              {scanVerb(e.contextType, e.direction).toLowerCase()}{' '}
+                              {e.contextType === 'meal' ? 'at' : e.contextType === 'site' ? 'at the' : e.direction === 'in' ? 'to' : 'of'} {e.contextType === 'site' ? 'gate' : e.place}
+                            </span>
+                          ) : (
+                            <span>
+                              <strong>{e.actor || 'Someone'}</strong> {ACTIONS[e.action] ?? e.action.replace(/[._]/g, ' ')} {e.target}
+                            </span>
+                          )}
+                          {meta && <span className="pf-log-meta">{meta}</span>}
                         </span>
                         {outcome && (
-                          <span>
+                          <span className="pf-log-badge">
                             <Badge tone={outcome.tone}>{outcome.label}</Badge>
                           </span>
                         )}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ol>
-            </div>
-          ))}
-        {next && (
-          <div>
-            <Button
-              busy={loadingMore}
-              busyLabel="Loading…"
-              onClick={async () => {
-                setLoadingMore(true);
-                await load(next).catch(() => setError("Couldn't load more. Check your signal."));
-                setLoadingMore(false);
-              }}
-            >
-              Load more
-            </Button>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </section>
+            ))}
+            {next && (
+              <div className="list-more">
+                <Button
+                  busy={loadingMore}
+                  busyLabel="Loading…"
+                  onClick={async () => {
+                    setLoadingMore(true);
+                    await load(next).catch(() => setError("Couldn't load more. Check your signal."));
+                    setLoadingMore(false);
+                  }}
+                >
+                  Load more
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>

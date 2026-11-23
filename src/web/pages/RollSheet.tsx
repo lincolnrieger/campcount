@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Registration } from '../model';
 import { useApi } from '../useApi';
-import { Button, Field, Icon, LoadError, Loading, PageHeader, SkeletonRows } from '../ui';
+import { Button, Icon, LoadError, Loading, PageHeader, Segmented, SkeletonRows, plural } from '../ui';
 import { useEvent } from './EventLayout';
 
 /**
@@ -9,20 +9,27 @@ import { useEvent } from './EventLayout';
  * signal fail. Tick by hand, then enter the ticks later with Find by name.
  */
 export function RollSheet() {
-  const { event } = useEvent();
-  const { base: eventBase } = useEvent();
+  const { event, base: eventBase } = useEvent();
   const { data, error, loading, reload } = useApi<{ registrations: Registration[] }>(`/events/${event.id}/registrations`);
   const [title, setTitle] = useState('');
   const [who, setWho] = useState<'all' | 'youth' | 'adult'>('all');
+  const [group, setGroup] = useState('');
   const [columns, setColumns] = useState('In, Out');
   const back = { to: `${eventBase}/people`, label: 'People' };
+
+  const active = (data?.registrations ?? []).filter((r) => r.status === 'active');
+  const people = active
+    .filter((r) => (who === 'all' || r.kind === who) && (!group || r.groupName === group))
+    .sort((a, b) => a.groupName.localeCompare(b.groupName) || a.lastName.localeCompare(b.lastName));
+  const groups = [...new Set(active.map((r) => r.groupName).filter(Boolean))].sort((a, b) => a.localeCompare(b));
 
   const header = (
     <div className="no-print">
       <PageHeader
         title="Print roll sheet"
         back={back}
-        summary="A paper backup. If phones, lanyards or signal fail, tick names by hand and enter them later with Find by name on the scanner."
+        summary={data && plural(people.length, 'person', 'people')}
+        help="A paper backup. If phones, lanyards or signal fail, tick names by hand and enter them later with Find by name on the scanner."
         primary={
           data && (
             <Button kind="primary" onClick={() => window.print()}>
@@ -51,9 +58,6 @@ export function RollSheet() {
         <LoadError error={error} onRetry={reload} what="the roll sheet" />
       </>
     );
-  const people = (data?.registrations ?? [])
-    .filter((r) => r.status === 'active' && (who === 'all' || r.kind === who))
-    .sort((a, b) => a.groupName.localeCompare(b.groupName) || a.lastName.localeCompare(b.lastName));
   const cols = columns
     .split(',')
     .map((c) => c.trim())
@@ -63,39 +67,53 @@ export function RollSheet() {
   return (
     <>
       {header}
-      <div className="sections">
-        <div className="form no-print">
-          <div className="field-pair">
-            <Field id="rs-title" label="Heading" optional hint="For example, Saturday lunch">
-              <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
-            </Field>
-            <Field id="rs-cols" label="Tick columns" hint="Separate with commas, up to six">
-              <input className="input" value={columns} onChange={(e) => setColumns(e.target.value)} />
-            </Field>
+      <div className="sections roll-page">
+        <div className="panel roll-options no-print">
+          <div className="field roll-who">
+            <span className="field-label">Who</span>
+            <Segmented
+              label="Who"
+              value={who}
+              onChange={setWho}
+              options={[
+                { value: 'all', label: 'Everyone' },
+                { value: 'youth', label: 'Youth' },
+                { value: 'adult', label: 'Leaders' },
+              ]}
+            />
           </div>
-          <fieldset className="field">
-            <legend className="field-label">Who</legend>
-            <div className="choices choices-inline">
-              {(
-                [
-                  ['all', 'Everyone'],
-                  ['youth', 'Youth only'],
-                  ['adult', 'Leaders only'],
-                ] as const
-              ).map(([v, label]) => (
-                <label key={v} className="choice">
-                  <input type="radio" name="rs-who" checked={who === v} onChange={() => setWho(v)} />
-                  <span className="choice-text">{label}</span>
-                </label>
+          <div className="field">
+            <label className="field-label" htmlFor="rs-group">
+              Scout group
+            </label>
+            <select id="rs-group" className="select" value={group} onChange={(e) => setGroup(e.target.value)}>
+              <option value="">All groups</option>
+              {groups.map((g) => (
+                <option key={g}>{g}</option>
               ))}
-            </div>
-          </fieldset>
+            </select>
+          </div>
+          <div className="field">
+            <label className="field-label" htmlFor="rs-title">
+              Heading <span className="field-optional">(optional)</span>
+            </label>
+            <input id="rs-title" className="input" value={title} placeholder="Saturday lunch" onChange={(e) => setTitle(e.target.value)} />
+          </div>
+          <div className="field">
+            <label className="field-label" htmlFor="rs-cols">
+              Tick columns
+            </label>
+            <input id="rs-cols" className="input" value={columns} aria-describedby="rs-cols-hint" onChange={(e) => setColumns(e.target.value)} />
+            <span className="field-hint" id="rs-cols-hint">
+              Comma separated, up to six
+            </span>
+          </div>
         </div>
 
         <div className="roll-sheet">
           <p className="roll-title">
-            <strong>{title || 'Roll sheet'}</strong> · {event.name} · printed {new Date().toLocaleDateString('en-AU')}. Contains personal information: keep it secure and shred
-            after use.
+            <strong>{title || 'Roll sheet'}</strong>
+            {group && ` · ${group}`} · {event.name} · printed {new Date().toLocaleDateString('en-AU')}. Contains personal information: keep it secure and shred after use.
           </p>
           <div className="table-wrap">
             <table className="table roll">

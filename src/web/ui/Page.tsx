@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Icon } from './Icon';
+import { InfoTip } from './Kit';
 import { Menu } from './Menu';
 import type { MenuItem } from './Menu';
 import { useTitle } from '../shell';
@@ -14,6 +15,7 @@ export function PageHeader({
   title,
   back,
   summary,
+  help,
   primary,
   menu,
   menuLabel,
@@ -21,7 +23,10 @@ export function PageHeader({
 }: {
   title: ReactNode;
   back?: { to: string; label: string };
+  /** One short line under the title (counts, status). Not for explanations: use `help`. */
   summary?: ReactNode;
+  /** An explanation, behind an (i) next to the title rather than a paragraph on the page. */
+  help?: ReactNode;
   primary?: ReactNode;
   menu?: (MenuItem | false | null | undefined)[];
   menuLabel?: string;
@@ -39,7 +44,10 @@ export function PageHeader({
       )}
       <div className="page-header-row">
         <div className="page-header-text">
-          <h1 tabIndex={-1}>{title}</h1>
+          <div className="page-title-row">
+            <h1 tabIndex={-1}>{title}</h1>
+            {help && <InfoTip label="About this page">{help}</InfoTip>}
+          </div>
           {summary && <div className="page-header-summary">{summary}</div>}
         </div>
         {(primary || menu) && (

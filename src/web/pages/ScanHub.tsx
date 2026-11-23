@@ -34,19 +34,17 @@ export function ScanHub() {
     return (
       <>
         <PageHeader title="Scan" />
-        <EmptyState title="Nothing to scan right now">
-          Scanning starts when an event manager opens an event and adds you to its staff as a scanner, activity leader or meal team.
-        </EmptyState>
+        <EmptyState title="Nothing to scan right now">An event manager needs to open an event and add you as a scanner, leader or meal team.</EmptyState>
       </>
     );
   }
 
   return (
     <>
-      <PageHeader title="Scan" summary="Tap what you're scanning for. The camera opens straight away." />
+      <PageHeader title="Scan" summary={events.length > 1 ? undefined : event.name} help="Tap what you're scanning for. The camera opens straight away." />
       <div className="sections">
         {events.length > 1 && (
-          <div className="field scan-event-pick">
+          <div className="pf-inline-field">
             <label htmlFor="scan-event" className="field-label">
               Event
             </label>

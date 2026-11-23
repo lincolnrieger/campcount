@@ -3,7 +3,31 @@ import type { FormEvent } from 'react';
 import { ApiFailure, api } from '../api';
 import { minutesAgo } from '../model';
 import { useApi } from '../useApi';
-import { Badge, Button, Field, Icon, LoadError, Loading, Menu, Notice, PageHeader, Section, Sheet, SkeletonRows, plural, useConfirm, useToast } from '../ui';
+import { matchesSearch } from '../../shared/search';
+import {
+  Badge,
+  Banner,
+  Button,
+  ButtonLink,
+  EmptyState,
+  Field,
+  FilterTabs,
+  Icon,
+  InfoTip,
+  LoadError,
+  Loading,
+  Menu,
+  PageHeader,
+  SearchField,
+  Sheet,
+  SkeletonRows,
+  StatStrip,
+  Toolbar,
+  plural,
+  useConfirm,
+  useRemembered,
+  useToast,
+} from '../ui';
 import { useEvent } from './EventLayout';
 
 interface Item {
@@ -24,14 +48,17 @@ interface Reconciliation {
 
 /** One line on what each download holds. */
 const DESCRIPTION: Record<string, string> = {
-  attendance: 'Every scan, with time, place and who scanned it',
-  'activity-summary': 'Each activity: bookings, people who came, sign-outs',
-  'meal-counts': 'Each meal: how many were served',
-  site: 'Each person: when they arrived and left camp',
-  catering: 'Totals for each dietary need, for the kitchen',
+  attendance: 'Every scan: time, place, scanned by',
+  'activity-summary': 'Each activity: bookings, attendance, sign-outs',
+  'meal-counts': 'Each meal: number served',
+  site: 'Each person: arrived and left',
+  catering: 'Totals per dietary need, for the kitchen',
   'dietary-list': 'Each person and their dietary needs',
 };
 const SENSITIVE = new Set(['dietary-list', 'catering']);
+
+type Tab = 'checkup' | 'downloads' | 'quest';
+type Kind = 'all' | 'present' | 'check';
 
 const fail = (err: unknown) => (err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.');
 
@@ -71,39 +98,20 @@ function ReasonForm({ label, defaultReason, submitLabel, onSubmit, onCancel }: {
 
 /** Reports: the check-up before closing, downloads, and closing the event. */
 export function Reports() {
-  const { event, can, reload: reloadEvent } = useEvent();
+  const { event, can, base, reload: reloadEvent } = useEvent();
   const toast = useToast();
   const confirm = useConfirm();
   const rec = useApi<Reconciliation>(`/events/${event.id}/reconciliation`);
   const exports = useApi<{ exports: { key: string; label: string }[] }>(`/events/${event.id}/exports`);
   const [ask, setAsk] = useState<{ title: string; label: string; defaultReason: string; submitLabel: string; run: (reason: string) => Promise<void> } | null>(null);
+  const [tab, setTab] = useRemembered<Tab>(`reports:${event.id}:tab`, 'checkup');
+  const [kind, setKind] = useState<Kind>('all');
+  const [query, setQuery] = useState('');
   // When the page loaded, for spotting phones that haven't uploaded for a while.
   const [loadedAt] = useState(() => Date.now());
   const correct = can('attendance.correct') && (event.status === 'open' || event.status === 'completed');
-
-  const header = <PageHeader title="Reports" summary="Check everything is sorted, download records, then close the event." />;
-  if (rec.loading && !rec.data)
-    return (
-      <>
-        {header}
-        <Loading what="reports">
-          <SkeletonRows rows={4} action />
-        </Loading>
-      </>
-    );
-  if (rec.error)
-    return (
-      <>
-        {header}
-        <LoadError error={rec.error} onRetry={rec.reload} what="reports" />
-      </>
-    );
-  const data = rec.data!;
-  const items = data.items;
-  const groups = [...new Set(items.map((i) => i.contextKey))];
-  const time = (iso: string | null) => (iso ? new Date(iso).toLocaleString('en-AU', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: data.timezone }) : '');
-  const stale = data.devices.filter((d) => loadedAt - Date.parse(d.lastUpload) > 60 * 60_000);
-  const allClear = items.length === 0 && data.pendingDietary === 0 && stale.length === 0;
+  const canClose = can('event.close') && (event.status === 'open' || event.status === 'completed');
+  const items = rec.data?.items ?? [];
 
   async function transition(to: 'completed' | 'open') {
     const closing = to === 'completed';
@@ -128,148 +136,249 @@ export function Reports() {
     }
   }
 
+  const header = (
+    <PageHeader
+      title="Reports"
+      summary={
+        rec.data ? (
+          <>
+            <span className="sep">{items.length ? `${plural(items.length, 'record')} to sort out` : 'Nothing to sort out'}</span>
+            {event.status === 'completed' && <Badge>Closed</Badge>}
+          </>
+        ) : undefined
+      }
+      help="Sort out the check-up before you close the event. Scan records are not proof of where someone is and don't replace a roll call."
+      primary={
+        canClose && (
+          <Button kind={event.status === 'open' ? 'secondary' : 'primary'} onAction={() => transition(event.status === 'open' ? 'completed' : 'open')} busyLabel="Saving…">
+            <Icon name={event.status === 'open' ? 'lock' : 'unlock'} />
+            {event.status === 'open' ? 'Close event' : 'Reopen event'}
+          </Button>
+        )
+      }
+    />
+  );
+  if (rec.loading && !rec.data)
+    return (
+      <>
+        {header}
+        <Loading what="reports">
+          <SkeletonRows rows={4} action />
+        </Loading>
+      </>
+    );
+  if (rec.error)
+    return (
+      <>
+        {header}
+        <LoadError error={rec.error} onRetry={rec.reload} what="reports" />
+      </>
+    );
+  const data = rec.data!;
+  const time = (iso: string | null) => (iso ? new Date(iso).toLocaleString('en-AU', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: data.timezone }) : '');
+  const stale = data.devices.filter((d) => loadedAt - Date.parse(d.lastUpload) > 60 * 60_000);
+  const allClear = items.length === 0 && data.pendingDietary === 0 && stale.length === 0;
+  const presentCount = items.filter((i) => i.kind === 'still_present').length;
+  const checkCount = items.length - presentCount;
+  const shownItems = items
+    .filter((i) => kind === 'all' || (kind === 'present' ? i.kind === 'still_present' : i.kind !== 'still_present'))
+    .filter((i) => matchesSearch(query, i.name, i.detail));
+  const groups = [...new Set(shownItems.map((i) => i.contextKey))];
+  const pickKind = (k: Kind) => setKind(kind === k ? 'all' : k);
+  const exportCount = exports.data?.exports.length;
+
   return (
     <>
       {header}
-      <div className="sections">
-        <Section title="Check-up" id="checkup">
-          {allClear ? (
-            <Notice tone="success" title="All clear">
-              <p>No one is still signed in, no scans need checking, and every phone has uploaded.</p>
-            </Notice>
-          ) : (
-            <p className="meta">Sort these out before you close. Scan records are not proof of where someone is and don't replace a roll call.</p>
-          )}
+      <div className="sections reports">
+        <FilterTabs
+          label="Reports"
+          value={tab === 'quest' && !event.features.sideQuest ? 'checkup' : tab}
+          onChange={setTab}
+          options={[
+            { value: 'checkup', label: <>Check-up{items.length > 0 && <span className="tab-count">{items.length}</span>}</> },
+            { value: 'downloads', label: <>Downloads{exportCount ? <span className="tab-count">{exportCount}</span> : null}</> },
+            ...(event.features.sideQuest ? [{ value: 'quest' as Tab, label: 'Side Quest' }] : []),
+          ]}
+        />
 
-          {data.pendingDietary > 0 && (
-            <Notice tone="warning">
-              <p>{plural(data.pendingDietary, 'person has', 'people have')} dietary notes still to review. Import the roster again to review them.</p>
-            </Notice>
-          )}
+        {(tab === 'checkup' || (tab === 'quest' && !event.features.sideQuest)) && (
+          <div className="reports-checkup">
+            <StatStrip
+              items={[
+                { label: 'Still signed in', value: presentCount, tone: presentCount ? 'warning' : 'success', pressed: kind === 'present', onPress: () => pickKind('present') },
+                { label: 'Scans to check', value: checkCount, tone: checkCount ? 'warning' : 'success', pressed: kind === 'check', onPress: () => pickKind('check') },
+                { label: 'Scanning phones', value: data.devices.length },
+                { label: 'Phones not uploading', value: stale.length, tone: stale.length ? 'warning' : undefined, hint: 'No upload in the last hour' },
+              ]}
+            />
 
-          {groups.map((key) => {
-            const list = items.filter((i) => i.contextKey === key);
-            const present = list.filter((i) => i.kind === 'still_present');
-            const site = key === 'site:';
-            const place = list[0]!.contextName || 'Unknown place';
-            return (
-              <div key={key} className="list">
-                <div className="row checkup-head">
-                  <span className="row-main">
-                    <span className="row-title">{site ? 'Gate' : place}</span>
-                    <span className="row-meta">
-                      {present.length > 0 && `${plural(present.length, 'person', 'people')} still ${site ? 'on site' : 'signed in'}`}
-                      {present.length > 0 && present.length < list.length && ' · '}
-                      {list.length > present.length && `${plural(list.length - present.length, 'scan')} to check`}
-                    </span>
-                  </span>
-                  {correct && present.length > 0 && (
-                    <span className="row-side">
-                      <Button
-                        small
-                        onClick={() =>
-                          setAsk({
-                            title: site ? 'Record departures' : 'Sign everyone out',
-                            label: site
-                              ? `Record ${plural(present.length, 'departure')} from the gate now.`
-                              : `Sign ${plural(present.length, 'person', 'people')} out of ${place} now.`,
-                            defaultReason: site ? 'Confirmed departed at end of camp' : 'Activity finished',
-                            submitLabel: site ? 'Record departures' : 'Sign everyone out',
-                            run: async (reason) => {
-                              await api(`/events/${event.id}/reconciliation/sign-out-all`, { body: { contextKey: key, reason } });
-                              toast(site ? `Recorded ${plural(present.length, 'departure')}` : `Signed out ${plural(present.length, 'person', 'people')}`);
-                              setAsk(null);
-                              await rec.reload();
-                            },
-                          })
-                        }
-                      >
-                        {site ? 'Record departures' : 'Sign everyone out'}
-                      </Button>
-                    </span>
-                  )}
-                </div>
-                <ul>
-                  {list.map((i, n) => (
-                    <li key={`${i.scanId ?? i.name}-${n}`} className="row">
-                      <span className="row-main">
-                        <span>{i.name}</span>
-                        <span className="row-meta">{[i.detail, time(i.at)].filter(Boolean).join(' · ')}</span>
-                      </span>
-                      {i.kind === 'unknown_card' && <Badge tone="warning">Unknown card</Badge>}
-                      {i.kind === 'review' && <Badge tone="warning">To check</Badge>}
-                      {correct && i.scanId && (
-                        <span className="row-side">
-                          <Menu
-                            label={`Options for ${i.name}`}
-                            items={[
-                              {
-                                label: "Don't count this scan",
-                                danger: true,
-                                onSelect: () =>
-                                  setAsk({
-                                    title: "Don't count this scan",
-                                    label: `${i.name}: ${i.detail}. It stays in the history, marked as undone.`,
-                                    defaultReason: '',
-                                    submitLabel: "Don't count it",
-                                    run: async (reason) => {
-                                      await api(`/events/${event.id}/scans/${i.scanId}/void`, { body: { reason } });
-                                      toast('Scan corrected');
-                                      setAsk(null);
-                                      await rec.reload();
-                                    },
-                                  }),
-                              },
-                            ]}
-                          />
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
+            {(allClear || data.pendingDietary > 0) && (
+              <div className="banners">
+                {allClear && <Banner tone="success">All clear <span className="meta">· no one signed in, no scans to check, every phone has uploaded</span></Banner>}
+                {data.pendingDietary > 0 && (
+                  <Banner
+                    tone="warning"
+                    action={
+                      can('roster.edit') ? (
+                        <ButtonLink to={`${base}/people/import`} small>
+                          Review
+                        </ButtonLink>
+                      ) : undefined
+                    }
+                  >
+                    {plural(data.pendingDietary, 'person has', 'people have')} dietary notes to review <span className="meta">· import the roster again</span>
+                  </Banner>
+                )}
               </div>
-            );
-          })}
+            )}
 
-          {data.devices.length > 0 && (
-            <div className="list">
-              <p className="list-group-heading">Scanning phones</p>
-              <ul>
-                {data.devices.map((d) => {
-                  const late = stale.includes(d);
-                  return (
-                    <li key={d.deviceId} className="row">
-                      <span className="row-main">
-                        <span>Phone …{d.deviceId.slice(-4)}</span>
-                        <span className="row-meta">
-                          {plural(d.scans, 'scan')} · last upload {minutesAgo(d.lastUpload)}
-                        </span>
+            <div className="reports-columns">
+              <div className="reports-groups">
+                {items.length > 0 && (
+                  <Toolbar label="Filter the check-up">
+                    <SearchField id="checkup-q" label="Find a name" value={query} onChange={setQuery} slash />
+                    {kind !== 'all' && (
+                      <Button small kind="ghost" onClick={() => setKind('all')}>
+                        Show all
+                      </Button>
+                    )}
+                    <div className="toolbar-end">
+                      <span className="meta" aria-live="polite">
+                        {plural(shownItems.length, 'record')}
                       </span>
-                      {late && <Badge tone="warning">Check it has signal</Badge>}
-                    </li>
+                    </div>
+                  </Toolbar>
+                )}
+                {items.length > 0 && shownItems.length === 0 && <EmptyState title="Nothing matches">Try another name, or show all.</EmptyState>}
+                {groups.map((key) => {
+                  const list = shownItems.filter((i) => i.contextKey === key);
+                  const all = items.filter((i) => i.contextKey === key);
+                  const present = all.filter((i) => i.kind === 'still_present');
+                  const site = key === 'site:';
+                  const place = all[0]!.contextName || 'Unknown place';
+                  return (
+                    <div key={key} className="list checkup-group">
+                      <div className="row checkup-head">
+                        <span className="row-main">
+                          <span className="row-title">{site ? 'Gate' : place}</span>
+                          <span className="row-meta">
+                            {present.length > 0 && `${plural(present.length, 'person', 'people')} still ${site ? 'on site' : 'signed in'}`}
+                            {present.length > 0 && present.length < all.length && ' · '}
+                            {all.length > present.length && `${plural(all.length - present.length, 'scan')} to check`}
+                          </span>
+                        </span>
+                        {correct && present.length > 0 && (
+                          <span className="row-side">
+                            <Button
+                              small
+                              onClick={() =>
+                                setAsk({
+                                  title: site ? 'Record departures' : 'Sign everyone out',
+                                  label: site
+                                    ? `Record ${plural(present.length, 'departure')} from the gate now.`
+                                    : `Sign ${plural(present.length, 'person', 'people')} out of ${place} now.`,
+                                  defaultReason: site ? 'Confirmed departed at end of camp' : 'Activity finished',
+                                  submitLabel: site ? 'Record departures' : 'Sign everyone out',
+                                  run: async (reason) => {
+                                    await api(`/events/${event.id}/reconciliation/sign-out-all`, { body: { contextKey: key, reason } });
+                                    toast(site ? `Recorded ${plural(present.length, 'departure')}` : `Signed out ${plural(present.length, 'person', 'people')}`);
+                                    setAsk(null);
+                                    await rec.reload();
+                                  },
+                                })
+                              }
+                            >
+                              {site ? 'Record departures' : 'Sign everyone out'}
+                            </Button>
+                          </span>
+                        )}
+                      </div>
+                      <ul className="scroll-list checkup-items">
+                        {list.map((i, n) => (
+                          <li key={`${i.scanId ?? i.name}-${n}`} className="row">
+                            <span className="row-main">
+                              <span>{i.name}</span>
+                              <span className="row-meta">{[i.detail, time(i.at)].filter(Boolean).join(' · ')}</span>
+                            </span>
+                            {i.kind === 'unknown_card' && <Badge tone="warning">Unknown card</Badge>}
+                            {i.kind === 'review' && <Badge tone="warning">To check</Badge>}
+                            {correct && i.scanId && (
+                              <span className="row-side">
+                                <Menu
+                                  label={`Options for ${i.name}`}
+                                  items={[
+                                    {
+                                      label: "Don't count this scan",
+                                      danger: true,
+                                      onSelect: () =>
+                                        setAsk({
+                                          title: "Don't count this scan",
+                                          label: `${i.name}: ${i.detail}. It stays in the history, marked as undone.`,
+                                          defaultReason: '',
+                                          submitLabel: "Don't count it",
+                                          run: async (reason) => {
+                                            await api(`/events/${event.id}/scans/${i.scanId}/void`, { body: { reason } });
+                                            toast('Scan corrected');
+                                            setAsk(null);
+                                            await rec.reload();
+                                          },
+                                        }),
+                                    },
+                                  ]}
+                                />
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   );
                 })}
-              </ul>
+              </div>
+
+              {data.devices.length > 0 && (
+                <aside className="list reports-phones" aria-label="Scanning phones">
+                  <p className="list-group-heading">Scanning phones</p>
+                  <ul>
+                    {data.devices.map((d) => {
+                      const late = stale.includes(d);
+                      return (
+                        <li key={d.deviceId} className="row">
+                          <span className="row-main">
+                            <span>Phone …{d.deviceId.slice(-4)}</span>
+                            <span className="row-meta">
+                              {plural(d.scans, 'scan')} · last upload {minutesAgo(d.lastUpload)}
+                            </span>
+                          </span>
+                          {late && <Badge tone="warning">Check it has signal</Badge>}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </aside>
+              )}
             </div>
-          )}
-        </Section>
+          </div>
+        )}
 
-        {event.features.sideQuest && <SideQuestBoard eventId={event.id} />}
-
-        <Section title="Downloads" id="downloads">
-          {exports.loading && !exports.data ? (
-            <Loading what="downloads" rows={3} />
-          ) : exports.error && exports.error.status !== 403 ? (
-            <LoadError error={exports.error} onRetry={exports.reload} what="downloads" />
-          ) : (exports.data?.exports.length ?? 0) === 0 ? (
-            <p className="meta">Your role can't download records.</p>
-          ) : (
-            <>
-              <p className="meta">Spreadsheet files (CSV) that open in Excel. Every download is recorded in the activity log. Store them securely.</p>
-              <ul className="list">
+        {tab === 'downloads' && (
+          <section className="section" aria-labelledby="downloads-heading">
+            <div className="section-head section-head-start">
+              <h2 id="downloads-heading">Downloads</h2>
+              <InfoTip label="About downloads">Spreadsheet files (CSV) that open in Excel. Every download is recorded in the activity log. Store them securely.</InfoTip>
+            </div>
+            {exports.loading && !exports.data ? (
+              <Loading what="downloads" rows={3} />
+            ) : exports.error && exports.error.status !== 403 ? (
+              <LoadError error={exports.error} onRetry={exports.reload} what="downloads" />
+            ) : (exportCount ?? 0) === 0 ? (
+              <EmptyState title="Your role can't download records" />
+            ) : (
+              <ul className="download-grid">
                 {exports.data!.exports.map((e) => (
-                  <li key={e.key} className="row">
-                    <span className="row-main">
+                  <li key={e.key} className="panel download-card">
+                    <span className="download-text">
                       <span className="row-title">{e.label}</span>
                       {DESCRIPTION[e.key] && <span className="row-meta">{DESCRIPTION[e.key]}</span>}
                       {SENSITIVE.has(e.key) && (
@@ -278,34 +387,18 @@ export function Reports() {
                         </span>
                       )}
                     </span>
-                    <span className="row-side">
-                      <a className="btn btn-secondary btn-small" href={`/api/events/${event.id}/exports/${e.key}.csv`} download>
-                        <Icon name="download" />
-                        Download<span className="visually-hidden"> {e.label}</span>
-                      </a>
-                    </span>
+                    <a className="btn btn-secondary btn-small" href={`/api/events/${event.id}/exports/${e.key}.csv`} download>
+                      <Icon name="download" />
+                      CSV<span className="visually-hidden"> download: {e.label}</span>
+                    </a>
                   </li>
                 ))}
               </ul>
-            </>
-          )}
-        </Section>
-
-        {can('event.close') && (event.status === 'open' || event.status === 'completed') && (
-          <section className="danger-zone" aria-labelledby="close-heading">
-            <h2 id="close-heading">{event.status === 'open' ? 'Close event' : 'Reopen event'}</h2>
-            <p className="prose">
-              {event.status === 'open'
-                ? 'Closing stops scanning and locks settings. You can reopen it for late corrections.'
-                : 'This event is closed. Reopen it to fix late records; close it again when you are done.'}
-            </p>
-            <div>
-              <Button onAction={() => transition(event.status === 'open' ? 'completed' : 'open')} busyLabel="Saving…">
-                {event.status === 'open' ? 'Close event' : 'Reopen event'}
-              </Button>
-            </div>
+            )}
           </section>
         )}
+
+        {tab === 'quest' && event.features.sideQuest && <SideQuestBoard eventId={event.id} />}
       </div>
 
       <Sheet open={ask !== null} title={ask?.title ?? ''} onClose={() => setAsk(null)}>
@@ -321,37 +414,53 @@ function SideQuestBoard({ eventId }: { eventId: string }) {
     `/events/${eventId}/side-quest`,
   );
   return (
-    <Section title="Super Splash Side Quest" id="side-quest">
-      <p className="meta">
-        The secret game: campers collect each other by scanning lanyards with their own phone.
-        {data ? ` ${data.rows.length} ${data.rows.length === 1 ? 'player' : 'players'}, ${data.collections} ${data.collections === 1 ? 'person' : 'people'} collected.` : ''}
-      </p>
-      {!data ? null : data.rows.length === 0 ? (
-        <p className="meta">No one has found it yet.</p>
+    <section className="section" aria-labelledby="side-quest-heading">
+      <div className="section-head section-head-start">
+        <h2 id="side-quest-heading">Super Splash Side Quest</h2>
+        <InfoTip label="About the Side Quest">The secret game: campers collect each other by scanning lanyards with their own phone. Top 20 shown.</InfoTip>
+      </div>
+      {!data ? (
+        <Loading what="the leaderboard" rows={4} />
       ) : (
-        <div className="table-wrap">
-          <table className="table">
-            <thead>
-              <tr>
-                <th scope="col" className="cell-num">Place</th>
-                <th scope="col">Name</th>
-                <th scope="col">Group</th>
-                <th scope="col" className="cell-num">Collected</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.rows.slice(0, 20).map((r) => (
-                <tr key={r.registrationId}>
-                  <td className="cell-num">{r.place}</td>
-                  <td>{r.name}</td>
-                  <td>{[r.section, r.groupName].filter(Boolean).join(' · ')}</td>
-                  <td className="cell-num">{r.collected}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <StatStrip
+            items={[
+              { label: data.rows.length === 1 ? 'Player' : 'Players', value: data.rows.length },
+              { label: 'People collected', value: data.collections },
+            ]}
+          />
+          {data.rows.length === 0 ? (
+            <EmptyState title="No one has found it yet" />
+          ) : (
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th scope="col" className="cell-num">
+                      Place
+                    </th>
+                    <th scope="col">Name</th>
+                    <th scope="col">Group</th>
+                    <th scope="col" className="cell-num">
+                      Collected
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.rows.slice(0, 20).map((r) => (
+                    <tr key={r.registrationId}>
+                      <td className="cell-num">{r.place}</td>
+                      <td>{r.name}</td>
+                      <td>{[r.section, r.groupName].filter(Boolean).join(' · ')}</td>
+                      <td className="cell-num">{r.collected}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
-    </Section>
+    </section>
   );
 }

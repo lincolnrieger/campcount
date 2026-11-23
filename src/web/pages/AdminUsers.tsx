@@ -8,11 +8,13 @@ import { useSession } from '../session';
 import { useApi } from '../useApi';
 import {
   Badge,
+  Banner,
   Button,
-  Choice,
   EmptyState,
   Field,
+  FilterChips,
   Icon,
+  InfoTip,
   LoadError,
   Loading,
   Menu,
@@ -21,8 +23,11 @@ import {
   Sheet,
   SkeletonRows,
   SortHeader,
+  Toggle,
+  Toolbar,
   sortRows,
   useConfirm,
+  useRemembered,
   useSort,
   useToast,
   useWide,
@@ -58,7 +63,12 @@ function LinkBox({ shared, onEmail, emailBusy }: { shared: Shared; onEmail?: () 
   const canShare = typeof navigator.share === 'function';
   return (
     <div className="stack">
-      <Field id="share-link" label={shared.label} hint={`Works once. Expires ${expires}. Send it only to them: anyone with it can set the password.`}>
+      <Field id="share-link" label={shared.label} hint={
+          <>
+            Works once · expires {expires}{' '}
+            <InfoTip label="About password links">Send it only to them: anyone with the link can set the password.</InfoTip>
+          </>
+        }>
         <input className="input" readOnly value={shared.link} onFocus={(e) => e.target.select()} />
       </Field>
       <div className="btn-row">
@@ -92,8 +102,8 @@ export function AdminUsers() {
   const confirm = useConfirm();
   const wide = useWide();
   const users = useApi<{ users: UserRow[] }>('/admin/users');
-  const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<Filter>('all');
+  const [query, setQuery] = useRemembered('accounts:q', '');
+  const [filter, setFilter] = useRemembered<Filter>('accounts:filter', 'all');
   const { sort, toggle } = useSort<'name' | 'email' | 'events' | 'lastSeen'>('name');
   const [adding, setAdding] = useState(false);
   const [renaming, setRenaming] = useState<UserRow | null>(null);
@@ -131,16 +141,12 @@ export function AdminUsers() {
   }
 
   const all = users.data?.users ?? [];
+  const noPassword = (u: UserRow) => !u.hasPassword && !u.isDemo && u.status === 'active';
+  const inFilter = (u: UserRow, f: Filter) =>
+    f === 'all' || (f === 'admins' && u.platformAdmin) || (f === 'no-password' && noPassword(u)) || (f === 'disabled' && u.status === 'disabled') || (f === 'demo' && u.isDemo);
+  const count = (f: Filter) => all.filter((u) => inFilter(u, f)).length;
   const list = sortRows(
-    all.filter(
-      (u) =>
-        matchesSearch(query, u.displayName, u.email) &&
-        (filter === 'all' ||
-          (filter === 'admins' && u.platformAdmin) ||
-          (filter === 'no-password' && !u.hasPassword && !u.isDemo && u.status === 'active') ||
-          (filter === 'disabled' && u.status === 'disabled') ||
-          (filter === 'demo' && u.isDemo)),
-    ),
+    all.filter((u) => matchesSearch(query, u.displayName, u.email) && inFilter(u, filter)),
     (u) => (sort.key === 'name' ? u.displayName : sort.key === 'email' ? u.email : sort.key === 'events' ? u.events : (u.lastSeen ?? '')),
     sort.dir,
   );
@@ -215,12 +221,28 @@ export function AdminUsers() {
     return <Menu label={`Actions for ${u.displayName}`} items={items} />;
   };
 
+  const lastSeen = (u: UserRow) => (u.lastSeen ? minutesAgo(u.lastSeen) : 'Never');
+  /** The one-tap fix for an account that can't sign in yet. */
+  const quick = (u: UserRow) =>
+    noPassword(u) && (
+      <Button small onAction={() => passwordLink(u, false)} busyLabel="Making…" aria-label={`Set-up link for ${u.displayName}`}>
+        <Icon name="copy" size={16} />
+        Set-up link
+      </Button>
+    );
+  const missing = count('no-password');
+
   return (
     <>
       <PageHeader
         title="Accounts"
         back={{ to: '/admin', label: 'Admin' }}
         summary={users.data && `${all.length} accounts · ${plural(all.filter((u) => u.platformAdmin).length, 'admin')}`}
+        help={
+          <>
+            Everyone who can sign in. To put someone on a camp's staff, open the camp from <Link to="/">Camps</Link>.
+          </>
+        }
         primary={
           <Button kind="primary" onClick={() => setAdding(true)}>
             <Icon name="plus" />
@@ -228,22 +250,43 @@ export function AdminUsers() {
           </Button>
         }
       />
-      <div className="sections">
-        <div className="toolbar">
-          <SearchField id="accounts-q" label="Search name or email" value={query} onChange={setQuery} />
-          <select className="select" aria-label="Show" value={filter} onChange={(e) => setFilter(e.target.value as Filter)}>
-            <option value="all">All accounts</option>
-            <option value="admins">Admins</option>
-            <option value="no-password">No password yet</option>
-            <option value="disabled">Disabled</option>
-            <option value="demo">Demo accounts</option>
-          </select>
+      <div className="pf-stack">
+        {users.data && missing > 0 && filter !== 'no-password' && (
+          <Banner
+            tone="warning"
+            action={
+              <Button small onClick={() => setFilter('no-password')}>
+                Show them
+              </Button>
+            }
+          >
+            {plural(missing, 'account')} can't sign in with a password yet
+          </Banner>
+        )}
+        <Toolbar sticky label="Find accounts">
+          <SearchField id="accounts-q" label="Search name or email" placeholder="Search name or email" value={query} onChange={setQuery} slash />
           {users.data && (
-            <p className="toolbar-count" aria-live="polite">
-              {list.length} of {all.length}
-            </p>
+            <FilterChips
+              label="Show"
+              value={filter}
+              onChange={setFilter}
+              options={[
+                { value: 'all', label: 'All', count: all.length },
+                { value: 'admins', label: 'Admins', count: count('admins') },
+                { value: 'no-password', label: 'No password', count: missing },
+                { value: 'disabled', label: 'Disabled', count: count('disabled') },
+                { value: 'demo', label: 'Demo', count: count('demo') },
+              ]}
+            />
           )}
-        </div>
+          {users.data && (
+            <div className="toolbar-end">
+              <p className="toolbar-count" aria-live="polite">
+                {list.length} of {all.length}
+              </p>
+            </div>
+          )}
+        </Toolbar>
 
         {users.loading && !users.data ? (
           <Loading what="accounts">
@@ -252,14 +295,38 @@ export function AdminUsers() {
         ) : users.error ? (
           <LoadError error={users.error} onRetry={users.reload} what="accounts" />
         ) : list.length === 0 ? (
-          <EmptyState title={all.length ? 'No accounts match' : 'No accounts yet'}>{all.length ? 'Try another search or filter.' : undefined}</EmptyState>
+          <EmptyState
+            title={all.length ? 'No accounts match' : 'No accounts yet'}
+            actions={
+              all.length > 0 && (
+                <Button
+                  onClick={() => {
+                    setQuery('');
+                    setFilter('all');
+                  }}
+                >
+                  Clear filters
+                </Button>
+              )
+            }
+          />
         ) : wide ? (
-          <div className="table-wrap">
-            <table className="table">
+          <div className="table-wrap scroll-list">
+            <table className="table pf-table">
               <thead>
                 <tr>
-                  <SortHeader label="Name" column="name" sort={sort} onSort={toggle} />
-                  <SortHeader label="Email" column="email" sort={sort} onSort={toggle} />
+                  <th scope="col" aria-sort={sort.key === 'name' || sort.key === 'email' ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
+                    <span className="pf-sort-pair">
+                      <button type="button" className="sort-btn" onClick={() => toggle('name')}>
+                        Name
+                        <Icon name={sort.key === 'name' ? (sort.dir === 'asc' ? 'sortAsc' : 'sortDesc') : 'sort'} size={16} />
+                      </button>
+                      <button type="button" className="sort-btn" onClick={() => toggle('email')}>
+                        Email
+                        <Icon name={sort.key === 'email' ? (sort.dir === 'asc' ? 'sortAsc' : 'sortDesc') : 'sort'} size={16} />
+                      </button>
+                    </span>
+                  </th>
                   <th scope="col">Status</th>
                   <SortHeader label="Events" column="events" sort={sort} onSort={toggle} className="cell-num" />
                   <SortHeader label="Last active" column="lastSeen" sort={sort} onSort={toggle} />
@@ -272,16 +339,23 @@ export function AdminUsers() {
                 {list.map((u) => (
                   <tr key={u.id} className={u.status === 'disabled' ? 'is-muted' : undefined}>
                     <td>
-                      <strong>
-                        {u.displayName}
-                        {u.id === myId && ' (you)'}
-                      </strong>
+                      <span className="pf-person">
+                        <strong>
+                          {u.displayName}
+                          {u.id === myId && <span className="meta"> (you)</span>}
+                        </strong>
+                        <span className="meta">{u.email}</span>
+                      </span>
                     </td>
-                    <td>{u.email}</td>
                     <td>{badges(u)}</td>
                     <td className="cell-num">{u.events}</td>
-                    <td className="meta">{u.lastSeen ? minutesAgo(u.lastSeen) : 'Never'}</td>
-                    <td className="cell-action">{menu(u)}</td>
+                    <td className="meta pf-nowrap">{lastSeen(u)}</td>
+                    <td className="cell-action">
+                      <span className="pf-row-actions">
+                        {quick(u)}
+                        {menu(u)}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -301,15 +375,16 @@ export function AdminUsers() {
                   </span>
                   {badges(u)}
                 </span>
-                <span className="row-side">{menu(u)}</span>
+                <span className="row-side">
+                  {quick(u)}
+                  {menu(u)}
+                </span>
               </li>
             ))}
           </ul>
         )}
-        <p className="meta">
-          To put someone on a camp's staff, open the camp from <Link to="/">Camps</Link>.
-        </p>
       </div>
+
 
       <Sheet open={adding} title="Add account" onClose={() => setAdding(false)}>
         {adding && (
@@ -380,19 +455,9 @@ function AddAccount({ onDone }: { onDone: (shared: Shared | null) => void }) {
       <Field id="u-email" label="Email address" error={errors.email}>
         <input className="input" type="email" value={form.email} autoComplete="off" onChange={(e) => setForm({ ...form, email: e.target.value })} />
       </Field>
-      <div className="choices">
-        <Choice
-          label="Admin"
-          description="Can create camps, manage everyone's accounts, use View as and read the activity log."
-          checked={form.platformAdmin}
-          onChange={(e) => setForm({ ...form, platformAdmin: e.target.checked })}
-        />
-        <Choice
-          label="Email them a set-up link"
-          description="They choose their own password from the link. You'll get the link to copy too."
-          checked={form.sendEmail}
-          onChange={(e) => setForm({ ...form, sendEmail: e.target.checked })}
-        />
+      <div className="pf-toggles">
+        <Toggle label="Admin" hint="Camps, accounts, View as, activity log" checked={form.platformAdmin} onChange={(v) => setForm({ ...form, platformAdmin: v })} />
+        <Toggle label="Email them a set-up link" hint="You also get the link to copy" checked={form.sendEmail} onChange={(v) => setForm({ ...form, sendEmail: v })} />
       </div>
       <div className="btn-row">
         <Button type="submit" kind="primary" busy={busy} busyLabel="Adding…">

@@ -20,7 +20,8 @@
 /* ---------- Meals ---------- */
 .meal-time {
   align-self: flex-start;
-  width: 4.5rem;
+  width: 5rem;
+  white-space: nowrap;
   flex: none;
   padding-top: 1px;
   color: var(--ink-2);
@@ -440,7 +441,8 @@
 .meal-cards > .meal-card + .meal-card {
   border-top: var(--border-width) solid var(--divider);
 }
-.meal-card.is-muted .meal-card-head {
+/* Not the whole head: opacity would trap the ⋯ menu under the next card. */
+.meal-card.is-muted .meal-card-head > :not(.row-side) {
   opacity: 0.6;
 }
 .meal-card-head {

@@ -1,0 +1,526 @@
+/* Organiser pages (programme): layout for the UI rework. Uses the shared kit (kit.css). */
+
+/* ---------- Shared bits ---------- */
+.pg-sections {
+  gap: var(--space-4);
+}
+.pg-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-1);
+}
+.pg-group {
+  display: grid;
+  gap: var(--space-2);
+}
+.pg-group-heading {
+  padding: 0 0 var(--space-2);
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-heavy);
+  letter-spacing: 0.02em;
+  text-align: left;
+  text-transform: uppercase;
+}
+.pg-table-fixed {
+  table-layout: fixed;
+}
+.pg-table-fixed .pg-col-place {
+  width: 20%;
+}
+.pg-table-fixed .pg-col-num {
+  width: 6rem;
+}
+.pg-table-fixed .pg-col-status {
+  width: 17rem;
+}
+.pg-table-fixed td {
+  overflow-wrap: anywhere;
+}
+.pg-table td {
+  height: 3.25rem;
+}
+.pg-table tr.is-muted td,
+.pg-table tr.is-muted td a.cell-link {
+  color: var(--ink-3);
+}
+.pg-table td:last-child {
+  text-align: right;
+}
+.pg-col-time {
+  width: 6.5rem;
+  white-space: nowrap;
+}
+/* A row of filter chips that takes a line of its own inside a toolbar. */
+.pg-toolbar-row {
+  flex-basis: 100%;
+  order: 10;
+  min-width: 0;
+}
+.pg-table .activity-time {
+  width: auto;
+}
+.pg-table .activity-time .meta {
+  font-weight: var(--weight-regular);
+}
+
+/* A compact sticky bar at the bottom of a form or wizard step. */
+.pg-actionbar {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 calc(var(--space-2) * -1);
+  padding: var(--space-3) var(--space-2);
+  border-top: var(--border-width) solid var(--divider);
+  background: color-mix(in srgb, var(--canvas) 94%, transparent);
+  backdrop-filter: blur(6px);
+}
+.pg-actionbar-end {
+  margin-left: auto;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+@media (max-width: 1023.98px) {
+  .pg-actionbar {
+    bottom: var(--tabbar-h, 0px);
+  }
+}
+
+/* ---------- Activity page ---------- */
+.pg-instructions {
+  border: var(--border-width) solid var(--info-border, var(--divider));
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  background: var(--info-bg, var(--surface));
+}
+.pg-instructions > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 2.75rem;
+  padding: 0 var(--space-4);
+  font-weight: var(--weight-bold);
+  cursor: pointer;
+  list-style: none;
+}
+.pg-instructions > summary::-webkit-details-marker {
+  display: none;
+}
+.pg-instructions > summary > .icon:last-child {
+  margin-left: auto;
+  color: var(--ink-3);
+  transition: transform var(--duration) var(--ease);
+}
+.pg-instructions[open] > summary > .icon:last-child {
+  transform: rotate(180deg);
+}
+.pg-instructions > p {
+  padding: 0 var(--space-4) var(--space-3);
+}
+
+/* People as a grid of rows: two or three columns on wide screens. */
+.pg-people {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 24rem), 1fr));
+  gap: var(--border-width);
+  margin: 0;
+  padding: 0;
+  border: var(--border-width) solid var(--divider);
+  border-radius: var(--radius-lg);
+  background: var(--divider);
+  list-style: none;
+}
+.pg-people > li {
+  background: var(--surface);
+}
+.pg-people > li:first-child {
+  border-top-left-radius: calc(var(--radius-lg) - var(--border-width));
+}
+.pg-people > li:last-child {
+  border-bottom-right-radius: calc(var(--radius-lg) - var(--border-width));
+}
+.pg-person {
+  align-items: flex-start;
+  padding-top: var(--space-3);
+  padding-bottom: var(--space-3);
+}
+.pg-person .activity-badges {
+  margin-top: 6px;
+}
+@media print {
+  .pg-people {
+    display: block;
+    border: 0;
+    background: none;
+  }
+  .pg-people > li {
+    border-top: 1px solid #CCCCCC;
+  }
+  .stats .stat {
+    padding: var(--space-1) var(--space-2);
+  }
+}
+
+/* ---------- Forms: details beside options ---------- */
+.pg-edit {
+  display: grid;
+  gap: var(--space-4);
+}
+.pg-edit-grid {
+  display: grid;
+  gap: var(--space-4);
+  align-items: start;
+}
+@media (min-width: 1024px) {
+  .pg-edit-grid {
+    grid-template-columns: minmax(0, 3fr) minmax(18rem, 2fr);
+  }
+}
+.pg-edit-main,
+.pg-edit-side {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.pg-panel-title {
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-heavy);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.pg-when {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(7.5rem, 1fr) minmax(7.5rem, 1fr);
+  gap: var(--space-3);
+}
+.pg-when > .field:only-child {
+  grid-column: 1 / -1;
+}
+@media (max-width: 599.98px) {
+  .pg-when {
+    grid-template-columns: 1fr 1fr;
+  }
+  .pg-when > .field:first-child {
+    grid-column: 1 / -1;
+  }
+}
+.pg-toggles {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.pg-toggles .toggle {
+  align-items: flex-start;
+}
+.pg-toggles .toggle-track {
+  margin-top: 2px;
+}
+.field-label .infotip {
+  margin-left: 2px;
+}
+
+/* Phones: filter chips scroll sideways on one line instead of stacking. */
+@media (max-width: 767.98px) {
+  .pg-sections .toolbar .chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin: 0 calc(var(--space-2) * -1);
+    padding: 0 var(--space-2);
+  }
+  .pg-sections .toolbar > .toolbar-end {
+    width: 100%;
+    margin-left: 0;
+  }
+  .pg-sections .toolbar > .toolbar-end > .chips {
+    flex: 1;
+  }
+}
+
+/* ---------- Import programme ---------- */
+.pg-import-file {
+  display: grid;
+  gap: var(--space-3);
+}
+.pg-import-file-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.pg-push {
+  margin-left: auto;
+}
+.pg-dropzone {
+  max-width: none;
+}
+.pg-import-step {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.pg-map {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pg-map-item {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--divider);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.pg-map-item.is-set {
+  border-color: var(--success-border);
+}
+.pg-map-label {
+  font-weight: var(--weight-bold);
+}
+.pg-map-sample {
+  min-height: 1.2em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pg-nowrap {
+  white-space: nowrap;
+}
+
+/* ---------- Schedule ---------- */
+.schedule-key {
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  gap: var(--space-3);
+}
+.schedule-key > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.pg-tray-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+/* On computers the grid scrolls inside itself, so the day names stay in view. */
+@media (min-width: 1024px) {
+  .schedule-scroll {
+    max-height: calc(100vh - 13rem);
+    min-height: 24rem;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  .schedule-tray {
+    max-height: calc(100vh - 13rem);
+  }
+}
+@media print {
+  .schedule-scroll {
+    max-height: none;
+  }
+}
+.pg-sections > * {
+  min-width: 0;
+}
+.pg-toolbar-first {
+  flex-basis: 100%;
+  min-width: 0;
+}
+/* Three or more side by side: the name first; the time is in the tooltip and on the details panel. */
+.schedule-item.is-narrow {
+  padding: 2px var(--space-1);
+}
+.schedule-item.is-narrow .schedule-time,
+.schedule-item.is-narrow .schedule-meta {
+  display: none;
+}
+.schedule-item.is-narrow .schedule-name {
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: auto;
+}
+@media (max-width: 1023.98px) {
+  .schedule-tray {
+    order: 2;
+  }
+}
+@media (max-width: 767.98px) {
+  .pg-sections .toolbar > .schedule-key {
+    display: none;
+  }
+}
+
+/* ---------- Teams ---------- */
+.pg-numbers {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+  align-items: start;
+}
+@media (max-width: 599.98px) {
+  .pg-numbers {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.pg-team-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr));
+  gap: var(--space-3);
+  align-items: start;
+}
+.pg-team {
+  display: grid;
+  min-width: 0;
+  border: var(--border-width) solid var(--divider);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.pg-team-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  border-bottom: var(--border-width) solid var(--divider);
+}
+.pg-team-head h2 {
+  font-size: var(--text-base);
+}
+.pg-team-members {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pg-team-members > li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 3rem;
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-4);
+}
+.pg-team-members > li + li {
+  border-top: var(--border-width) solid var(--divider);
+}
+.pg-team-members > li.is-match {
+  background: var(--brand-tint);
+}
+.pg-team-members > li .btn {
+  flex: none;
+}
+.pg-team-empty,
+.pg-team-more {
+  padding: var(--space-3) var(--space-4);
+}
+.pg-team-foot {
+  padding: var(--space-1) var(--space-2);
+  border-top: var(--border-width) solid var(--divider);
+}
+
+/* ---------- Meals ---------- */
+.pg-mi-columns {
+  display: grid;
+  gap: var(--space-4);
+  align-items: start;
+}
+@media (min-width: 1100px) {
+  .pg-mi-columns {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
+}
+.pg-inline-help {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.pg-plan-list {
+  max-height: 40vh;
+}
+.mi-copy-list {
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.meal-card-head .row-main > span:has(.badge) {
+  margin-top: 4px;
+}
+
+/* ---------- Sign-up kiosk ---------- */
+.pg-kiosk {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-4);
+}
+.pg-kiosk-qr {
+  width: 7.5rem;
+}
+.pg-kiosk-main {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.pg-kiosk-main .btn-row {
+  margin: 0;
+}
+@media (max-width: 599.98px) {
+  .pg-kiosk {
+    grid-template-columns: 1fr;
+  }
+  .pg-kiosk-qr {
+    width: 9rem;
+  }
+}
+.pg-check {
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+  accent-color: var(--brand);
+}
+
+/* ---------- Booking links ---------- */
+.pg-link-cell {
+  max-width: 0;
+  width: 40%;
+}
+.pg-link-cell .booking-link {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pg-numbers {
+  align-items: end;
+}
+/* An open row menu floats over the rows after it. */
+.row-side > .menu:has(> [aria-expanded='true']),
+.pg-team-head .menu:has(> [aria-expanded='true']) {
+  z-index: 6;
+}
+@media (max-width: 599.98px) {
+  .row:has(> .pg-places) {
+    flex-wrap: wrap;
+  }
+  .row > .pg-places {
+    order: 3;
+    margin-left: calc(1.25rem + var(--space-3));
+  }
+  .row:has(> .pg-places) > .row-main {
+    flex-basis: calc(100% - 9rem);
+  }
+}

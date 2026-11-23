@@ -4,7 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router';
 import { ApiFailure, api } from '../api';
 import { ViewAsForm } from '../components/ViewAs';
 import { useSession } from '../session';
-import { Badge, Button, Choice, Field, Icon, Notice, PageHeader, Section, useConfirm, useToast } from '../ui';
+import { Badge, Banner, Button, Choice, Field, Icon, Notice, PageHeader, useConfirm, useToast } from '../ui';
 
 const failText = (err: unknown) => (err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.');
 
@@ -18,6 +18,7 @@ export function Account() {
   const [nameError, setNameError] = useState<string | undefined>();
   const [password, setPassword] = useState('');
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   if (me?.kind !== 'user') return null;
   const user = me.user;
   const isAdmin = me.platformPermissions.includes('platform.users.manage');
@@ -61,9 +62,12 @@ export function Account() {
   return (
     <>
       <PageHeader title="Account" summary={user.email} />
-      <div className="sections narrow-page">
-        <Section title="Your details" id="details">
-          <form className="form" onSubmit={saveName} noValidate>
+      <div className="pf-split pf-account">
+        <section className="pf-panel" aria-labelledby="details-heading">
+          <h2 className="pf-panel-title" id="details-heading">
+            Your details
+          </h2>
+          <form className="pf-form" onSubmit={saveName} noValidate>
             <Field id="account-name" label="Name" error={nameError}>
               <input className="input" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
             </Field>
@@ -76,65 +80,91 @@ export function Account() {
               </Button>
             </div>
           </form>
-        </Section>
+        </section>
 
-        <Section title="Sign-in and access" id="access">
-          <ul className="list">
-            {!user.isDemo && (
-              <li className="row row-link">
-                <span className="row-main">
-                  <span className="row-title">
-                    <Link to="password">{user.hasPassword ? 'Change password' : 'Set a password'}</Link>
-                  </span>
-                  <span className="row-meta">{user.hasPassword ? 'Changing it signs you out on your other devices' : 'So you can sign in without waiting for an email'}</span>
-                </span>
-                {!user.hasPassword && <Badge tone="warning">Not set</Badge>}
-                <span className="row-chevron">
-                  <Icon name="chevron" />
-                </span>
-              </li>
-            )}
-            {canViewAs && (
-              <li className="row row-link">
-                <span className="row-main">
-                  <span className="row-title">
-                    <Link to="view-as">View as a role</Link>
-                  </span>
-                  <span className="row-meta">See an event the way a scanner, leader or the meal team sees it</span>
-                </span>
-                {me.preview && <Badge tone="brand">Viewing</Badge>}
-                <span className="row-chevron">
-                  <Icon name="chevron" />
-                </span>
-              </li>
-            )}
-          </ul>
-          <div>
-            <Button onClick={() => void signOut()}>Sign out</Button>
-          </div>
-        </Section>
+        <div className="pf-stack">
+          <section className="pf-panel" aria-labelledby="access-heading">
+              <h2 className="pf-panel-title" id="access-heading">
+                Sign-in and access
+              </h2>
+              <ul className="pf-links">
+                {!user.isDemo && (
+                  <li className="row row-link">
+                    <Icon name="lock" />
+                    <span className="row-main">
+                      <span className="row-title">
+                        <Link to="password">{user.hasPassword ? 'Change password' : 'Set a password'}</Link>
+                      </span>
+                      <span className="row-meta">{user.hasPassword ? 'Signs you out on other devices' : 'Sign in without waiting for an email'}</span>
+                    </span>
+                    {!user.hasPassword && <Badge tone="warning">Not set</Badge>}
+                    <span className="row-chevron">
+                      <Icon name="chevron" />
+                    </span>
+                  </li>
+                )}
+                {canViewAs && (
+                  <li className="row row-link">
+                    <Icon name="eye" />
+                    <span className="row-main">
+                      <span className="row-title">
+                        <Link to="view-as">View as a role</Link>
+                      </span>
+                      <span className="row-meta">See a camp as a scanner, leader or meal team</span>
+                    </span>
+                    {me.preview && <Badge tone="brand">Viewing</Badge>}
+                    <span className="row-chevron">
+                      <Icon name="chevron" />
+                    </span>
+                  </li>
+                )}
+              </ul>
+              <div>
+                <Button onClick={() => void signOut()}>Sign out</Button>
+              </div>
+            </section>
 
-        {!user.isDemo && (
-          <section className="danger-zone" aria-labelledby="delete-heading">
-            <h2 id="delete-heading">Delete my account</h2>
-            <p className="meta">Your account and access are removed. This can't be undone.</p>
-            {deleteError && (
-              <Notice tone="error">
-                <p>{deleteError}</p>
-              </Notice>
-            )}
-            {user.hasPassword && (
-              <Field id="delete-pw" label="Your password" hint="Needed to delete your account.">
-                <input className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-              </Field>
-            )}
-            <div>
-              <Button kind="danger" disabled={user.hasPassword && !password} onAction={deleteAccount} busyLabel="Deleting…">
-                Delete my account
-              </Button>
-            </div>
-          </section>
-        )}
+          {!user.isDemo && (
+            <section className="pf-panel pf-danger" aria-labelledby="delete-heading">
+              <div className="pf-panel-head">
+                <h2 className="pf-panel-title" id="delete-heading">
+                  Delete my account
+                </h2>
+                {!deleting && (
+                  <Button small kind="ghost" className="pf-danger-text" onClick={() => setDeleting(true)}>
+                    Delete…
+                  </Button>
+                )}
+              </div>
+              {deleting && (
+                <>
+                  <p className="meta">Your account and access are removed. This can't be undone.</p>
+                  {deleteError && <Banner tone="error">{deleteError}</Banner>}
+                  {user.hasPassword && (
+                    <Field id="delete-pw" label="Your password">
+                      <input className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                    </Field>
+                  )}
+                  <div className="btn-row">
+                    <Button kind="danger" disabled={user.hasPassword && !password} onAction={deleteAccount} busyLabel="Deleting…">
+                      Delete my account
+                    </Button>
+                    <Button
+                      kind="ghost"
+                      onClick={() => {
+                        setDeleting(false);
+                        setPassword('');
+                        setDeleteError(null);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </>
+              )}
+            </section>
+          )}
+        </div>
       </div>
     </>
   );
@@ -175,23 +205,18 @@ export function SetPassword() {
       <PageHeader
         title={first ? 'Choose a password' : hasPassword ? 'Change password' : 'Set a password'}
         back={first ? undefined : { to: '/account', label: 'Account' }}
-        summary={
-          first ? "You're signed in. Choose a password so next time you can sign in without waiting for an email." : 'Changing your password signs you out on your other devices.'
-        }
+        summary={first ? "You're signed in" : undefined}
+        help={first ? 'With a password you can sign in without waiting for an email.' : 'Changing your password signs you out on your other devices.'}
       />
       <form className="form" onSubmit={submit} noValidate>
-        {error && (
-          <Notice tone="error">
-            <p>{error}</p>
-          </Notice>
-        )}
+        {error && <Banner tone="error">{error}</Banner>}
         <input type="email" autoComplete="username" value={me?.kind === 'user' ? me.user.email : ''} readOnly hidden />
         {hasPassword && !first && (
           <Field id="current" label="Current password" hint="Forgotten it? Sign out, then use Email me a code.">
             <input className="input" type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />
           </Field>
         )}
-        <Field id="new-password" label="New password" hint="At least 10 characters. A short phrase is easy to remember and hard to guess.">
+        <Field id="new-password" label="New password" hint="At least 10 characters. A short phrase works well.">
           <input className="input" type={show ? 'text' : 'password'} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
         </Field>
         <Choice label="Show password" checked={show} onChange={(e) => setShow(e.target.checked)} />
@@ -216,7 +241,7 @@ export function ViewAsPage() {
   const allowed = me?.kind === 'user' && (me.platformPermissions.includes('platform.users.manage') || me.preview !== null);
   return (
     <>
-      <PageHeader title="View as a role" back={{ to: '/account', label: 'Account' }} summary="See an event as someone in that role. Nothing changes for anyone else." />
+      <PageHeader title="View as a role" back={{ to: '/account', label: 'Account' }} help="See an event as someone in that role. Nothing changes for anyone else." />
       {allowed ? (
         <div className="narrow-page">
           <ViewAsForm />

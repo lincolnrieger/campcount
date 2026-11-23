@@ -5,7 +5,7 @@ import { QrCode } from '../components/QrCode';
 import type { Activity, Meal } from '../model';
 import { useApi } from '../useApi';
 import { formatShortCode } from '../../shared/credentials';
-import { Badge, Button, EmptyState, Field, Icon, LoadError, Loading, Menu, Notice, PageHeader, Sheet, SkeletonRows, useConfirm, useToast } from '../ui';
+import { Badge, Banner, Button, EmptyState, Field, Icon, LoadError, Loading, Menu, PageHeader, Sheet, SkeletonRows, useConfirm, useToast } from '../ui';
 import type { Tone } from '../ui';
 import { useEvent } from './EventLayout';
 
@@ -28,6 +28,7 @@ const STATE: Record<Station['state'], { label: string; tone: Tone }> = {
 };
 
 const HOURS = [4, 12, 24, 48, 72];
+const HELP = 'A shared phone or tablet that scans one thing and nothing else, such as the meal hall. Staff scan from their own phones on the Scan tab.';
 const fail = (err: unknown) => (err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.');
 
 type Panel = { kind: 'add' } | { kind: 'edit'; station: Station } | { kind: 'reopen'; station: Station } | { kind: 'code'; name: string; code: string } | null;
@@ -52,10 +53,8 @@ export function Stations() {
   if (event.status !== 'open') {
     return (
       <>
-        <PageHeader title="Scanning stations" back={back} />
-        <Notice title="Stations are set up once the event is open">
-          <p>A station is a shared phone or tablet that scans one thing, such as the meal hall.</p>
-        </Notice>
+        <PageHeader title="Scanning stations" back={back} help={HELP} />
+        <EmptyState title="Set up stations once the event is open">A shared phone or tablet that scans one thing, such as the meal hall.</EmptyState>
       </>
     );
   }
@@ -98,7 +97,16 @@ export function Stations() {
       <PageHeader
         title="Scanning stations"
         back={back}
-        summary="A shared phone or tablet that scans one thing and nothing else. Staff scan from their own phones on the Scan tab."
+        summary={
+          list.length > 0 ? (
+            <>
+              <span className="sep">{list.filter((s) => s.state === 'active').length} paired</span>
+              <span className="sep">{list.filter((s) => s.state === 'waiting').length} waiting</span>
+              {finished.length > 0 && <span className="sep">{finished.length} finished</span>}
+            </>
+          ) : undefined
+        }
+        help={HELP}
         primary={list.length > 0 && add}
       />
       {stations.loading && !stations.data ? (
@@ -112,18 +120,19 @@ export function Stations() {
           Most camps only need one, for the meal hall.
         </EmptyState>
       ) : (
-        <>
+        <div className="stack">
         {finished.length > 1 && (
-          <div className="toolbar">
-            <p>
-              <strong>{finished.length}</strong> finished stations
-            </p>
-            <Button small kind="ghost" onClick={() => void remove(finished)}>
-              Delete finished stations
-            </Button>
-          </div>
+          <Banner
+            action={
+              <Button small onClick={() => void remove(finished)}>
+                Delete finished
+              </Button>
+            }
+          >
+            {finished.length} finished stations <span className="meta">· their scans stay in the reports</span>
+          </Banner>
         )}
-        <ul className="list">
+        <ul className="list stations-list">
           {list.map((s) => {
             const live = s.state === 'active' || s.state === 'waiting';
             return (
@@ -134,6 +143,11 @@ export function Stations() {
                 </span>
                 <Badge tone={STATE[s.state].tone}>{STATE[s.state].label}</Badge>
                 <span className="row-side">
+                  {!live && (
+                    <Button small onClick={() => setPanel({ kind: 'reopen', station: s })}>
+                      Reopen<span className="visually-hidden"> {s.name}</span>
+                    </Button>
+                  )}
                   <Menu
                     label={`More actions for ${s.name}`}
                     items={[
@@ -167,7 +181,7 @@ export function Stations() {
             );
           })}
         </ul>
-        </>
+        </div>
       )}
 
       <Sheet open={panel?.kind === 'add'} title="Set up station" onClose={() => setPanel(null)}>
@@ -292,8 +306,8 @@ function StationForm({
           {failure}
         </p>
       )}
-      <Field id="st-name" label="Name" hint="For example, Meal hall tablet" error={errors.name}>
-        <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
+      <Field id="st-name" label="Name" error={errors.name}>
+        <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" placeholder="For example, Meal hall tablet" />
       </Field>
       <Field id="st-ctx" label="What it scans" hint={station ? 'A paired station switches over the next time it opens CampCount.' : undefined} error={errors.context}>
         <select className="select" value={context} onChange={(e) => setContext(e.target.value)}>

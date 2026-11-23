@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { DietaryEntryInput } from '../../shared/schemas';
-import { Badge, Button, Choice, Field } from '../ui';
+import { Badge, Button, Choice, Field, Icon } from '../ui';
 
 export const CATEGORY_LABEL: Record<DietaryEntryInput['category'], string> = {
   allergy: 'Allergy',
@@ -49,7 +49,7 @@ export function DietaryEditor({
       {entries.length > 0 && (
         <ul className="list" aria-label={`Dietary needs for ${labelPrefix}`}>
           {entries.map((e, i) => (
-            <li key={i} className="row">
+            <li key={i} className="row dietary-row">
               {e.category === 'allergy' && <Badge tone="error">{e.severity === 'anaphylactic' ? 'Anaphylactic' : 'Allergy'}</Badge>}
               <span className="row-main">{describeEntry(e)}</span>
               <span className="row-side">
@@ -72,15 +72,26 @@ export function DietaryEditor({
       )}
       {value !== undefined && entries.length === 0 && <p className="meta">Checked: no dietary needs.</p>}
 
-      <div className="quick-picks" role="group" aria-label={`Common needs for ${labelPrefix}`}>
-        {QUICK.map((q) => (
-          <Button key={q.item} small onClick={() => add(q)}>
-            {q.item}
-          </Button>
-        ))}
-        <Button small onClick={() => onChange([])}>
+      <div className="quick-picks chips" role="group" aria-label={`Common needs for ${labelPrefix}`}>
+        {QUICK.map((q) => {
+          const on = entries.some((x) => x.category === q.category && x.item.toLowerCase() === q.item.toLowerCase());
+          return (
+            <button
+              key={q.item}
+              type="button"
+              className="chip"
+              aria-pressed={on}
+              onClick={() => (on ? onChange(entries.filter((x) => !(x.category === q.category && x.item.toLowerCase() === q.item.toLowerCase()))) : add(q))}
+            >
+              {on && <Icon name="check" size={14} />}
+              {q.item}
+            </button>
+          );
+        })}
+        <button type="button" className="chip" aria-pressed={value !== undefined && entries.length === 0} onClick={() => onChange([])}>
+          {value !== undefined && entries.length === 0 && <Icon name="check" size={14} />}
           No dietary needs
-        </Button>
+        </button>
       </div>
 
       <details className="more-options">
