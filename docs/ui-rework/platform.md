@@ -1,7 +1,7 @@
 # UI rework: platform and account pages — inventory
 
 The checklist of everything these pages do before the rework. Every item must still work afterwards.
-`[x]` = checked in the browser after the rework.
+`[x]` = checked in the browser after the rework. `[~]` = checked in code only (needs a non-admin account on several camps, or a camp's own address).
 
 ## Camps console (`/`, `Camps` in `Camps.tsx`) — shown to users with any platform permission
 - [x] Loads `GET /events`; skeleton while loading; LoadError with Try again on failure.
@@ -29,10 +29,10 @@ The checklist of everything these pages do before the rework. Every item must st
 - [x] ErrorSummary; `POST /events`; logo upload (toast on logo failure); toast; navigate to the camp page. Cancel back to `/`.
 
 ## Events (`Events` in `Events.tsx`, used by StaffLanding fallback) and Create event (`/events/new`)
-- [x] Events list: first visit lands someone with one event and no platform permissions straight in it (`landingFor`).
-- [x] Search (when > 8 events) by name or location; no-match empty state.
-- [x] Happening now (open), Coming up (draft), Past (on request: "Show past events (n)", or when searching); "No current events".
-- [x] Rows: name link, dates · location, Demo badge, status badge.
+- [~] Events list: first visit lands someone with one event and no platform permissions straight in it (`landingFor`).
+- [~] Search (when > 8 events) by name or location; no-match empty state.
+- [~] Happening now (open), Coming up (draft), Past (on request: "Show past events (n)", or when searching); "No current events".
+- [~] Rows: name link, dates · location, Demo badge, status badge.
 - [x] Empty state, with Create event when allowed (`platform.events.create`).
 - [x] Create event page: permission check message; EventFields (name, dates, location, notes) + FeatureChecklist; `POST /events`; toast; navigate; Cancel. `EventFields`, `FeatureChecklist`, `checkEventForm` are also used by Settings (unchanged API).
 
@@ -76,10 +76,10 @@ The checklist of everything these pages do before the rework. Every item must st
 - [x] View as page: ViewAsForm for admins/previewing, else notice.
 
 ## Staff landing (`StaffLanding`)
-- [x] One camp with an address: redirect to it. Several: list with marks and addresses. None with addresses but events: `Events`. None: empty state.
+- [~] One camp with an address: redirect to it. Several: list with marks and addresses. None with addresses but events: `Events`. None: empty state.
 
 ## More (`/more`, event sites on phones)
-- [x] Sections beyond the tab bar, plus Account; Sign out.
+- [~] Sections beyond the tab bar, plus Account; Sign out. (File unchanged.)
 
 ## Not found
 - [x] Message and a button to the camp home (in an event) or the start.
