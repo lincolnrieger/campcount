@@ -1,1 +1,66 @@
 /* Organiser pages (people): layout for the UI rework. Uses the shared kit (kit.css). */
+
+/* ---------- People › Everyone ---------- */
+.people-list {
+  gap: var(--space-3);
+}
+.people-list .toolbar > .chips {
+  flex-basis: 100%;
+}
+.people-list .toolbar-count {
+  margin: 0;
+}
+.people-scroll {
+  max-height: calc(100vh - 17rem);
+  min-height: 18rem;
+}
+.people-table td {
+  height: 2.75rem;
+  padding-top: var(--space-1);
+  padding-bottom: var(--space-1);
+}
+.people-table tbody tr.is-selected {
+  background: var(--brand-tint);
+}
+.people-table .cell-check input,
+.people-row-check {
+  position: relative;
+  z-index: 1;
+  cursor: pointer;
+}
+.people-rows .row {
+  gap: var(--space-3);
+}
+.people-row-check {
+  flex: none;
+  align-self: center;
+}
+.people-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control);
+  color: var(--ink-2);
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+  cursor: pointer;
+}
+.selection-bar .selection-ghost {
+  color: #FFFFFF;
+}
+.selection-bar .selection-ghost:hover {
+  background: rgb(255 255 255 / 0.12);
+}
+@media (max-width: 1023.98px) {
+  .people-list .toolbar > .search {
+    flex: 1 1 10rem;
+  }
+  .people-list .toolbar > .toolbar-end {
+    display: none;
+  }
+  .people-list .toolbar > .chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+}
