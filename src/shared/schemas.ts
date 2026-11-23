@@ -201,7 +201,11 @@ export const registrationPatchSchema = z.strictObject({
   extra: extraFieldsSchema.optional(),
 });
 
-export const dietaryUpdateSchema = z.strictObject({ entries: z.array(dietaryEntrySchema).max(10) });
+export const dietaryUpdateSchema = z.strictObject({
+  entries: z.array(dietaryEntrySchema).max(10),
+  /** Import & check: fingerprints of the notes that were read (never the notes). */
+  checkedNotes: z.array(z.string().regex(/^[a-z0-9]{1,16}$/)).max(4).optional(),
+});
 
 // ---------------------------------------------------------------- registration
 

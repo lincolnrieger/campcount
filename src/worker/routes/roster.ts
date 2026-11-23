@@ -50,7 +50,7 @@ rosterRoutes.get('/registrations', async (c) => {
 
   const { results } = await c.env.DB.prepare(
     `SELECT r.id, p.member_number, p.first_name, p.preferred_name, p.last_name, r.kind, r.section, r.group_name,
-            r.position, r.role_label, r.photo_consent, r.status, r.dietary_source_hash,
+            r.position, r.role_label, r.photo_consent, r.status, r.dietary_source_hash, r.dietary_checked,
             (SELECT short_code FROM credentials cr WHERE cr.registration_id = r.id AND cr.status = 'active') AS short_code
        FROM registrations r JOIN people p ON p.id = r.person_id
       WHERE r.event_id = ?
@@ -90,7 +90,9 @@ rosterRoutes.get('/registrations', async (c) => {
       carRego: r.car_rego,
       shortCode: r.short_code ? formatShortCode(r.short_code) : null,
       ...(withPhoto ? { photoConsent: r.photo_consent } : {}),
-      ...(withDietary ? { dietary: dietary.get(r.id!) ?? [], dietaryFingerprint: r.dietary_source_hash } : {}),
+      ...(withDietary
+        ? { dietary: dietary.get(r.id!) ?? [], dietaryFingerprint: r.dietary_source_hash, dietaryChecked: r.dietary_checked ? (JSON.parse(r.dietary_checked) as string[]) : null }
+        : {}),
     })),
   });
 });
@@ -275,7 +277,7 @@ rosterRoutes.put('/registrations/:registrationId/dietary', async (c) => {
   requirePermission(c, 'dietary.edit', { eventId });
   const user = requireUser(c);
   const id = regParam(c.req.param('registrationId'));
-  const { entries } = await parseBody(c, dietaryUpdateSchema);
+  const { entries, checkedNotes } = await parseBody(c, dietaryUpdateSchema);
   const event = await editableEvent(c, eventId);
   if (event.feature_dietary !== 1) throw conflict('Dietary requirements are switched off for this event.');
   const exists = await c.env.DB.prepare(`SELECT 1 FROM registrations WHERE id = ? AND event_id = ?`).bind(id, eventId).first();
@@ -288,7 +290,12 @@ rosterRoutes.put('/registrations/:registrationId/dietary', async (c) => {
         `INSERT INTO dietary_entries (id, event_id, registration_id, category, item, severity, note, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).bind(crypto.randomUUID(), eventId, id, e.category, e.item, e.severity, e.note, user.userId, now),
     ),
-    c.env.DB.prepare(`UPDATE registrations SET dietary_review_pending = 0, updated_at = ? WHERE id = ?`).bind(now, id),
+    // Checked: which notes were read (from Import & check), or just that someone has (edited elsewhere).
+    c.env.DB.prepare(`UPDATE registrations SET dietary_review_pending = 0, dietary_checked = COALESCE(?, dietary_checked, '["*"]'), updated_at = ? WHERE id = ?`).bind(
+      checkedNotes ? JSON.stringify(checkedNotes) : null,
+      now,
+      id,
+    ),
     // Never the values themselves.
     auditStatement(c.env.DB, { actor: { type: 'user', id: user.userId }, action: 'dietary.update', eventId, targetType: 'registration', targetId: id, detail: { entries: entries.length } }),
   ]);

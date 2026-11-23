@@ -5,6 +5,7 @@ import type { Linked, RosterPerson, Section as SectionName } from '../../shared/
 import {
   autoSection,
   buildRow,
+  checkedNotes,
   detailChanges,
   dietaryIsDone,
   dietaryNotes,
@@ -37,6 +38,8 @@ interface Registration {
   position: string;
   status: string;
   dietary?: DietaryEntryInput[];
+  /** Fingerprints of the notes read in Import & check (kept on the roster); ['*'] for checked before that. */
+  dietaryChecked?: string[] | null;
 }
 
 const fail = (err: unknown) => (err instanceof ApiFailure || err instanceof Error ? err.message : 'No connection. Check your signal and try again.');
@@ -313,12 +316,17 @@ export function Intake() {
   const sectionNames = event.sections.map((x) => x.name);
   const onRoster = (p: Linked) => regByKey.has(p.key);
   const chosenMap = local.chosen as Record<string, SectionName>;
-  const toChoose = people.filter((p) => onRoster(p) && needsSection(p, chosenMap));
-  const chosen = people.filter((p) => onRoster(p) && autoSection(p) === null && chosenMap[p.key]);
+  // A section already on the roster (chosen here, on another computer, or on their page) counts as chosen.
+  const rosterSection = (p: Linked) => {
+    const s = regByKey.get(p.key)?.section;
+    return s && s !== 'Other' ? s : '';
+  };
+  const toChoose = people.filter((p) => onRoster(p) && needsSection(p, chosenMap) && !rosterSection(p));
+  const chosen = people.filter((p) => onRoster(p) && autoSection(p) === null && (chosenMap[p.key] || rosterSection(p)));
   const dietaryTodo = people
-    .filter((p) => onRoster(p) && hasDietaryNotes(p) && !dietaryIsDone(p, local.dietaryDone[p.key]))
+    .filter((p) => onRoster(p) && hasDietaryNotes(p) && !dietaryIsDone(p, local.dietaryDone[p.key], regByKey.get(p.key)?.dietaryChecked))
     .sort((a, b) => later.indexOf(a.key) - later.indexOf(b.key));
-  const dietaryDone = people.filter((p) => onRoster(p) && hasDietaryNotes(p) && dietaryIsDone(p, local.dietaryDone[p.key]));
+  const dietaryDone = people.filter((p) => onRoster(p) && hasDietaryNotes(p) && dietaryIsDone(p, local.dietaryDone[p.key], regByKey.get(p.key)?.dietaryChecked));
   const changes = Object.entries(local.changes ?? {}).sort(([, a], [, b]) => a.name.localeCompare(b.name));
   // Only people still off the roster.
   const removed = Object.entries(local.removed ?? {})
@@ -423,7 +431,7 @@ export function Intake() {
                   eventId={event.id}
                   person={current}
                   reg={regByKey.get(current.key)!}
-                  fresh={newDietarySources(current, local.dietaryDone[current.key])}
+                  fresh={newDietarySources(current, local.dietaryDone[current.key], regByKey.get(current.key)?.dietaryChecked)}
                   left={dietaryTodo.length}
                   onDone={async (p) => {
                     update((l) => ({
@@ -526,7 +534,7 @@ export function Intake() {
                   <summary>Chosen already ({chosen.length})</summary>
                   <ul className="list">
                     {chosen.map((p) => (
-                      <SectionRow key={p.key} person={p} options={sectionNames} current={chosenMap[p.key] ?? ''} onChoose={(s) => void chooseSection(p, s)} />
+                      <SectionRow key={p.key} person={p} options={sectionNames} current={chosenMap[p.key] ?? rosterSection(p)} onChoose={(s) => void chooseSection(p, s)} />
                     ))}
                   </ul>
                 </details>
@@ -702,7 +710,8 @@ function DietaryReview({
     try {
       await api(`/events/${eventId}/registrations/${reg.id}/dietary`, {
         method: 'PUT',
-        body: { entries },
+        // The roster keeps which notes were read (fingerprints only), so any computer knows.
+        body: { entries, checkedNotes: checkedNotes(person) },
       });
       toast(`${displayName(person)} done`);
       await onDone(person);

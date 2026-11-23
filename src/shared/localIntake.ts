@@ -176,23 +176,51 @@ export const dietarySignature = (p: Linked) => {
   return meaningful([n.myscout, n.consent2go]).join('\u0000');
 };
 
-/** Already read: nothing that says something is new since. (Reads older saved forms too.) */
-export function dietaryIsDone(p: Linked, saved: string | undefined): boolean {
-  if (saved === undefined) return false;
-  const before = new Set(meaningful(saved.split('\u0000')));
-  const n = dietaryNotes(p);
-  return meaningful([n.myscout, n.consent2go]).every((t) => before.has(t));
+/** A short fingerprint of a note (to tell notes apart without keeping them on the server). */
+export function noteHash(text: string): string {
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
 
-/** Which file's notes are new since they were last read (to mark them). */
-export function newDietarySources(p: Linked, saved: string | undefined): ('myscout' | 'consent2go')[] {
-  if (saved === undefined) return [];
-  const before = new Set(meaningful(saved.split('\u0000')));
+/** Fingerprints of the notes that say something, as kept on the roster when someone is checked. */
+export const checkedNotes = (p: Linked) => {
   const n = dietaryNotes(p);
+  return meaningful([n.myscout, n.consent2go]).map(noteHash);
+};
+
+/**
+ * Which file's notes are new since they were last read: by this browser's
+ * record, or the roster's (so another computer, or a cleared browser,
+ * still knows). Someone checked before the roster kept fingerprints counts as
+ * having read MyScout; a Consent2Go note that adds something brings them back.
+ */
+export function newDietarySources(p: Linked, saved: string | undefined, roster?: string[] | null): ('myscout' | 'consent2go')[] {
+  const n = dietaryNotes(p);
+  const local = saved === undefined ? null : new Set(meaningful(saved.split('\u0000')));
+  const hashes = roster ? new Set(roster) : null;
+  const msNote = normNote(n.myscout);
   return (['myscout', 'consent2go'] as const).filter((s) => {
     const t = normNote(n[s]);
-    return t && !saysNothing(t) && !before.has(t);
+    if (!t || saysNothing(t)) return false;
+    if (local?.has(t)) return false;
+    if (hashes?.has(noteHash(t))) return false;
+    if (hashes?.has('*')) return s === 'consent2go' && t !== msNote;
+    return local !== null || hashes !== null;
   });
+}
+
+/** Already read: nothing that says something is new since (by this browser's record or the roster's). */
+export function dietaryIsDone(p: Linked, saved: string | undefined, roster?: string[] | null): boolean {
+  if (saved === undefined && !roster) return false;
+  return newDietarySources(p, saved, roster).length === 0;
 }
 
 /** One detail that differs from the last upload of the same file. */

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { FilePerson, RosterPerson } from '../src/shared/localIntake';
 import {
   buildRow,
+  checkedNotes,
   combinedPhoto,
   detailChanges,
   dietaryIsDone,
@@ -153,5 +154,27 @@ describe('uploading again', () => {
       { label: 'MyScout position', before: 'Scout', after: 'Rover Scout' },
     ]);
     expect(mergeChanges(one, [{ label: 'MyScout position', before: 'Venturer Scout', after: 'Scout' }])).toEqual([]);
+  });
+});
+
+describe('dietary already checked on another computer (kept on the roster)', () => {
+  const link = (m: FilePerson[], c: FilePerson[]) => linkPeople(m, c, []).people[0]!;
+  const msOnly = link([ms('100', 'Ava', 'Scout', { dietaryText: 'Peanut allergy' })], []);
+
+  it('trusts the roster when this browser has nothing', () => {
+    expect(dietaryIsDone(msOnly, undefined, null)).toBe(false);
+    expect(dietaryIsDone(msOnly, undefined, checkedNotes(msOnly))).toBe(true);
+    const withC2G = link([ms('100', 'Ava', 'Scout', { dietaryText: 'Peanut allergy' })], [cg('100', 'Ava', { dietaryText: 'Coeliac' })]);
+    expect(dietaryIsDone(withC2G, undefined, checkedNotes(msOnly))).toBe(false);
+    expect(newDietarySources(withC2G, undefined, checkedNotes(msOnly))).toEqual(['consent2go']);
+    expect(dietaryIsDone(withC2G, undefined, checkedNotes(withC2G))).toBe(true);
+  });
+
+  it('counts people checked before fingerprints as having read MyScout', () => {
+    expect(dietaryIsDone(msOnly, undefined, ['*'])).toBe(true);
+    expect(dietaryIsDone(link([ms('100', 'Ava', 'Scout', { dietaryText: 'Peanut allergy' })], [cg('100', 'Ava', { dietaryText: 'nil' })]), undefined, ['*'])).toBe(true);
+    expect(dietaryIsDone(link([ms('100', 'Ava', 'Scout', { dietaryText: 'Peanut allergy' })], [cg('100', 'Ava', { dietaryText: 'peanut allergy' })]), undefined, ['*'])).toBe(true);
+    const extra = link([ms('100', 'Ava', 'Scout', { dietaryText: 'Peanut allergy' })], [cg('100', 'Ava', { dietaryText: 'Peanut allergy, also lactose' })]);
+    expect(newDietarySources(extra, undefined, ['*'])).toEqual(['consent2go']);
   });
 });
