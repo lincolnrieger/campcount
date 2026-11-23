@@ -1,1 +1,291 @@
-/* Organiser pages (event): layout for the UI rework. Uses the shared kit (kit.css). */
+/* Organiser pages (event): layout for the UI rework. Uses the shared kit (kit.css). Tokens only. */
+
+/* ---------- Home ---------- */
+.home {
+  gap: var(--space-4);
+}
+.home-notes {
+  padding: var(--space-2) var(--space-4);
+}
+.home-notes > summary {
+  margin: 0;
+}
+.home-notes > summary > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.home-notes > summary > span .icon {
+  color: var(--ink-3);
+  transform: none;
+}
+.home-notes p {
+  padding-bottom: var(--space-2);
+}
+.home-list-title {
+  font-size: var(--text-lg);
+  margin-right: var(--space-2);
+}
+.home-more {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.ready {
+  display: grid;
+  gap: var(--space-4);
+  align-items: start;
+}
+@media (min-width: 1024px) {
+  .ready {
+    grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr);
+  }
+  .ready .ready-open {
+    margin-top: calc(var(--control) + var(--space-3));
+  }
+}
+.ready-steps {
+  display: grid;
+  gap: var(--space-3);
+}
+.ready-open {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+.ready-open-title {
+  font-size: var(--text-lg);
+}
+@media (max-width: 599.98px) {
+  /* On a phone the filters take too much height to stay pinned. */
+  .home .toolbar-sticky {
+    position: static;
+  }
+  .home .toolbar > .select {
+    flex: 1 1 8rem;
+  }
+}
+
+/* ---------- Shared bits ---------- */
+.tab-count {
+  min-width: 1.4rem;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.section-head-start {
+  justify-content: flex-start;
+  gap: var(--space-1);
+}
+
+/* ---------- Reports ---------- */
+.reports {
+  gap: var(--space-4);
+}
+.reports-checkup {
+  display: grid;
+  gap: var(--space-4);
+}
+.reports-columns {
+  display: grid;
+  gap: var(--space-4);
+  align-items: start;
+}
+@media (min-width: 1100px) {
+  .reports-columns:has(.reports-phones) {
+    grid-template-columns: minmax(0, 1fr) 18rem;
+  }
+  .reports-phones {
+    position: sticky;
+    top: var(--space-4);
+  }
+}
+.reports-groups {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.checkup-group {
+  overflow: hidden;
+}
+.checkup-group .checkup-head {
+  border-bottom: var(--border-width) solid var(--divider);
+}
+.checkup-items {
+  max-height: min(50vh, 26rem);
+}
+.checkup-items > li + li {
+  border-top: var(--border-width) solid var(--divider);
+}
+.checkup-items .row {
+  min-height: 3rem;
+}
+.download-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+  gap: var(--space-3);
+}
+.download-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+.download-text {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---------- Settings index ---------- */
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr));
+  gap: var(--space-3);
+}
+.settings-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 4.5rem;
+  padding: var(--space-3) var(--space-4);
+}
+.settings-card.row-link:hover {
+  border-color: var(--border-soft);
+  background: var(--surface);
+}
+.settings-card-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius);
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+.settings-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+.settings-status-text {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.settings-status h2 {
+  font-size: var(--text-base);
+}
+.btn.settings-danger {
+  color: var(--error-fg);
+}
+
+/* ---------- Settings forms: two columns and a sticky Save bar ---------- */
+.settings-form {
+  display: grid;
+  gap: var(--space-4);
+}
+.settings-columns {
+  display: grid;
+  gap: var(--space-4);
+  align-items: start;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+@media (min-width: 1024px) {
+  .settings-columns {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
+}
+.settings-panel {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.settings-panel-title {
+  font-size: var(--text-lg);
+}
+.feature-group {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.feature-group-title {
+  padding: 0;
+  margin-bottom: var(--space-1);
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+.feature-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.feature-row .toggle-text .meta {
+  font-weight: var(--weight-regular);
+}
+.save-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: var(--z-sticky);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2) var(--space-3);
+  margin: 0 calc(var(--space-2) * -1);
+  padding: var(--space-3) var(--space-2);
+  border-top: var(--border-width) solid var(--divider);
+  background: color-mix(in srgb, var(--canvas) 94%, transparent);
+  backdrop-filter: blur(6px);
+}
+@media (max-width: 1023.98px) {
+  .save-bar {
+    bottom: var(--tabbar-h, 0px);
+  }
+}
+.save-bar-state {
+  margin-right: auto;
+  color: var(--ink-3);
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+}
+.save-bar-state.is-dirty {
+  color: var(--warning-fg);
+}
+.save-bar-state.is-error {
+  color: var(--error-fg);
+}
+.save-bar-keys {
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+}
+.save-bar-keys kbd {
+  padding: 0 4px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  font: inherit;
+}
+@media (hover: none), (max-width: 599.98px) {
+  .save-bar-keys {
+    display: none;
+  }
+}

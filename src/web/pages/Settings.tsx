@@ -6,9 +6,12 @@ import type { EventFeatures, EventStatus } from '../../shared/schemas';
 import { EVENT_TRANSITIONS } from '../../shared/lifecycle';
 import { useSession } from '../session';
 import { useApi } from '../useApi';
-import { Badge, Button, Field, Icon, Notice, PageHeader, Section, plural, useConfirm, useToast } from '../ui';
-import { EventFields, FeatureChecklist, checkEventForm } from './Events';
+import { Badge, Banner, Button, Field, Icon, InfoTip, PageHeader, Section, Toggle, plural, useConfirm, useToast } from '../ui';
+import type { IconName } from '../ui';
+import { checkEventForm } from './Events';
 import type { EventForm } from './Events';
+import { FEATURE_COPY } from './featureCopy';
+import { SaveBar } from '../ui/EventSaveBar';
 import { useEvent } from './EventLayout';
 
 const STATUS_WORD: Record<EventStatus, string> = { draft: 'Draft', open: 'Open', completed: 'Closed', archived: 'Archived', cancelled: 'Cancelled' };
@@ -25,7 +28,7 @@ const CHANGES: Partial<Record<EventStatus, { label: string; title: string; body:
   draft: { label: 'Return to draft', title: 'Return this event to draft?', body: 'You can set it up again and open it when ready.', done: 'Event is a draft again' },
 };
 
-/** Settings: one row per section this person can change, then the event's status. */
+/** Settings: one card per section this person can change, then the event's status. */
 export function SettingsIndex() {
   const { event, can, reload, base: eventBase, onSite } = useEvent();
   const { me } = useSession();
@@ -36,18 +39,19 @@ export function SettingsIndex() {
   const canCopy = !onSite && me?.kind === 'user' && me.platformPermissions.includes('platform.events.create');
 
   const rows = [
-    can('event.configure') && { to: 'event', title: 'Event details', meta: 'Name, dates, location, notes and features' },
-    can('event.configure') && { to: 'sections', title: 'Sections', meta: 'Names, lanyard words and colours, which count as youth, and adding your own' },
-    can('event.configure') && { to: 'banner', title: 'Participant page banner', meta: 'A graphic across the top of the page each lanyard opens' },
-    can('event.configure') && { to: 'lanyards', title: 'Lanyards', meta: 'Design the front and back of the card, and how no-photo consent is marked' },
-    can('staff.manage') && { to: 'staff', title: 'Staff', meta: staff.data ? `${plural(staff.data.staff.length, 'person', 'people')} · who works on this event` : 'Who works on this event and what they can do' },
+    can('event.configure') && { to: 'event', icon: 'events', title: 'Event details', meta: 'Name, dates, location, features' },
+    can('event.configure') && { to: 'sections', icon: 'layers', title: 'Sections', meta: `${plural(event.sections.length, 'section')} · names, colours` },
+    can('event.configure') && { to: 'banner', icon: 'image', title: 'Participant page banner', meta: 'Top of each participant’s page' },
+    can('event.configure') && { to: 'lanyards', icon: 'band', title: 'Lanyards', meta: 'Card design, no-photo marker' },
+    can('staff.manage') && { to: 'staff', icon: 'team', title: 'Staff', meta: staff.data ? `${plural(staff.data.staff.length, 'person', 'people')} · roles` : 'Who works here, and their roles' },
     can('stations.manage') && {
       to: 'stations',
+      icon: 'scan',
       title: 'Scanning stations',
-      meta: stations.data ? `${plural(stations.data.stations.length, 'station')} · shared tablets locked to one job` : 'Shared tablets locked to one job',
+      meta: stations.data ? `${plural(stations.data.stations.length, 'station')} · shared tablets` : 'Shared tablets locked to one job',
     },
-    canCopy && { to: 'copy', title: 'Copy event', meta: "Start next year's camp from this one" },
-  ].filter((r): r is { to: string; title: string; meta: string } => Boolean(r));
+    canCopy && { to: 'copy', icon: 'copy', title: 'Copy event', meta: "Start next year's camp from it" },
+  ].filter((r): r is { to: string; icon: IconName; title: string; meta: string } => Boolean(r));
 
   const changes = can('event.close') ? EVENT_TRANSITIONS[event.status].filter((to) => CHANGES[to]) : [];
 
@@ -58,9 +62,12 @@ export function SettingsIndex() {
       <PageHeader title="Settings" />
       <div className="sections">
         {rows.length > 0 && (
-          <ul className="list">
+          <ul className="settings-grid">
             {rows.map((r) => (
-              <li key={r.to} className="row row-large row-link">
+              <li key={r.to} className="panel settings-card row-link">
+                <span className="settings-card-icon" aria-hidden="true">
+                  <Icon name={r.icon} />
+                </span>
                 <span className="row-main">
                   <span className="row-title">
                     <Link to={r.to}>{r.title}</Link>
@@ -75,18 +82,20 @@ export function SettingsIndex() {
           </ul>
         )}
         {changes.length > 0 && (
-          <section className="danger-zone" aria-labelledby="status-heading">
-            <h2 id="status-heading">Event status</h2>
-            <p>
-              This event is <Badge tone={event.status === 'draft' ? 'warning' : 'neutral'}>{STATUS_WORD[event.status]}</Badge>
-            </p>
+          <section className="panel settings-status" aria-labelledby="status-heading">
+            <div className="settings-status-text">
+              <h2 id="status-heading">Event status</h2>
+              <Badge tone={event.status === 'draft' ? 'warning' : 'neutral'}>{STATUS_WORD[event.status]}</Badge>
+              <InfoTip label="About event status">Open a draft from Home. Close an open event from Reports.</InfoTip>
+            </div>
             <div className="btn-row">
               {changes.map((to) => {
                 const c = CHANGES[to]!;
                 return (
                   <Button
                     key={to}
-                    kind={c.danger ? 'secondary' : 'secondary'}
+                    kind="secondary"
+                    small
                     className={c.danger ? 'settings-danger' : undefined}
                     busyLabel="Working…"
                     onAction={async () => {
@@ -113,6 +122,21 @@ export function SettingsIndex() {
   );
 }
 
+/** One short line under each feature switch; the full explanation is behind its (i). */
+const FEATURE_SHORT: Record<keyof EventFeatures, string> = {
+  site: 'Scan on and off site',
+  activities: 'Scan in and out of activities',
+  meals: 'Count who has eaten',
+  dietary: 'Allergy alerts and catering totals',
+  photo: '“No photos” marker at scans',
+  selfSignup: 'People book sessions themselves',
+  sideQuest: 'A secret lanyard-collecting game',
+};
+const FEATURE_GROUPS: { title: string; keys: (keyof EventFeatures)[] }[] = [
+  { title: 'Scanning', keys: ['site', 'activities', 'meals'] },
+  { title: 'Extras', keys: ['dietary', 'photo', 'selfSignup', 'sideQuest'] },
+];
+
 /** Settings › Event details: name, dates, location, notes and features. */
 export function EventDetails() {
   const { event, can, reload } = useEvent();
@@ -120,14 +144,23 @@ export function EventDetails() {
   const navigate = useNavigate();
   const toast = useToast();
   const editable = can('event.configure') && (event.status === 'draft' || event.status === 'open');
-  const [form, setForm] = useState<EventForm>({ name: event.name, location: event.location, startsOn: event.startsOn, endsOn: event.endsOn, description: event.description });
-  const [features, setFeatures] = useState<EventFeatures>(event.features);
-  const [contactEmail, setContactEmail] = useState(event.contactEmail ?? '');
+  const [initial] = useState(() => ({
+    form: { name: event.name, location: event.location, startsOn: event.startsOn, endsOn: event.endsOn, description: event.description } as EventForm,
+    features: event.features,
+    contactEmail: event.contactEmail ?? '',
+  }));
+  const [form, setForm] = useState<EventForm>(initial.form);
+  const [features, setFeatures] = useState<EventFeatures>(initial.features);
+  const [contactEmail, setContactEmail] = useState(initial.contactEmail);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [failure, setFailure] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const set = (key: keyof EventForm) => (e: { target: { value: string } }) => setForm({ ...form, [key]: e.target.value });
   const back = { to: `${eventBase}/settings`, label: 'Settings' };
+  const dirty =
+    (Object.keys(form) as (keyof EventForm)[]).some((k) => form[k] !== initial.form[k]) ||
+    (Object.keys(features) as (keyof EventFeatures)[]).some((k) => features[k] !== initial.features[k]) ||
+    contactEmail !== initial.contactEmail;
 
   if (!can('event.configure')) return <Navigate to={back.to} replace />;
 
@@ -153,36 +186,58 @@ export function EventDetails() {
     }
   }
 
+  const problems = Object.keys(errors).length;
+
   return (
     <>
-      <PageHeader title="Event details" back={back} />
-      <form className="form" onSubmit={save} noValidate>
-        {!editable && (
-          <Notice title={`This event is ${STATUS_WORD[event.status].toLowerCase()}`}>
-            <p>Details are locked. Reopen the event to change them.</p>
-          </Notice>
-        )}
-        {failure && (
-          <p className="field-error" role="alert">
-            <Icon name="error" size={16} />
-            {failure}
-          </p>
-        )}
-        <fieldset className="form" disabled={!editable || busy}>
-          <EventFields form={form} set={set} errors={errors} />
-          <Field id="ev-contact" label="Contact email" optional hint="Shown on booking links: “If you would like to change a booking, please email …”" error={errors.contactEmail}>
-            <input className="input" type="email" value={contactEmail} maxLength={200} onChange={(e) => setContactEmail(e.target.value)} autoComplete="off" />
-          </Field>
-          <FeatureChecklist value={features} onChange={setFeatures} />
-        </fieldset>
-        {editable && (
-          <div className="btn-row">
-            <Button type="submit" kind="primary" busy={busy} busyLabel="Saving…">
-              Save changes
-            </Button>
-            <Button onClick={() => navigate(back.to)}>Cancel</Button>
+      <PageHeader title="Event details" back={back} summary={!editable ? <Badge>{STATUS_WORD[event.status]}</Badge> : undefined} />
+      <form className="settings-form" onSubmit={save} noValidate>
+        {(!editable || failure) && (
+          <div className="banners">
+            {!editable && <Banner>Locked while the event is {STATUS_WORD[event.status].toLowerCase()}. Reopen it to make changes.</Banner>}
+            {failure && <Banner tone="error">{failure}</Banner>}
           </div>
         )}
+        <fieldset className="settings-columns" disabled={!editable || busy}>
+          <div className="panel panel-pad settings-panel">
+            <h2 className="settings-panel-title">Details</h2>
+            <Field id="name" label="Event name" error={errors.name}>
+              <input className="input" value={form.name} onChange={set('name')} autoComplete="off" />
+            </Field>
+            <div className="field-pair">
+              <Field id="startsOn" label="First day" error={errors.startsOn}>
+                <input className="input" type="date" value={form.startsOn} onChange={set('startsOn')} />
+              </Field>
+              <Field id="endsOn" label="Last day" error={errors.endsOn}>
+                <input className="input" type="date" value={form.endsOn} onChange={set('endsOn')} />
+              </Field>
+            </div>
+            <Field id="location" label="Location" optional error={errors.location}>
+              <input className="input" value={form.location} onChange={set('location')} placeholder="For example, Woodhouse Activity Centre" />
+            </Field>
+            <Field id="ev-contact" label="Contact email" optional hint="Shown on booking links, for changes to a booking" error={errors.contactEmail}>
+              <input className="input" type="email" value={contactEmail} maxLength={200} onChange={(e) => setContactEmail(e.target.value)} autoComplete="off" />
+            </Field>
+            <Field id="description" label="Notes for staff" optional hint="Shown on Home to everyone on staff" error={errors.description}>
+              <textarea className="textarea" rows={4} value={form.description} onChange={set('description')} />
+            </Field>
+          </div>
+          <div className="panel panel-pad settings-panel">
+            <h2 className="settings-panel-title">Features</h2>
+            {FEATURE_GROUPS.map((g) => (
+              <fieldset key={g.title} className="feature-group">
+                <legend className="feature-group-title">{g.title}</legend>
+                {g.keys.map((key) => (
+                  <div key={key} className="feature-row">
+                    <Toggle checked={features[key]} onChange={(on) => setFeatures({ ...features, [key]: on })} label={FEATURE_COPY[key].label} hint={FEATURE_SHORT[key]} />
+                    <InfoTip label={`About ${FEATURE_COPY[key].label}`}>{FEATURE_COPY[key].hint}</InfoTip>
+                  </div>
+                ))}
+              </fieldset>
+            ))}
+          </div>
+        </fieldset>
+        {editable && <SaveBar dirty={dirty} busy={busy} problems={problems} onCancel={() => navigate(back.to)} />}
       </form>
     </>
   );
