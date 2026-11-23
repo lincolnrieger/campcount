@@ -609,7 +609,7 @@ async function auditStatementRun(c: AppContext, a: { action: string; eventId: st
 async function activeCards(c: AppContext, eventId: string, registrationIds?: string[]) {
   const { results } = await c.env.DB.prepare(
     `SELECT r.id, p.first_name, p.preferred_name, p.last_name, r.kind, r.section, r.group_name, r.photo_consent,
-            cr.short_code, cr.token_ciphertext
+            cr.short_code, cr.token_ciphertext, cr.issued_at, cr.printed_at
        FROM registrations r
        JOIN people p ON p.id = r.person_id
        JOIN credentials cr ON cr.registration_id = r.id AND cr.status = 'active'
@@ -640,6 +640,8 @@ async function activeCards(c: AppContext, eventId: string, registrationIds?: str
       // Anyone without a "yes" is treated as no consent, the same as at the scanner.
       noPhotos: photos && r.photo_consent !== 'yes',
       qr: credentialUrl(origin, await decryptToken(c.env, r.token_ciphertext!)),
+      issuedAt: r.issued_at!,
+      printedAt: r.printed_at ?? null,
     })),
   );
 }
@@ -653,6 +655,23 @@ rosterRoutes.post('/credentials/print', async (c) => {
   const cards = await activeCards(c, eventId, registrationIds);
   await auditStatementRun(c, { action: 'credentials.print', eventId, userId: user.userId, count: cards.length });
   return c.json({ cards });
+});
+
+/** Mark lanyards as printed (after their PDF is downloaded), or as not printed again. */
+rosterRoutes.post('/credentials/printed', async (c) => {
+  const eventId = c.req.param('eventId')!;
+  requirePermission(c, 'credentials.manage', { eventId });
+  const { registrationIds, printed } = await parseBody(c, z.strictObject({ registrationIds: z.array(z.uuid()).min(1).max(2000), printed: z.boolean() }));
+  const at = printed ? nowIso() : null;
+  for (let i = 0; i < registrationIds.length; i += 90) {
+    const ids = registrationIds.slice(i, i + 90);
+    await c.env.DB.prepare(
+      `UPDATE credentials SET printed_at = ? WHERE event_id = ? AND status = 'active' AND registration_id IN (${ids.map(() => '?').join(',')})`,
+    )
+      .bind(at, eventId, ...ids)
+      .run();
+  }
+  return c.json({ ok: true, printedAt: at });
 });
 
 /**
