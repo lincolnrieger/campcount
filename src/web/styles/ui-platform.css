@@ -3,6 +3,7 @@
 /* ---------- Layout ---------- */
 .pf-stack {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
   min-width: 0;
 }
@@ -391,4 +392,31 @@ legend.pf-panel-title + * {
 }
 .pf-links + * {
   margin-top: var(--space-3);
+}
+
+/* An open ⋯ menu floats over the buttons in the rows below it. */
+.pf-stack .menu:has(> [aria-expanded='true']) {
+  z-index: var(--z-overlay);
+}
+.pf-stack .list > .list-group-heading:first-child,
+.pf-stack .list > section:first-child > .list-group-heading {
+  border-top-left-radius: calc(var(--radius-lg) - var(--border-width));
+  border-top-right-radius: calc(var(--radius-lg) - var(--border-width));
+}
+@media (max-width: 599.98px) {
+  /* Phones: filter chips scroll sideways in one row. */
+  .pf-stack .toolbar .chips {
+    flex-wrap: nowrap;
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .pf-stack .toolbar .chip {
+    flex: none;
+  }
+  .pf-stack .row > .badges {
+    flex-direction: column;
+    align-items: flex-end;
+  }
 }
