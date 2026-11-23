@@ -12,14 +12,13 @@ export function NotFound({ inEvent = false }: { inEvent?: boolean }) {
     <>
       <PageHeader title="There's no page at this address" />
       <EmptyState
-        title="The link may be old, or the page may have moved"
+        title="The link may be old, or the page has moved"
         actions={
           <ButtonLink to={home} kind="primary">
             {label}
           </ButtonLink>
         }
       >
-        Check the address, or start again from the beginning.
       </EmptyState>
     </>
   );
