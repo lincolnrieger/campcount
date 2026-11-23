@@ -25,6 +25,7 @@ import {
   SkeletonRows,
   StatStrip,
   Toolbar,
+  plural,
   useConfirm,
   useToast,
 } from '../ui';
@@ -329,7 +330,7 @@ export function ActivityRoster() {
             { label: a.trackSignOut ? 'Here now' : 'Checked in', value: hereCount, tone: 'success', pressed: show === 'here', onPress: () => setShow('here') },
             { label: 'Everyone', value: involved.size, pressed: show === 'all', onPress: () => setShow('all'), hint: 'Booked, or checked in at some point' },
             a.capacity !== null
-              ? { label: placesLeft === 0 ? `Full: ${a.capacity} places` : `Places left of ${a.capacity}`, value: placesLeft === 0 ? booked.length : placesLeft!, tone: placesLeft === 0 ? 'warning' : undefined, hint: capacityHelp }
+              ? { label: placesLeft === 0 ? 'Booked, full' : `Booked, ${plural(placesLeft!, 'place')} left`, value: `${booked.length}/${a.capacity}`, tone: placesLeft === 0 ? 'warning' : undefined, hint: capacityHelp }
               : { label: 'Booked', value: booked.length },
           ]}
         />

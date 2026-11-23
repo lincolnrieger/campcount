@@ -220,7 +220,9 @@ export function SignupScreen() {
                               <span className="row-title">{s.name}</span>
                               <span className="row-meta">{[when(s), s.location || null].filter(Boolean).join(' · ')}</span>
                             </span>
-                            <Badge tone={s.full ? 'neutral' : 'success'}>{placesLeft(s)}</Badge>
+                            <span className="pg-places">
+                              <Badge tone={s.full ? 'neutral' : 'success'}>{placesLeft(s)}</Badge>
+                            </span>
                             <span className="row-side">
                               <Button small onClick={() => setPrinting([s.id])}>
                                 <Icon name="print" size={18} />

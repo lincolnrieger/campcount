@@ -14,8 +14,7 @@
   display: grid;
   gap: var(--space-2);
 }
-.pg-group-heading,
-.pg-caption {
+.pg-group-heading {
   padding: 0 0 var(--space-2);
   color: var(--ink-2);
   font-size: var(--text-sm);
@@ -24,20 +23,20 @@
   text-align: left;
   text-transform: uppercase;
 }
-.pg-table-wrap {
-  overflow: visible;
+.pg-table-fixed {
+  table-layout: fixed;
 }
-.pg-table-wrap:has(caption) {
-  border: 0;
-  background: none;
+.pg-table-fixed .pg-col-place {
+  width: 20%;
 }
-.pg-table-wrap:has(caption) .pg-table {
-  border: var(--border-width) solid var(--divider);
-  border-radius: var(--radius-lg);
-  border-collapse: separate;
-  border-spacing: 0;
-  background: var(--surface);
-  overflow: hidden;
+.pg-table-fixed .pg-col-num {
+  width: 6rem;
+}
+.pg-table-fixed .pg-col-status {
+  width: 17rem;
+}
+.pg-table-fixed td {
+  overflow-wrap: anywhere;
 }
 .pg-table td {
   height: 3.25rem;
@@ -200,6 +199,9 @@
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(7.5rem, 1fr) minmax(7.5rem, 1fr);
   gap: var(--space-3);
+}
+.pg-when > .field:only-child {
+  grid-column: 1 / -1;
 }
 @media (max-width: 599.98px) {
   .pg-when {
@@ -504,4 +506,21 @@
 }
 .pg-numbers {
   align-items: end;
+}
+/* An open row menu floats over the rows after it. */
+.row-side > .menu:has(> [aria-expanded='true']),
+.pg-team-head .menu:has(> [aria-expanded='true']) {
+  z-index: 6;
+}
+@media (max-width: 599.98px) {
+  .row:has(> .pg-places) {
+    flex-wrap: wrap;
+  }
+  .row > .pg-places {
+    order: 3;
+    margin-left: calc(1.25rem + var(--space-3));
+  }
+  .row:has(> .pg-places) > .row-main {
+    flex-basis: calc(100% - 9rem);
+  }
 }

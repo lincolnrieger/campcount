@@ -168,50 +168,54 @@ export function Activities() {
   const groups = grouped ? dayValues.map((d) => [d, visible.filter((a) => bucket(a) === d)] as const).filter(([, l]) => l.length > 0) : [[shownDay, visible] as const];
 
   const table = (list: readonly Activity[], caption: string | null) => (
-    <div className="table-wrap pg-table-wrap" key={caption ?? 'list'}>
-      <table className="table pg-table">
-        {caption && <caption className="pg-caption">{caption}</caption>}
-        <thead>
-          <tr>
-            <th scope="col" className="pg-col-time">
-              Time
-            </th>
-            <th scope="col">Activity</th>
-            <th scope="col">Place</th>
-            <th scope="col" className="cell-num">
-              Booked
-            </th>
-            {live.data && (
-              <th scope="col" className="cell-num">
-                Now
+    <div key={caption ?? 'list'} className="pg-group">
+      {caption && <h2 className="pg-group-heading">{caption}</h2>}
+      <div className="table-wrap">
+        <table className="table pg-table pg-table-fixed">
+          <thead>
+            <tr>
+              <th scope="col" className="pg-col-time">
+                Time
               </th>
-            )}
-            <th scope="col">
-              <span className="visually-hidden">Status</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {list.map((a) => (
-            <tr key={a.id} className={a.status === 'cancelled' ? 'row-link is-muted' : 'row-link'}>
-              <td className="pg-col-time num">
-                <span className="activity-time">{time(a)}</span>
-              </td>
-              <td>
-                <Link to={a.id} className="cell-link">
-                  {a.name}
-                </Link>
-              </td>
-              <td className="meta">{a.location}</td>
-              <td className="cell-num num">{bookedText(a)}</td>
-              {live.data && <td className="cell-num num">{nowCount(a) || ''}</td>}
-              <td>
-                <span className="pg-badges">{badges(a)}</span>
-              </td>
+              <th scope="col">Activity</th>
+              <th scope="col" className="pg-col-place">
+                Place
+              </th>
+              <th scope="col" className="cell-num pg-col-num">
+                Booked
+              </th>
+              {live.data && (
+                <th scope="col" className="cell-num pg-col-num">
+                  Now
+                </th>
+              )}
+              <th scope="col" className="pg-col-status">
+                <span className="visually-hidden">Status</span>
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {list.map((a) => (
+              <tr key={a.id} className={a.status === 'cancelled' ? 'row-link is-muted' : 'row-link'}>
+                <td className="pg-col-time num">
+                  <span className="activity-time">{time(a)}</span>
+                </td>
+                <td>
+                  <Link to={a.id} className="cell-link">
+                    {a.name}
+                  </Link>
+                </td>
+                <td className="meta">{a.location}</td>
+                <td className="cell-num num">{bookedText(a)}</td>
+                {live.data && <td className="cell-num num">{nowCount(a) || ''}</td>}
+                <td>
+                  <span className="pg-badges">{badges(a)}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 

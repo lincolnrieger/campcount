@@ -19,6 +19,7 @@ import {
   LoadError,
   Loading,
   PageHeader,
+  Popover,
   Segmented,
   Sheet,
   SkeletonRows,
@@ -291,6 +292,12 @@ export function Schedule() {
   )
     .map((o) => ({ ...o, count: kindCount(o.value) }))
     .filter((o) => o.count > 0 || kinds.includes(o.value));
+  const filters = (
+    <>
+      {kindOptions.length > 1 && <FilterChips multi label="Show" value={kinds} onChange={setKinds} options={kindOptions} />}
+      {items.some((i) => i.cancelled) && <Toggle label="Cancelled" checked={showCancelled} onChange={setShowCancelled} />}
+    </>
+  );
   const placed = (it: Item) => (drag?.key === it.key ? { ...it, day: drag.day, start: drag.start, end: drag.end } : it);
 
   return (
@@ -317,7 +324,7 @@ export function Schedule() {
       <div className="sections pg-sections">
         {!editable && <Banner>The event is closed, so the schedule is read-only.</Banner>}
         {items.length > 0 && (
-          <Toolbar sticky={!wide} label="Schedule filters">
+          <Toolbar label="Schedule filters">
             {!wide && (
               <div className="pg-toolbar-first">
                 <FilterChips
@@ -328,8 +335,13 @@ export function Schedule() {
                 />
               </div>
             )}
-            {kindOptions.length > 1 && <FilterChips multi label="Show" value={kinds} onChange={setKinds} options={kindOptions} />}
-            {items.some((i) => i.cancelled) && <Toggle label="Cancelled" checked={showCancelled} onChange={setShowCancelled} />}
+            {wide ? (
+              filters
+            ) : (
+              <Popover button={kinds.length || !showCancelled ? 'Filters on' : 'Filters'} label="Schedule filters">
+                {filters}
+              </Popover>
+            )}
             <div className="toolbar-end schedule-key" aria-label="Key">
               <span>
                 <span className="schedule-swatch schedule-activity" aria-hidden="true" /> Activity
