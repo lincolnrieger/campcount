@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ApiFailure, api } from '../api';
-import { Button, EmptyState, Icon, LoadError, Loading, Notice, PageHeader, SearchField, SkeletonRows, useToast } from '../ui';
+import { Banner, Button, EmptyState, Icon, LoadError, Loading, PageHeader, SearchField, SkeletonRows, Toolbar, useToast } from '../ui';
 import { matchesSearch } from '../../shared/search';
 import { useEvent } from './EventLayout';
 import { csvCell } from '../../shared/csv';
@@ -38,6 +38,7 @@ export function ParticipantLinks() {
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [query, setQuery] = useState('');
   const [group, setGroup] = useState('');
+  const [section, setSection] = useState('');
   const back = { to: `${base}/links`, label: 'Links' };
 
   const load = useCallback(async () => {
@@ -59,7 +60,8 @@ export function ParticipantLinks() {
   }, [load]);
 
   const groups = useMemo(() => [...new Set((links ?? []).map((l) => l.groupName))].filter(Boolean).sort(), [links]);
-  const shown = (links ?? []).filter((l) => (!group || l.groupName === group) && matchesSearch(query, l.name, l.groupName, l.shortCode));
+  const sections = useMemo(() => [...new Set((links ?? []).map((l) => l.section))].filter(Boolean).sort(), [links]);
+  const shown = (links ?? []).filter((l) => (!group || l.groupName === group) && (!section || l.section === section) && matchesSearch(query, l.name, l.groupName, l.shortCode));
 
   async function copy(text: string, what: string) {
     try {
@@ -92,7 +94,8 @@ export function ParticipantLinks() {
     <PageHeader
       title="Participant links"
       back={back}
-      summary="Each person's own page: they book activities, join teams, and see the programme and meal menus with ingredients. It's the same link as the QR on their lanyard."
+      summary={links && links.length > 0 ? `${links.length} ${links.length === 1 ? 'person' : 'people'}${missing ? ` · ${missing} without a link` : ''}` : undefined}
+      help="Each person's own page: they book activities, join teams, and see the programme and meal menus with ingredients. It's the same link as the QR on their lanyard."
       primary={
         links &&
         links.length > 0 && (
@@ -128,25 +131,28 @@ export function ParticipantLinks() {
       </>
     );
 
+  const filtered = Boolean(query || group || section);
   return (
     <>
       {header}
-      <div className="sections">
-        <Notice tone="warning" title="Send each link only to that person or their family">
-          <p>Anyone with a link can book and cancel activities for that person. Replacing someone's lanyard makes a new link and stops the old one.</p>
-        </Notice>
-        {missing > 0 && (
-          <Notice title={`${missing} ${missing === 1 ? 'person has' : 'people have'} no link yet`}>
-            <p>Links come with lanyards. Make them now; you can print the lanyards later.</p>
-            <Button onAction={issueMissing}>Make {missing} missing link{missing === 1 ? '' : 's'}</Button>
-          </Notice>
-        )}
+      <div className="sections plinks">
+        <div className="banners">
+          <Banner tone="warning">
+            Send each link only to that person or their family{' '}
+            <span className="meta">· anyone with it can book and cancel for them. A new lanyard makes a new link.</span>
+          </Banner>
+          {missing > 0 && (
+            <Banner action={<Button small onAction={issueMissing}>Make {missing} missing link{missing === 1 ? '' : 's'}</Button>}>
+              {missing} {missing === 1 ? 'person has' : 'people have'} no link yet <span className="meta">· links come with lanyards; print those later</span>
+            </Banner>
+          )}
+        </div>
         {links.length === 0 ? (
           <EmptyState title="No links yet">Add people first, then make their links here.</EmptyState>
         ) : (
-          <>
-            <div className="toolbar">
-              <SearchField id="links-q" label="Search" placeholder="Name, group or code" value={query} onChange={setQuery} />
+          <section className="section" aria-label="Links">
+            <Toolbar sticky label="Find links">
+              <SearchField id="links-q" label="Search" placeholder="Name, group or code" value={query} onChange={setQuery} slash />
               {groups.length > 1 && (
                 <select className="select" aria-label="Group" value={group} onChange={(e) => setGroup(e.target.value)}>
                   <option value="">All groups</option>
@@ -157,7 +163,35 @@ export function ParticipantLinks() {
                   ))}
                 </select>
               )}
-            </div>
+              {sections.length > 1 && (
+                <select className="select" aria-label="Section" value={section} onChange={(e) => setSection(e.target.value)}>
+                  <option value="">All sections</option>
+                  {sections.map((g) => (
+                    <option key={g} value={g}>
+                      {g}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {filtered && (
+                <Button
+                  small
+                  kind="ghost"
+                  onClick={() => {
+                    setQuery('');
+                    setGroup('');
+                    setSection('');
+                  }}
+                >
+                  Clear
+                </Button>
+              )}
+              <div className="toolbar-end">
+                <span className="meta" aria-live="polite">
+                  {shown.length === links.length ? `${links.length} links` : `${shown.length} of ${links.length}`}
+                </span>
+              </div>
+            </Toolbar>
             {shown.length === 0 ? (
               <EmptyState title="No one matches">Try another name or group.</EmptyState>
             ) : (
@@ -178,7 +212,10 @@ export function ParticipantLinks() {
                       <tr key={l.registrationId}>
                         <td>
                           <strong>{l.name}</strong>
-                          <div className="meta num">{l.shortCode}</div>
+                          <div className="meta num">
+                            {l.shortCode}
+                            {l.section ? ` · ${l.section}` : ''}
+                          </div>
                         </td>
                         <td>{l.groupName}</td>
                         <td className="link-cell">
@@ -196,7 +233,7 @@ export function ParticipantLinks() {
                 </table>
               </div>
             )}
-          </>
+          </section>
         )}
       </div>
     </>

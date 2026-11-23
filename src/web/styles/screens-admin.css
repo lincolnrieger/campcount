@@ -302,18 +302,7 @@ label.btn:has(input:focus-visible) {
   outline-offset: 2px;
 }
 
-/* Settings › Sections */
-.section-setting {
-  display: grid;
-  grid-template-columns: 5.5rem minmax(0, 1fr) 8rem;
-  align-items: center;
-  gap: var(--space-4);
-}
-@media (max-width: 720px) {
-  .section-setting {
-    grid-template-columns: 1fr;
-  }
-}
+/* Settings › Sections: the lanyard swatch (layout in ui-event.css) */
 .section-swatch {
   display: grid;
   place-items: center;
@@ -327,53 +316,6 @@ label.btn:has(input:focus-visible) {
   text-transform: uppercase;
   text-align: center;
 }
-.section-setting-fields {
-  display: grid;
-  grid-template-columns: minmax(7rem, 1fr) minmax(6rem, 8rem) auto auto;
-  flex: 1;
-  align-items: end;
-  gap: var(--space-3);
-  min-width: 0;
-}
-@media (max-width: 720px) {
-  .section-setting-fields {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-.section-field {
-  display: grid;
-  gap: 2px;
-}
-.section-field .input {
-  width: 100%;
-}
-.section-colour input {
-  width: 3rem;
-  height: var(--control);
-  padding: 2px;
-  border: var(--border-width) solid var(--border-control);
-  border-radius: var(--radius);
-  background: var(--surface);
-}
-.section-youth {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: var(--control);
-  font-weight: var(--weight-bold);
-}
-.section-youth input {
-  width: 1.25rem;
-  height: 1.25rem;
-}
-.section-setting-side {
-  display: grid;
-  justify-items: end;
-  gap: var(--space-1);
-  text-align: right;
-  font-size: var(--text-sm);
-}
-
 /* Booking links */
 .booking-link {
   overflow-wrap: anywhere;

@@ -7,7 +7,7 @@ import { ApiFailure, api } from '../api';
 import type { Activity, Meal } from '../model';
 import { useSession } from '../session';
 import type { EventSummary } from '../types';
-import { Button, Choice, Field, Icon, Notice, PageHeader, useToast } from '../ui';
+import { Banner, Button, EmptyState, Field, Icon, PageHeader, Toggle, formatDay, useToast } from '../ui';
 import { useEvent } from './EventLayout';
 import { clockInZone, dayInZone, weekdayName, zonedIso } from '../../shared/time';
 
@@ -120,54 +120,59 @@ export function CopyEvent() {
     return (
       <>
         <PageHeader title="Copy event" back={back} />
-        <Notice title="Copy events from the admin console">
-          <p>Copying creates a new camp, which is done at the main CampCount address by an administrator.</p>
-        </Notice>
+        <EmptyState title="Copy events from the admin console">Copying creates a new camp, which an administrator does at the main CampCount address.</EmptyState>
       </>
     );
   if (!canCreate)
     return (
       <>
         <PageHeader title="Copy event" back={back} />
-        <Notice tone="warning">
-          <p>Only administrators can create events.</p>
-        </Notice>
+        <Banner tone="warning">Only administrators can create events.</Banner>
       </>
     );
 
+  const endsOn = startsOn ? addDays(startsOn, length) : '';
   return (
     <>
-      <PageHeader title="Copy event" back={back} summary="Start a new event from this one. You'll be its event manager." />
-      <form onSubmit={submit} noValidate className="form">
-        {failure && (
-          <Notice tone="error" title="Couldn't copy everything">
-            <p>{failure}</p>
-          </Notice>
-        )}
-        <Field id="copy-name" label="New event name">
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
-        </Field>
-        <Field id="copy-start" label="First day" hint={`Runs ${length + 1} day${length ? 's' : ''}, like this event. Activity and meal times move to the new dates.`}>
-          <input className="input input-time" type="date" value={startsOn} onChange={(e) => setStartsOn(e.target.value)} />
-        </Field>
-        <fieldset className="field">
-          <legend className="field-label">Copy</legend>
-          <div className="choices">
-            <Choice checked disabled label={<strong>Details and features</strong>} description="Location, notes for staff and which features are on" />
-            {event.features.activities && (
-              <Choice checked={copyActivities} onChange={(e) => setCopyActivities(e.target.checked)} label={<strong>Activities</strong>} description="With their times, places and limits" />
-            )}
-            {event.features.meals && <Choice checked={copyMeals} onChange={(e) => setCopyMeals(e.target.checked)} label={<strong>Meals</strong>} />}
+      <PageHeader
+        title="Copy event"
+        back={back}
+        summary="Start a new event from this one."
+        help="You'll be the new event's manager. People, lanyards, scans and other staff stay with this event. Activity and meal times move to the new dates."
+      />
+      <form onSubmit={submit} noValidate className="form copy-form">
+        {failure && <Banner tone="error">{failure}</Banner>}
+        <div className="panel panel-pad settings-panel">
+          <Field id="copy-name" label="New event name">
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
+          </Field>
+          <div className="field-pair">
+            <Field id="copy-start" label="First day">
+              <input className="input" type="date" value={startsOn} onChange={(e) => setStartsOn(e.target.value)} />
+            </Field>
+            <div className="field">
+              <span className="field-label">Last day</span>
+              <span className="copy-ends">
+                {endsOn ? `${formatDay(endsOn)} ${endsOn.slice(0, 4)}` : '–'} <span className="meta">· {length + 1} day{length ? 's' : ''}, like this event</span>
+              </span>
+            </div>
           </div>
-        </fieldset>
-        <p className="meta">People, lanyards, scans and other staff stay with this event.</p>
+          <fieldset className="feature-group">
+            <legend className="feature-group-title">Copy</legend>
+            <Toggle checked disabled onChange={() => undefined} label="Details and features" hint="Location, notes for staff, features" />
+            <Toggle checked label="Lanyard design" disabled onChange={() => undefined} hint="With its images" />
+            {event.features.activities && <Toggle checked={copyActivities} onChange={setCopyActivities} label="Activities" hint="Times, places and limits" />}
+            {event.features.meals && <Toggle checked={copyMeals} onChange={setCopyMeals} label="Meals" />}
+          </fieldset>
+        </div>
         {progress && (
-          <p className="meta" role="status">
-            <Icon name="sync" size={16} /> {progress}
-          </p>
+          <Banner>
+            <span role="status">{progress}</span>
+          </Banner>
         )}
         <div className="btn-row">
           <Button type="submit" kind="primary" busy={!!progress} busyLabel="Copying…" disabled={!name.trim() || !startsOn}>
+            <Icon name="copy" />
             Copy event
           </Button>
           <Button onClick={() => navigate(back.to)} disabled={!!progress}>

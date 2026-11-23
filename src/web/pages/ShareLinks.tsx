@@ -5,7 +5,7 @@ import type { LinkFeature } from '../../shared/participantLinks';
 import { LINK_FEATURES, LINK_FEATURE_INFO } from '../../shared/participantLinks';
 import { ApiFailure, api } from '../api';
 import { useApi } from '../useApi';
-import { Badge, Button, EmptyState, Field, Icon, LoadError, Loading, Menu, Notice, PageHeader, useConfirm, useToast } from '../ui';
+import { Badge, Banner, Button, ButtonLink, EmptyState, Field, Icon, LoadError, Loading, Menu, PageHeader, Sheet, Toggle, useConfirm, useToast } from '../ui';
 import { useEvent } from './EventLayout';
 import { eventSiteUrl, useSite } from '../site';
 
@@ -24,6 +24,9 @@ const PRESETS: { name: string; features: LinkFeature[]; about: string }[] = [
   { name: 'Book activities', features: ['book'], about: 'Just booking and cancelling' },
   { name: 'Programme and food', features: ['programme', 'food'], about: 'Look only, nothing to change' },
 ];
+
+const HELP =
+  'One link for all participants. They type their Scouts SA membership number and see their own camp page, with only the parts you switch on. Surnames, groups, team-mates and dietary details are never shown. Changes apply the next time someone opens the link. Each person’s own lanyard QR still opens their full page. Typing numbers is limited per device, so nobody can try lots of numbers.';
 
 /**
  * People › Links for everyone: one link to send to every participant. They
@@ -44,20 +47,21 @@ export function ShareLinks() {
   const [features, setFeatures] = useState<LinkFeature[]>([...LINK_FEATURES]);
   const [failure, setFailure] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<{ link: ShareLink; name: string } | null>(null);
   const back = { to: `${base}/links`, label: 'Links' };
   if (!can('activities.manage')) return <Navigate to={back.to} replace />;
 
+  const links = data?.links ?? [];
   const header = (
     <PageHeader
       title="Links for everyone"
       back={back}
-      summary="One link for all participants. They type their Scouts SA membership number and see their own camp page, with only the parts you switch on. Surnames, groups, team-mates and dietary details are never shown on these pages."
+      summary={data && links.length > 0 ? `${links.length} link${links.length === 1 ? '' : 's'} · ${links.filter((l) => l.active).length} on` : undefined}
+      help={HELP}
       primary={
-        !making && (
-          <Button kind="primary" onClick={() => setMaking(true)}>
-            <Icon name="plus" /> New link
-          </Button>
-        )
+        <Button kind="primary" onClick={() => (setFailure(null), setMaking(true))}>
+          <Icon name="plus" /> New link
+        </Button>
       }
     />
   );
@@ -98,96 +102,75 @@ export function ShareLinks() {
   }
 
   const patch = (l: ShareLink, body: object, done?: string) => run(l.id, () => api(`/events/${event.id}/participant-links/${l.id}`, { method: 'PATCH', body }), done);
+  const onWebsite = links.find((l) => l.home && l.active);
 
   return (
     <>
       {header}
       <div className="sections share-links">
-        {!event.features.selfSignup && (
-          <Notice tone="warning">
-            <p>Activity sign-up is switched off for this camp, so booking shows as closed. Turn it on in Settings › Event details.</p>
-          </Notice>
-        )}
-
-        {siteName && (
-          <Notice tone="info">
-            <p>
-              <strong>{siteName}</strong> asks people whether they’re a participant or on the event team.{' '}
-              {data.links.some((l) => l.home && l.active)
-                ? 'Participants get the link marked “Camp website”. Give your other links more parts to test with.'
-                : 'Choose a link for participants with ⋯ › Use on the camp website. Until then it only offers Event team sign-in.'}
-            </p>
-          </Notice>
-        )}
-
-        {making && (
-          <form
-            className="panel panel-pad form share-new"
-            onSubmit={(e: FormEvent) => {
-              e.preventDefault();
-              void make(name.trim() || 'Camp page', features);
-            }}
-          >
-            <h2>New link</h2>
-            {failure && (
-              <Notice tone="error">
-                <p>{failure}</p>
-              </Notice>
+        {(!event.features.selfSignup || siteName) && (
+          <div className="banners">
+            {!event.features.selfSignup && (
+              <Banner
+                tone="warning"
+                action={
+                  can('event.configure') ? (
+                    <ButtonLink to={`${base}/settings/event`} small>
+                      Event details
+                    </ButtonLink>
+                  ) : undefined
+                }
+              >
+                Activity sign-up is off <span className="meta">· booking shows as closed</span>
+              </Banner>
             )}
-            <Field id="share-name" label="Name" hint="Just for you, so you can tell links apart. For example, “Pre-camp email”.">
-              <input className="input" maxLength={60} value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
-            </Field>
-            <fieldset className="share-features">
-              <legend className="field-label">What people can see and do</legend>
-              {LINK_FEATURES.map((f) => (
-                <label key={f} className="choice">
-                  <input type="checkbox" checked={features.includes(f)} onChange={(e) => setFeatures((fs) => (e.target.checked ? LINK_FEATURES.filter((x) => x === f || fs.includes(x)) : fs.filter((x) => x !== f)))} />
-                  <span className="choice-text">
-                    <span>{LINK_FEATURE_INFO[f].label}</span>
-                    <span className="meta">{LINK_FEATURE_INFO[f].hint}</span>
-                  </span>
-                </label>
-              ))}
-            </fieldset>
-            <div className="btn-row">
-              <Button type="submit" kind="primary" disabled={features.length === 0}>
-                Make link
-              </Button>
-              <Button onClick={() => setMaking(false)}>Cancel</Button>
-            </div>
-          </form>
+            {siteName && (
+              <Banner>
+                <strong>{siteName}</strong>{' '}
+                {onWebsite ? (
+                  <span className="meta">· participants get “{onWebsite.name}”</span>
+                ) : (
+                  <span className="meta">· only offers Event team sign-in. Choose a link with ⋯ › Use on the camp website.</span>
+                )}
+              </Banner>
+            )}
+          </div>
         )}
 
-        {data.links.length === 0 && !making ? (
-          <EmptyState title="No links yet">
-            <p>Start with one of these. You can change what each link shows at any time.</p>
-            <div className="share-presets">
-              {PRESETS.map((p) => (
-                <button key={p.name} type="button" className="share-preset" onClick={() => void make(p.name, p.features)}>
-                  <strong>{p.name}</strong>
-                  <span className="meta">{p.about}</span>
-                </button>
-              ))}
-            </div>
+        {links.length === 0 ? (
+          <EmptyState
+            title="No links yet"
+            actions={
+              <div className="share-presets">
+                {PRESETS.map((p) => (
+                  <button key={p.name} type="button" className="share-preset" onClick={() => void make(p.name, p.features)}>
+                    <strong>{p.name}</strong>
+                    <span className="meta">{p.about}</span>
+                  </button>
+                ))}
+              </div>
+            }
+          >
+            Start with one of these. You can change what each link shows at any time.
           </EmptyState>
         ) : (
           <ul className="share-list">
-            {data.links.map((l) => (
-              <li key={l.id} className={l.active ? 'panel panel-pad share-link' : 'panel panel-pad share-link is-off'}>
+            {links.map((l) => (
+              <li key={l.id} className={l.active ? 'panel share-link' : 'panel share-link is-off'}>
                 <div className="share-link-head">
                   <h2>{l.name}</h2>
                   {l.home && <Badge tone="brand">Camp website</Badge>}
                   {!l.active && <Badge tone="warning">Switched off</Badge>}
+                  <Toggle
+                    checked={l.active}
+                    disabled={busy === l.id}
+                    onChange={(on) => void patch(l, { active: on }, on ? 'Link switched on' : 'Link switched off')}
+                    label={<span className="share-onoff">{l.active ? 'On' : 'Off'}<span className="visually-hidden">: {l.name}</span></span>}
+                  />
                   <Menu
                     label={`More actions for ${l.name}`}
                     items={[
-                      {
-                        label: 'Rename…',
-                        onSelect: () => {
-                          const n = window.prompt('Name for this link', l.name)?.trim();
-                          if (n && n !== l.name) void patch(l, { name: n }, 'Renamed');
-                        },
-                      },
+                      { label: 'Rename…', onSelect: () => setRenaming({ link: l, name: l.name }) },
                       !!siteName && {
                         label: l.home ? 'Stop using on the camp website' : `Use on the camp website (${siteName})`,
                         onSelect: () => void patch(l, { home: !l.home }, l.home ? 'No longer on the camp website' : 'Now on the camp website'),
@@ -221,6 +204,7 @@ export function ShareLinks() {
                   </a>
                 </div>
                 <div className="share-toggles" role="group" aria-label={`What ${l.name} shows`}>
+                  <span className="share-toggles-label">Shows</span>
                   {LINK_FEATURES.map((f) => {
                     const on = l.features.includes(f);
                     return (
@@ -243,11 +227,66 @@ export function ShareLinks() {
             ))}
           </ul>
         )}
-        <p className="meta">
-          Changes apply the next time someone opens the link. Each person’s own lanyard QR code still opens their full page. Typing numbers is limited per device, so nobody can
-          try lots of numbers.
-        </p>
       </div>
+
+      <Sheet open={making} title="New link" onClose={() => setMaking(false)}>
+        {making && (
+          <form
+            className="form share-new"
+            onSubmit={(e: FormEvent) => {
+              e.preventDefault();
+              void make(name.trim() || 'Camp page', features);
+            }}
+          >
+            {failure && <Banner tone="error">{failure}</Banner>}
+            <Field id="share-name" label="Name" hint="Only you see it. For example, “Pre-camp email”.">
+              <input className="input" maxLength={60} value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
+            </Field>
+            <fieldset className="share-features">
+              <legend className="field-label">What people can see and do</legend>
+              {LINK_FEATURES.map((f) => (
+                <Toggle
+                  key={f}
+                  checked={features.includes(f)}
+                  onChange={(checked) => setFeatures((fs) => (checked ? LINK_FEATURES.filter((x) => x === f || fs.includes(x)) : fs.filter((x) => x !== f)))}
+                  label={LINK_FEATURE_INFO[f].label}
+                  hint={LINK_FEATURE_INFO[f].hint}
+                />
+              ))}
+            </fieldset>
+            <div className="btn-row">
+              <Button type="submit" kind="primary" disabled={features.length === 0}>
+                Make link
+              </Button>
+              <Button onClick={() => setMaking(false)}>Cancel</Button>
+            </div>
+          </form>
+        )}
+      </Sheet>
+
+      <Sheet open={renaming !== null} title="Rename link" onClose={() => setRenaming(null)}>
+        {renaming && (
+          <form
+            className="form"
+            onSubmit={(e: FormEvent) => {
+              e.preventDefault();
+              const n = renaming.name.trim();
+              if (n && n !== renaming.link.name) void patch(renaming.link, { name: n }, 'Renamed');
+              setRenaming(null);
+            }}
+          >
+            <Field id="share-rename" label="Name for this link">
+              <input className="input" maxLength={60} value={renaming.name} onChange={(e) => setRenaming({ ...renaming, name: e.target.value })} autoComplete="off" />
+            </Field>
+            <div className="btn-row">
+              <Button type="submit" kind="primary" disabled={!renaming.name.trim()}>
+                Rename
+              </Button>
+              <Button onClick={() => setRenaming(null)}>Cancel</Button>
+            </div>
+          </form>
+        )}
+      </Sheet>
     </>
   );
 }
