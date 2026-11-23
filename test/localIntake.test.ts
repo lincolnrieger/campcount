@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FilePerson, RosterPerson } from '../src/shared/localIntake';
 import {
+  autoNoDietary,
   buildRow,
   checkedNotes,
   combinedPhoto,
@@ -176,5 +177,34 @@ describe('dietary already checked on another computer (kept on the roster)', () 
     expect(dietaryIsDone(link([ms('100', 'Ava', 'Scout', { dietaryText: 'Peanut allergy' })], [cg('100', 'Ava', { dietaryText: 'peanut allergy' })]), undefined, ['*'])).toBe(true);
     const extra = link([ms('100', 'Ava', 'Scout', { dietaryText: 'Peanut allergy' })], [cg('100', 'Ava', { dietaryText: 'Peanut allergy, also lactose' })]);
     expect(newDietarySources(extra, undefined, ['*'])).toEqual(['consent2go']);
+  });
+});
+
+describe('Consent2Go "None; None"', () => {
+  const link = (m: FilePerson[], c: FilePerson[]) => linkPeople(m, c, []).people[0]!;
+  const none = (msText: string | null, c2g = 'None; None') =>
+    link(msText === null ? [] : [ms('100', 'Ava', 'Scout', { dietaryText: msText })], [cg('100', 'Ava', { dietaryText: c2g })]);
+
+  it('records no dietary needs only when MyScout and the roster have nothing', () => {
+    expect(autoNoDietary(none(''), [])).toBe(true);
+    expect(autoNoDietary(none('Nil'), [])).toBe(true);
+    expect(autoNoDietary(none('N/A'), [])).toBe(true);
+    expect(autoNoDietary(none(null), [])).toBe(true);
+    expect(autoNoDietary(none('', '  None; None  '), [])).toBe(true);
+  });
+
+  it('never when MyScout says anything, or anything is already recorded', () => {
+    expect(autoNoDietary(none('Peanut allergy'), [])).toBe(false);
+    expect(autoNoDietary(none('Vegetarian'), [])).toBe(false);
+    expect(autoNoDietary(none(''), [{ category: 'allergy', item: 'Peanut' }])).toBe(false);
+    // Can't see what's recorded: leave it to a person.
+    expect(autoNoDietary(none(''), undefined)).toBe(false);
+  });
+
+  it('only for exactly "None; None"', () => {
+    for (const t of ['None', 'none; none', 'None;None', 'None; None; None', 'Nil', 'None; Peanuts', ''])
+      expect(autoNoDietary(none('', t), [])).toBe(false);
+    // Someone not in Consent2Go at all.
+    expect(autoNoDietary(link([ms('100', 'Ava', 'Scout')], []), [])).toBe(false);
   });
 });
