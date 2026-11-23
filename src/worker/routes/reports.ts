@@ -54,7 +54,13 @@ reportRoutes.get('/side-quest/collections', async (c) => {
   const principal = requirePermission(c, 'reports.view', { eventId });
   const ev = await event(c, eventId);
   const [rows, people] = await Promise.all([
-    c.env.DB.prepare(`SELECT collector_id, collected_id, created_at FROM side_quest_collections WHERE event_id = ? ORDER BY created_at LIMIT 20000`)
+    // Only young people play: collections by or of a leader (from before that rule) don't count.
+    c.env.DB.prepare(
+      `SELECT c.collector_id, c.collected_id, c.created_at FROM side_quest_collections c
+         JOIN registrations a ON a.id = c.collector_id AND a.kind = 'youth'
+         JOIN registrations b ON b.id = c.collected_id AND b.kind = 'youth'
+        WHERE c.event_id = ? ORDER BY c.created_at LIMIT 20000`,
+    )
       .bind(eventId)
       .all<{ collector_id: string; collected_id: string; created_at: string }>(),
     c.env.DB.prepare(
@@ -67,7 +73,7 @@ reportRoutes.get('/side-quest/collections', async (c) => {
   return c.json({
     enabled: ev.feature_side_quest === 1,
     canRemove: can(principal, 'event.configure', { eventId }),
-    players: (await c.env.DB.prepare(`SELECT count(*) AS n FROM registrations WHERE event_id = ? AND status = 'active'`).bind(eventId).first<{ n: number }>())?.n ?? 0,
+    players: (await c.env.DB.prepare(`SELECT count(*) AS n FROM registrations WHERE event_id = ? AND status = 'active' AND kind = 'youth'`).bind(eventId).first<{ n: number }>())?.n ?? 0,
     people: people.results.map((p) => ({
       id: p.id,
       name: `${p.preferred_name || p.first_name} ${p.last_name}`.trim(),

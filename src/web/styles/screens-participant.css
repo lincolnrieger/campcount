@@ -564,7 +564,7 @@ button.pp-state.is-booked {
 }
 .pp-quest-big {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--space-3);
   font-weight: var(--weight-heavy);
 }

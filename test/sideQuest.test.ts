@@ -70,7 +70,8 @@ describe('Super Splash Side Quest', () => {
     const first = await ava.open(c.token('Ben'));
     expect(first.body.collect.fresh).toBe(true);
     expect(first.body.collect.friend).toMatchObject({ firstName: 'Ben', sectionWord: 'Rover' });
-    expect(first.body.collect.standing).toMatchObject({ collected: 1, total: 4, rank: 1, players: 1 });
+    // Totals count young people only (Dee is a leader).
+    expect(first.body.collect.standing).toMatchObject({ collected: 1, total: 3, rank: 1, players: 1 });
     // The friend's own page (bookings, pass) is never shown on someone else's phone.
     expect(first.body.pass).toBeUndefined();
 
@@ -89,10 +90,28 @@ describe('Super Splash Side Quest', () => {
       ['Ava S.', 2, true],
     ]);
 
-    // Quests: every Rover, and leaders with the event team.
+    // Quests: every youth section (no leaders quest).
     const quests = (await eli.open(c.token('Eli'))).body.sideQuest.quests;
     expect(quests.find((q: { key: string }) => q.key === 'rovers')).toMatchObject({ collected: 2, total: 2, done: true });
-    expect(quests.find((q: { key: string }) => q.key === 'leaders')).toMatchObject({ label: 'Leaders and the event team', collected: 0, total: 1, done: false });
+    expect(quests.find((q: { key: string }) => q.key === 'leaders')).toBeUndefined();
+  });
+
+  it('is for young people only: leaders neither collect nor get collected', async () => {
+    const c = await camp();
+    const ava = phone();
+    await ava.open(c.token('Ava'));
+    const leader = await ava.open(c.token('Dee'));
+    expect(leader.body.collect).toMatchObject({ fresh: false, leader: true });
+    expect(leader.body.collect.standing.collected).toBe(0);
+    // A leader's own phone has no game, and opening a youth lanyard on it collects nobody.
+    const dee = phone();
+    const own = await dee.open(c.token('Dee'));
+    expect(own.body.sideQuest).toBeNull();
+    const kid = await dee.open(c.token('Ben'));
+    expect(kid.body.collect).toBeUndefined();
+    const list = await json(await api(`/events/${c.eventId}/side-quest/collections`, { cookie: c.manager.cookie }));
+    expect(list.collections).toHaveLength(0);
+    expect(list.players).toBe(4);
   });
 
   it('never collects at the shared sign-up kiosk or with a typed code', async () => {
@@ -139,8 +158,8 @@ describe('Super Splash Side Quest', () => {
     await ava.open(c.token('Ben'));
     await ava.open(c.token('Dee'));
     const board = await json(await api(`/events/${c.eventId}/side-quest`, { cookie: c.manager.cookie }));
-    expect(board).toMatchObject({ enabled: true, collections: 2 });
-    expect(board.rows[0]).toMatchObject({ name: 'Ava Splash', collected: 2, place: 1 });
+    expect(board).toMatchObject({ enabled: true, collections: 1 });
+    expect(board.rows[0]).toMatchObject({ name: 'Ava Splash', collected: 1, place: 1 });
     const scanner = await createUser();
     await grant(scanner.id, 'scanner', c.eventId);
     expect((await api(`/events/${c.eventId}/side-quest`, { cookie: scanner.cookie })).status).toBe(403);
