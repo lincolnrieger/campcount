@@ -124,6 +124,22 @@ describe('a person on the event', () => {
     expect((await api(path, { cookie: scanner.cookie, method: 'PATCH', body: { groupName: 'x' } })).status).toBe(403);
   });
 
+  it('keeps which dietary notes were read (fingerprints only) on the roster', async () => {
+    const c = await camp();
+    const id = c.card('100').registrationId;
+    const checkedOf = async () =>
+      (await json(await api(`/events/${c.eventId}/registrations`, { cookie: c.manager.cookie }))).registrations.find((r: { id: string }) => r.id === id).dietaryChecked;
+    expect(await checkedOf()).toBeNull();
+    const put = (body: object) => api(`/events/${c.eventId}/registrations/${id}/dietary`, { cookie: c.manager.cookie, method: 'PUT', body });
+    expect((await put({ entries: [], checkedNotes: ['abc123', 'zz9'] })).status).toBe(200);
+    expect(await checkedOf()).toEqual(['abc123', 'zz9']);
+    // Saved from their page (no fingerprints): still counts as checked, and keeps what was read.
+    await put({ entries: [] });
+    expect(await checkedOf()).toEqual(['abc123', 'zz9']);
+    // Only fingerprints, never text.
+    expect((await put({ entries: [], checkedNotes: ['Peanut allergy'] })).status).toBe(400);
+  });
+
   it('deletes someone with their card and scans, and records it', async () => {
     const c = await camp();
     await c.scan('site', null, '200');
