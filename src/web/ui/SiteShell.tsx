@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react';
-import { Link, NavLink, Outlet, useLocation } from 'react-router';
+import { Link, Outlet, useLocation } from 'react-router';
 import { Icon } from './Icon';
 import type { IconName } from './Icon';
 import { Badge } from './Feedback';
-import { BrandMark } from './AppShell';
+import { BrandMark, EventNavList } from './AppShell';
 import { stopPreview } from '../components/ViewAs';
 import { useSession } from '../session';
-import { useShell } from '../shell';
+import { activeNav, useShell } from '../shell';
 import { useSiteEvent } from '../site';
 
 const ICONS: Record<string, IconName> = { '': 'home', scan: 'scan', people: 'user', activities: 'events', schedule: 'events', teams: 'user', meals: 'events', reports: 'download', settings: 'admin', more: 'more', account: 'user' };
@@ -35,7 +35,8 @@ export function SiteShell() {
   const preview = me?.kind === 'user' ? me.preview : null;
   const sections = shellEvent?.sections ?? [];
   const tabs = sections.length + 1 > TAB_LIMIT ? [...sections.slice(0, TAB_LIMIT - 1), { to: 'more', label: 'More' }] : [...sections, { to: 'account', label: 'Account' }];
-  const inMore = sections.slice(TAB_LIMIT - 1).some((s) => location.pathname.startsWith(`/${s.to}`)) || location.pathname.startsWith('/account');
+  const here = activeNav(sections, location.pathname.replace(/^\/+|\/+$/g, '')).section;
+  const inMore = sections.slice(TAB_LIMIT - 1).some((s) => s.to === here) || location.pathname.startsWith('/account');
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -67,16 +68,7 @@ export function SiteShell() {
                 <Badge tone={shellEvent.status === 'draft' ? 'warning' : 'neutral'}>{shellEvent.status === 'draft' ? 'Not open yet' : 'Closed'}</Badge>
               </p>
             )}
-            <ul>
-              {sections.map((s) => (
-                <li key={s.to}>
-                  <NavLink to={`/${s.to}`} end={s.to === ''}>
-                    <Icon name={ICONS[s.to] ?? 'chevron'} />
-                    {s.label}
-                  </NavLink>
-                </li>
-              ))}
-            </ul>
+            <EventNavList base="" sections={sections} label={`${site.name} sections`} />
           </nav>
           <Link to="/account" className="sidebar-user" aria-current={location.pathname.startsWith('/account') ? 'page' : undefined}>
             <span className="avatar" aria-hidden="true">
@@ -132,10 +124,10 @@ export function SiteShell() {
       {me?.kind === 'user' && (
         <nav className="tabbar" aria-label="Main">
           {tabs.map((t) => {
-            const active = t.to === 'more' ? inMore : t.to === '' ? location.pathname === '/' : location.pathname.startsWith(`/${t.to}`);
+            const active = t.to === 'more' ? inMore : t.to === 'account' ? location.pathname.startsWith('/account') : t.to === here;
             return (
               <Link key={t.to} to={`/${t.to}`} aria-current={active ? 'page' : undefined}>
-                <Icon name={ICONS[t.to] ?? 'chevron'} size={24} />
+                <Icon name={('icon' in t && t.icon ? t.icon : ICONS[t.to]) as IconName ?? 'chevron'} size={24} />
                 <span>{t.label}</span>
               </Link>
             );

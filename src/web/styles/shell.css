@@ -366,3 +366,115 @@
 .sidebar-status {
   padding: 0 var(--space-3);
 }
+
+/* ---------- Event navigation: sections that open to show their pages ---------- */
+.navtree-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.navtree-head > a {
+  flex: 1;
+  min-width: 0;
+}
+.navtree-toggle {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.navtree-toggle:hover {
+  background: var(--surface-sunken);
+  color: var(--ink);
+}
+.navtree-toggle svg {
+  transition: transform 200ms var(--ease);
+}
+.navtree-toggle[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+/* Opens and closes smoothly: the rows grow from nothing. */
+.navtree-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 220ms var(--ease);
+}
+.navtree-body.is-open {
+  grid-template-rows: 1fr;
+}
+.navtree-body > ul {
+  min-height: 0;
+  overflow: hidden;
+}
+.navtree-section.is-here > .navtree-head > a:not([aria-current]) {
+  color: var(--ink);
+  font-weight: var(--weight-heavy);
+}
+@media (min-width: 1024px) {
+  /* The pages of a section hang off their own guide line, under the section's name. */
+  .sidebar-nav .navtree-body > ul {
+    margin: 2px 0 var(--space-1) calc(var(--space-3) + 10px);
+    padding-left: var(--space-3);
+    border-left: 2px solid var(--divider);
+  }
+  .sidebar-nav .navtree-body a {
+    min-height: 2.25rem;
+    font-size: var(--text-md);
+    font-weight: var(--weight-medium);
+  }
+  .sidebar-nav .navtree-body a[aria-current='page'] {
+    font-weight: var(--weight-heavy);
+  }
+}
+
+/* Phones: the pages of the section you're in, as chips under the section tabs. */
+.subtabs {
+  display: flex;
+  gap: var(--space-2);
+  margin: calc(var(--space-3) * -1) 0 var(--space-5);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.subtabs::-webkit-scrollbar {
+  display: none;
+}
+.subtabs a {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.5rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.subtabs a[aria-current='page'] {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #FFFFFF;
+}
+.page > .subtabs:first-child {
+  margin-top: 0;
+}
+@media print {
+  .subtabs {
+    display: none !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .navtree-body,
+  .navtree-toggle svg {
+    transition: none;
+  }
+}

@@ -22,7 +22,7 @@ export function BookingLinks() {
   const header = (
     <PageHeader
       title="Booking links"
-      back={{ to: `${base}/activities`, label: 'Activities' }}
+      back={{ to: `${base}/links`, label: 'Links' }}
       summary="One link per activity, to put in an email before camp. People open it, type their membership number and they’re booked. The page never shows who a number belongs to."
     />
   );

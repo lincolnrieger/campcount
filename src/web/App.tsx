@@ -32,6 +32,7 @@ import { SectionsSettings } from './pages/SectionsSettings';
 import { Intake } from './pages/Intake';
 import { BookingLinks } from './pages/BookingLinks';
 const BookLink = lazy(() => import('./pages/BookLink').then((m) => ({ default: m.BookLink })));
+const LinksHub = lazy(() => import('./pages/LinksHub').then((m) => ({ default: m.LinksHub })));
 const ShareLinks = lazy(() => import('./pages/ShareLinks').then((m) => ({ default: m.ShareLinks })));
 const FrontDoor = lazy(() => import('./pages/FrontDoor').then((m) => ({ default: m.FrontDoor })));
 const JoinLink = lazy(() => import('./pages/JoinLink').then((m) => ({ default: m.JoinLink })));
@@ -211,6 +212,7 @@ function EventSiteApp({ site }: { site: Extract<SiteInfo, { kind: 'event' }> }) 
             <Route path="people/roll-sheet" element={<RollSheet />} />
             <Route path="people/links" element={<ParticipantLinks />} />
             <Route path="people/share" element={<ShareLinks />} />
+            <Route path="links" element={<LinksHub />} />
             <Route path="people/leader-roster" element={<LeaderRoster />} />
             <Route path="people/:registrationId" element={<Person />} />
             <Route path="people/:registrationId/edit" element={<PersonEdit />} />
@@ -294,6 +296,7 @@ function PlatformApp() {
             <Route path="people/roll-sheet" element={<RollSheet />} />
             <Route path="people/links" element={<ParticipantLinks />} />
             <Route path="people/share" element={<ShareLinks />} />
+            <Route path="links" element={<LinksHub />} />
             <Route path="people/leader-roster" element={<LeaderRoster />} />
             <Route path="people/:registrationId" element={<Person />} />
             <Route path="people/:registrationId/edit" element={<PersonEdit />} />

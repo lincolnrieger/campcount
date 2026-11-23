@@ -1,11 +1,12 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { Icon } from './Icon';
 import type { IconName } from './Icon';
 import { Badge } from './Feedback';
 import { stopPreview } from '../components/ViewAs';
 import { useSession } from '../session';
-import { useShell } from '../shell';
+import type { NavSection } from '../shell';
+import { activeNav, useShell } from '../shell';
 import { useSite } from '../site';
 
 /** True when event addresses work here (on campcount.com, not workers.dev): the main site is then just the admin console. */
@@ -98,15 +99,7 @@ function Sidebar({ isAdmin }: { isAdmin: boolean }) {
                 </span>
               )}
             </p>
-            <ul aria-label={`${event.name} sections`}>
-              {event.sections.map((s) => (
-                <li key={s.to}>
-                  <NavLink to={`${event.base}/${s.to}`} end={s.to === ''}>
-                    {s.label}
-                  </NavLink>
-                </li>
-              ))}
-            </ul>
+            <EventNavList base={event.base} sections={event.sections} label={`${event.name} sections`} />
           </div>
         )}
         {isAdmin && (
@@ -242,20 +235,108 @@ export function AppShell() {
   );
 }
 
-/** Event sections on phones: one scrollable row of tabs under the top bar. */
-export function EventTabs({ base, sections }: { base: string; sections: { to: string; label: string }[] }) {
-  const ref = useRef<HTMLElement>(null);
+/** The path inside the event ('' for Home). */
+function useRel(base: string) {
   const { pathname } = useLocation();
+  const inside = base && pathname.startsWith(base) ? pathname.slice(base.length) : pathname;
+  return inside.replace(/^\/+|\/+$/g, '');
+}
+
+/**
+ * An event's sections in the sidebar. Sections with pages under them open
+ * and close (the one you're in starts open), so every page is one click away
+ * without hunting through menus.
+ */
+export function EventNavList({ base, sections, label }: { base: string; sections: NavSection[]; label: string }) {
+  const rel = useRel(base);
+  const active = activeNav(sections, rel);
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  // Opening a page in a section opens that section.
+  useEffect(() => {
+    if (active.section !== null) setOpen((o) => (o[active.section!] ? o : { ...o, [active.section!]: true }));
+  }, [active.section]);
+  return (
+    <ul className="navtree" aria-label={label}>
+      {sections.map((s) => {
+        const here = active.section === s.to;
+        const isOpen = !!open[s.to];
+        const id = `nav-${s.to || 'home'}`.replace(/\W/g, '-');
+        return (
+          <li key={s.to} className={here ? 'navtree-section is-here' : 'navtree-section'}>
+            <div className="navtree-head">
+              <Link to={`${base}/${s.to}`} aria-current={here && (!s.children || active.page === null) ? 'page' : undefined}>
+                <Icon name={(s.icon as IconName) ?? 'chevron'} />
+                <span>{s.label}</span>
+              </Link>
+              {s.children && (
+                <button
+                  type="button"
+                  className="navtree-toggle"
+                  aria-expanded={isOpen}
+                  aria-controls={id}
+                  aria-label={`${isOpen ? 'Hide' : 'Show'} ${s.label} pages`}
+                  onClick={() => setOpen((o) => ({ ...o, [s.to]: !isOpen }))}
+                >
+                  <Icon name="down" size={18} />
+                </button>
+              )}
+            </div>
+            {s.children && (
+              <div className={isOpen ? 'navtree-body is-open' : 'navtree-body'} id={id}>
+                <ul inert={!isOpen}>
+                  {s.children.map((c) => (
+                    <li key={c.to}>
+                      <Link to={`${base}/${c.to}`} aria-current={here && active.page === c.to ? 'page' : undefined}>
+                        {c.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Event sections on phones: one scrollable row of tabs under the top bar. */
+export function EventTabs({ base, sections }: { base: string; sections: NavSection[] }) {
+  const ref = useRef<HTMLElement>(null);
+  const rel = useRel(base);
+  const active = activeNav(sections, rel);
   useEffect(() => {
     ref.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'center' });
-  }, [pathname]);
+  }, [active.section]);
   if (sections.length < 2) return null;
   return (
     <nav className="tabs event-tabs only-phone" aria-label="Event sections" ref={ref}>
       {sections.map((s) => (
-        <NavLink key={s.to} to={`${base}/${s.to}`} end={s.to === ''}>
+        <Link key={s.to} to={`${base}/${s.to}`} aria-current={active.section === s.to ? 'page' : undefined}>
           {s.label}
-        </NavLink>
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
+/** Phones: the pages of the section you're in, as a second row of chips. */
+export function EventSubTabs({ base, sections }: { base: string; sections: NavSection[] }) {
+  const ref = useRef<HTMLElement>(null);
+  const rel = useRel(base);
+  const active = activeNav(sections, rel);
+  const section = sections.find((s) => s.to === active.section);
+  useEffect(() => {
+    ref.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }, [active.page]);
+  if (!section?.children) return null;
+  return (
+    <nav className="subtabs only-phone" aria-label={`${section.label} pages`} ref={ref}>
+      {section.children.map((c) => (
+        <Link key={c.to} to={`${base}/${c.to}`} aria-current={active.page === c.to ? 'page' : undefined}>
+          {c.label}
+        </Link>
       ))}
     </nav>
   );
