@@ -19,7 +19,7 @@ describe('encrypting existing data', () => {
       testEnv.DB.prepare(
         `INSERT INTO registrations (id, event_id, person_id, kind, level, group_name, car_rego, photo_consent, created_at, updated_at) VALUES (?, ?, ?, 'adult', 'Leaders', 'Old Club', 'ABC123', 'yes', ?, ?)`,
       ).bind(regId, eventId, personId, now, now),
-      testEnv.DB.prepare(`INSERT INTO dietary_entries (id, event_id, registration_id, category, item, severity, note, created_by, created_at) VALUES (?, ?, ?, 'allergy', 'Sesame', 'standard', 'Mild', ?, ?)`).bind(
+      testEnv.DB.prepare(`INSERT INTO dietary_entries (id, event_id, registration_id, category, item, severity, note, created_by, created_at) VALUES (?, ?, ?, 'allergy', 'Sesame', 'standard', 'Mild reaction only: hives, no breathing trouble, ok', ?, ?)`).bind(
         crypto.randomUUID(),
         eventId,
         regId,
