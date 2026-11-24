@@ -17,13 +17,13 @@ layout, with camps at `/events/<id>`.
 
 ## A camp's own site
 
-Sections, shown only when the person's role can use them:
+Levels, shown only when the person's role can use them:
 
-| Section | Holds |
+| Level | Holds |
 | --- | --- |
 | Home | Open camp: counts that filter (On site, Not arrived, Left camp), Find a person, everyone listed with Not arrived first, and Arrived/Left by hand. Draft camp: the Get ready checklist, ending with Open event. |
 | Scan | Big buttons: On now, then Gate, then the day's meals and activities. One tap opens the full-screen scanner. People who only scan go straight into the scanner when there's only one thing on. |
-| People | Search, one filter, and a table (computers) or list (phones). The ⋯ menu has Import from MyScout, Design lanyards (the card designer, with a Print tab), Print lanyards, Participant links (everyone's own page link, to copy or download as CSV for emailing), Print roll sheet and Select people to delete. A person has Right now, Dietary needs, Activities, History (with Undo this scan) and Details, plus Edit details. |
+| People | Search, one filter, and a table (computers) or list (phones). The ⋯ menu has Import, Design lanyards (the card designer, with a Print tab), Print lanyards, Participant links (everyone's own page link, to copy or download as CSV for emailing), Print roll sheet and Select people to delete. A person has Right now, Dietary needs, Activities, History (with Undo this scan) and Details, plus Edit details. |
 | Activities | Day tabs, then rows. Each activity has who's booked and who's here, Check in, and Add someone. |
 | Meals | Day tabs. Add a day of meals adds breakfast, lunch and dinner in one go. Each meal can have a menu and ingredients, shown under it for leaders to check. |
 | Reports | Check-up, Downloads, Close event. |
@@ -32,7 +32,7 @@ Sections, shown only when the person's role can use them:
 - **Computers:** a sidebar with the camp's logo and name.
 - **Phones:**
   - A top bar with the logo and name.
-  - A bottom tab bar with the first three sections, plus More for the rest and Account.
+  - A bottom tab bar with the first three levels, plus More for the rest and Account.
 
 The scanner is built for outdoors (sun, rain, wet fingers) and for people who only scan. It is full screen and the camera screen never scrolls: the place and a plain count ("12 of 45 eaten"), Change (pick another place) and Settings (beep, account) at the top, the camera, a solid green / amber / red answer after each scan, and one big button with who's still to come ("Not eaten yet 33"). That opens the list: search, Not yet / Done, a big Served / Check in / Arrived button on each name for anyone without a lanyard, and Undo on the done side at meals and activities. Back to camera stays at the bottom. The upload status only shows when there's a problem (no signal, scans waiting, blocked). Close returns to the Scan buttons.
 

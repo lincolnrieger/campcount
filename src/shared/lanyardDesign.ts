@@ -44,12 +44,12 @@ export function fontWeight(font: FontId, wanted: FontWeight): FontWeight {
   return ws.reduce((best, w) => (Math.abs(w - wanted) < Math.abs(best - wanted) ? w : best), ws[0]!) as FontWeight;
 }
 
-/** Fields that fill in per person. Typed into text as {name}, {section}… */
+/** Fields that fill in per person. Typed into text as {name}, {level}… */
 export const FIELDS = {
   name: { label: 'Name', sample: 'Sam Taylor' },
   first: { label: 'First name', sample: 'Sam' },
   last: { label: 'Last name', sample: 'Taylor' },
-  section: { label: 'Section', sample: 'Scout' },
+  level: { label: 'Level', sample: 'Participant' },
   code: { label: 'Lanyard code', sample: '1234567' },
   camp: { label: 'Camp name', sample: 'Summer Camp' },
 } as const;
@@ -57,14 +57,14 @@ export type FieldId = keyof typeof FIELDS;
 export const FIELD_IDS = Object.keys(FIELDS) as FieldId[];
 
 /**
- * A colour: a hex value, or one that follows the person's section
- * (Scout green, Venturer maroon, Rover red, Leader eucalypt), or the text
- * colour that reads on it.
+ * A colour: a hex value, or one that follows the person's level (the
+ * camp's colour for it in Settings › Levels), or the text colour that reads
+ * on it.
  */
-export const SECTION_COLOUR = 'section';
-export const SECTION_TEXT_COLOUR = 'section-text';
+export const LEVEL_COLOUR = 'level';
+export const LEVEL_TEXT_COLOUR = 'level-text';
 const hex = z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Use a colour like #1F5C46');
-const colour = z.union([hex, z.literal(SECTION_COLOUR), z.literal(SECTION_TEXT_COLOUR)]);
+const colour = z.union([hex, z.literal(LEVEL_COLOUR), z.literal(LEVEL_TEXT_COLOUR)]);
 const fill = z.union([colour, z.literal('none')]);
 export type Colour = z.infer<typeof colour>;
 export type Fill = z.infer<typeof fill>;
@@ -84,7 +84,7 @@ const base = {
 export const textElement = z.strictObject({
   ...base,
   type: z.literal('text'),
-  /** Words to print; {name}, {section}… fill in for each person. */
+  /** Words to print; {name}, {level}… fill in for each person. */
   text: z.string().max(400),
   font: z.enum(FONT_IDS as [FontId, ...FontId[]]),
   /** Point size (1 pt = 0.3528 mm). Shrinks to fit the box if the words are too long. */
@@ -161,54 +161,43 @@ export function designAssetIds(d: LanyardDesign): string[] {
 
 // ---------------------------------------------------------------- per-person values
 
-/** Scouts Australia section colours. The section word is always printed too, so colour is never the only signal. */
-export const SECTION_COLOURS: Record<string, { bg: string; fg: string }> = {
-  Joey: { bg: '#8B5A2B', fg: '#FFFFFF' },
-  Cub: { bg: '#FFC82E', fg: '#1A1A1A' },
-  Scout: { bg: '#00843D', fg: '#FFFFFF' },
-  Venturer: { bg: '#7A1F3D', fg: '#FFFFFF' },
-  Rover: { bg: '#C8102E', fg: '#FFFFFF' },
+/**
+ * Fallback card colours, for when a card has no camp style (each camp sets
+ * its own per level in Settings › Levels). The level word is always printed
+ * too, so colour is never the only signal.
+ */
+export const LEVEL_COLOURS: Record<string, { bg: string; fg: string }> = {
+  Participant: { bg: '#1F6F8B', fg: '#FFFFFF' },
   // Navy, RGB 38 38 97.
   Leader: { bg: '#262661', fg: '#FFFFFF' },
 };
-/** Anyone not in a section: no word on the card, and a neutral band. */
-const NO_SECTION = { bg: '#5A6770', fg: '#FFFFFF' };
+/** Anyone not in a level: no word on the card, and a neutral band. */
+const NO_LEVEL = { bg: '#5A6770', fg: '#FFFFFF' };
 
-export type SectionWord = 'Joey' | 'Cub' | 'Scout' | 'Venturer' | 'Rover' | 'Leader' | '';
+export type LevelWord = 'Participant' | 'Leader' | '';
 
-/**
- * The one word for someone's section on a card. Leaders (adults) are Leader;
- * Joeys, Cubs, Scouts, Venturers and Rovers keep their section. Anyone else
- * gets no word.
- */
-export function sectionWord(kind: 'youth' | 'adult', section: string): SectionWord {
-  const s = section.trim().toLowerCase();
-  if (s.startsWith('rover')) return 'Rover';
-  if (kind === 'adult' || s.startsWith('leader')) return 'Leader';
-  if (s.startsWith('joey')) return 'Joey';
-  if (s.startsWith('cub')) return 'Cub';
-  if (s.startsWith('scout')) return 'Scout';
-  if (s.startsWith('venturer')) return 'Venturer';
-  return '';
+/** The fallback word for someone's level on a card, when the camp's own word isn't known: Leader for adults, Participant otherwise. */
+export function levelWord(kind: 'youth' | 'adult', _level: string): LevelWord {
+  return kind === 'adult' ? 'Leader' : 'Participant';
 }
 
-/** A section's card colours (the neutral band for anyone without a section). */
-export function sectionColours(word: string): { bg: string; fg: string } {
-  return SECTION_COLOURS[word] ?? NO_SECTION;
+/** A level's card colours (the neutral band for anyone without a level). */
+export function levelColours(word: string): { bg: string; fg: string } {
+  return LEVEL_COLOURS[word] ?? NO_LEVEL;
 }
 
 export interface CardPerson {
-  /** Preferred (or first) name and surname. */
+  /** First name and last name (either may be an initial). */
   name: string;
   firstName?: string;
   lastName?: string;
   kind: 'youth' | 'adult';
-  section: string;
+  level: string;
   groupName: string;
   shortCode: string;
   qr: string;
   noPhotos?: boolean;
-  /** The camp's word and colours for their section (Settings › Sections). */
+  /** The camp's word and colours for their level (Settings › Levels). */
   style?: { word: string; bg: string; fg: string };
 }
 
@@ -221,7 +210,7 @@ export function fillFields(text: string, person: CardPerson, campName: string): 
     last: person.lastName ?? (parts.length > 1 ? parts.slice(1).join(' ') : ''),
     // Cards no longer show the group: {group} on an older design prints nothing.
     group: '',
-    section: person.style ? person.style.word : sectionWord(person.kind, person.section),
+    level: person.style ? person.style.word : levelWord(person.kind, person.level),
     code: person.shortCode,
     camp: campName,
   };
@@ -229,9 +218,9 @@ export function fillFields(text: string, person: CardPerson, campName: string): 
 }
 
 export function resolveColour(c: Colour, person: CardPerson | null): string {
-  if (c !== SECTION_COLOUR && c !== SECTION_TEXT_COLOUR) return c;
-  const s = person?.style ?? (person ? sectionColours(sectionWord(person.kind, person.section)) : SECTION_COLOURS.Scout!);
-  return c === SECTION_COLOUR ? s.bg : s.fg;
+  if (c !== LEVEL_COLOUR && c !== LEVEL_TEXT_COLOUR) return c;
+  const s = person?.style ?? (person ? levelColours(levelWord(person.kind, person.level)) : LEVEL_COLOURS.Participant!);
+  return c === LEVEL_COLOUR ? s.bg : s.fg;
 }
 
 // ---------------------------------------------------------------- starting design
@@ -243,7 +232,7 @@ export function newId(prefix = 'el'): string {
 }
 
 /**
- * The design every camp starts from: the section band, full name, QR code
+ * The design every camp starts from: the level band, full name, QR code
  * and typed code on the front; "if found" on the back. Laid out for the
  * chosen size and orientation.
  */
@@ -254,8 +243,8 @@ export function starterDesign(format: CardFormat = 'cr80', orientation: Orientat
   const id = (n: string) => `${n}-${format}-${orientation}`;
   const front: DesignElement[] = [];
   const bandH = portrait ? h * 0.15 : h * 0.2;
-  front.push({ id: id('band'), name: 'Section band', type: 'shape', shape: 'rect', x: 0, y: 0, w, h: bandH, fill: SECTION_COLOUR, stroke: 'none', strokeWidth: 0, radius: 0, opacity: 1 });
-  front.push({ id: id('section'), name: 'Section', type: 'text', text: '{section}', x: m, y: 0, w: w - 2 * m - bandH, h: bandH, font: 'nunito-sans', size: portrait ? (format === 'large' ? 22 : 13) : 12, weight: 800, colour: SECTION_TEXT_COLOUR, align: 'left', wrap: false, uppercase: true });
+  front.push({ id: id('band'), name: 'Level band', type: 'shape', shape: 'rect', x: 0, y: 0, w, h: bandH, fill: LEVEL_COLOUR, stroke: 'none', strokeWidth: 0, radius: 0, opacity: 1 });
+  front.push({ id: id('level'), name: 'Level', type: 'text', text: '{level}', x: m, y: 0, w: w - 2 * m - bandH, h: bandH, font: 'nunito-sans', size: portrait ? (format === 'large' ? 22 : 13) : 12, weight: 800, colour: LEVEL_TEXT_COLOUR, align: 'left', wrap: false, uppercase: true });
   front.push({ id: id('marker'), name: 'No-photo mark', type: 'marker', x: w - m - bandH * 0.7, y: bandH * 0.15, w: bandH * 0.7, h: bandH * 0.7 });
   if (portrait) {
     const nameY = bandH + (format === 'large' ? 6 : 3.5);

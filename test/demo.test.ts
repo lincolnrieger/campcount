@@ -12,7 +12,7 @@ describe('demo mode', () => {
     expect(event).toMatchObject({ status: 'open', isDemo: true });
     const { registrations } = await json(await api(`/events/${eventId}/registrations`, { cookie: admin.cookie }));
     expect(registrations.length).toBeGreaterThanOrEqual(24);
-    expect(registrations.every((r: any) => r.memberNumber.startsWith('DEMO') && r.shortCode)).toBe(true);
+    expect(registrations.every((r: any) => r.participantId.startsWith('DEMO') && r.shortCode)).toBe(true);
 
     const demo = await json(await api('/admin/demo', { cookie: admin.cookie }));
     const accounts = demo.events.find((e: any) => e.id === eventId).accounts;

@@ -7,7 +7,7 @@ Page header
   [Back]  Title                                   [Primary]  [⋯ More]
   One-line summary (optional, meta text)
 Content
-  sections: heading (18px) + content, 24px apart (32px on desktop)
+  levels: heading (18px) + content, 24px apart (32px on desktop)
 States
   loading → skeleton of the same shape · empty → message + next step · error → message + Try again
 ```
@@ -70,7 +70,7 @@ A full-screen, dark camera view. This is the most important screen; get it right
 │                              │
 ├──────────────────────────────┤
 │ ✓ ARRIVED                    │  result panel: green / amber / red, icon + word + name 32px
-│ Sam Lee · Joeys · 1st Unley  │
+│ Sam Lee · Minis · 1st Unley  │
 │ ⚠ Allergy: peanuts           │  (meals) dietary alert
 ├──────────────────────────────┤
 │ ████████░░  84 of 90 on site │  progress
@@ -113,11 +113,11 @@ A full-screen, dark camera view. This is the most important screen; get it right
 - **The list:** one row per person, with Not arrived first, then On site, then Left.
   - Each row shows:
     - The name, which links to Person.
-    - The section and group, as meta text.
+    - The level and group, as meta text.
     - Where they are, as a status badge ("On site", "At Kayaking", "Left 15:20", "Not arrived").
     - An **Arrived** or **Left** button on the right (secondary, small, 44px tall).
   - Long lists show 50 rows with "Show all 312".
-  - On desktop the list is a table with columns: Name · Section · Group · Where · Action.
+  - On desktop the list is a table with columns: Name · Level · Group · Where · Action.
 - **Notes for staff:** if the event has a description, show it as a collapsible "Notes for staff" box above the counts.
 
 **Draft event, event manager:**
@@ -136,7 +136,7 @@ A full-screen, dark camera view. This is the most important screen; get it right
 
 - **Primary action:** Add person.
 - **More menu:**
-  - Import from MyScout.
+  - Import from the registration spreadsheet.
   - Print lanyards.
   - Print roll sheet.
   - — (divider)
@@ -145,16 +145,16 @@ A full-screen, dark camera view. This is the most important screen; get it right
   - Search.
   - One filter select: All · Youth · Leaders · No card · Withdrawn.
   - A count ("86 people").
-- **Phone list:** rows showing the name, then "Section · Group" as meta, with a status badge if withdrawn or missing a card.
-- **Desktop table:** Name · Section · Group · Card · Status. Columns sort; the whole row is a link.
-- **Empty:** "No one on this event yet." with Import from MyScout (primary) and Add person (secondary).
+- **Phone list:** rows showing the name, then "Level · Group" as meta, with a status badge if withdrawn or missing a card.
+- **Desktop table:** Name · Level · Group · Card · Status. Columns sort; the whole row is a link.
+- **Empty:** "No one on this event yet." with Import from the registration spreadsheet (primary) and Add person (secondary).
 
 ## Person (`/events/:id/people/:registrationId`)
 
 - **Header:**
   - Back to People (or Home, if you came from Home).
   - Title: full name, with "goes by" in brackets.
-  - Summary: Section · Group · Youth or Leader.
+  - Summary: Level · Group · Youth or Leader.
   - Primary action: **Mark as arrived** or **Mark as left**, when gate tracking is on and the event is open.
 - **More menu:**
   - Edit details.
@@ -163,12 +163,12 @@ A full-screen, dark camera view. This is the most important screen; get it right
   - Withdraw from event, or Restore to event.
   - — (divider)
   - Delete person…
-- **Sections, in order:**
+- **Levels, in order:**
   1. **Right now:** a large status ("On site since 09:12", "At Kayaking since 10:05", "Not arrived"). It also shows the **No photos** flag if relevant.
   2. **Dietary needs:** the text, plus Edit (needs `dietary.edit`). A "Needs review" badge shows if one is pending.
   3. **Activities:** their bookings, each with day, time and name.
   4. **History:** time · what · where · how (scan / by hand / station). Each row has a "⋯" with **Undo this scan** (needs `attendance.correct`). Undone rows are struck through with an "Undone" badge.
-  5. **Details:** membership number, section, group, position, as a definition list.
+  5. **Details:** participant ID, level, group, position, as a definition list.
 - **Desktop:** two columns. Right now, Dietary and Activities on the left (60%); History and Details on the right (40%).
 
 ## Edit person (`/people/:id/edit`), Add person (`/people/add`)
@@ -178,14 +178,14 @@ A full-screen, dark camera view. This is the most important screen; get it right
   - Last name.
   - Goes by.
   - Youth or leader (radio).
-  - Section (select).
+  - Level (select).
   - Group.
-  - Membership number.
+  - Participant ID.
   - Dietary needs.
   - No photos (checkbox).
 - **Buttons:** Save changes (or Add person), and Cancel.
 
-## Import from MyScout (`/people/import`)
+## Import from the registration spreadsheet (`/people/import`)
 
 - A stepper at the top: **1 Choose file · 2 Match columns · 3 Check · 4 Dietary review · 5 Done**. The current step is in bold with `aria-current="step"`.
 - Each step has one primary button (Next), and Back.
@@ -230,7 +230,7 @@ Simple pages:
   - Delete activity…
 - **Counts line:** "12 booked · 8 here · 4 to come".
 - **Toolbar:** a segmented control (To come · Here · All) and **Add someone** (a secondary button that opens a search sheet).
-- **Rows:** the name with "Section · Group" as meta, and a **Check in** or **Sign out** button. Bookings can be removed from the row's ⋯ menu.
+- **Rows:** the name with "Level · Group" as meta, and a **Check in** or **Sign out** button. Bookings can be removed from the row's ⋯ menu.
 
 ## Add or edit activity
 
@@ -263,7 +263,7 @@ Simple pages:
 
 ## Reports (`/events/:id/reports`)
 
-Three sections:
+Three levels:
 1. **Check-up.** Each issue is a row with a count and a fix button:
    - "3 people still signed in at Kayaking": Sign everyone out.
    - "1 dietary need to review": Review.
@@ -280,7 +280,7 @@ Three sections:
 - **Staff:** "12 people". Who works on this event and what they can do.
 - **Scanning stations:** "2 stations". Shared tablets locked to one job.
 - **Copy event:** "Start next year's camp from this one".
-- **Event status:** Cancel event, or Archive. These are destructive, so they sit in the last section under a divider.
+- **Event status:** Cancel event, or Archive. These are destructive, so they sit in the last level under a divider.
 
 **Sub-pages:**
 - **Event details:** the form, with fields as in Create event. The button is Save changes.

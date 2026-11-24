@@ -79,7 +79,7 @@ The checklist of everything these pages do before the rework. Every item must st
 - [~] One camp with an address: redirect to it. Several: list with marks and addresses. None with addresses but events: `Events`. None: empty state.
 
 ## More (`/more`, event sites on phones)
-- [~] Sections beyond the tab bar, plus Account; Sign out. (File unchanged.)
+- [~] Levels beyond the tab bar, plus Account; Sign out. (File unchanged.)
 
 ## Not found
 - [x] Message and a button to the camp home (in an event) or the start.

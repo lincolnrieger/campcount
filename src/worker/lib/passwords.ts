@@ -48,7 +48,7 @@ export function passwordProblem(password: string, email: string): string | null 
   if (password.length > PASSWORD_MAX) return `Use at most ${PASSWORD_MAX} characters.`;
   if (password.toLowerCase().includes(email.split('@')[0]!.toLowerCase())) return "Don't use your email address in your password.";
   if (/^(.)\1+$/.test(password)) return 'Choose something less predictable.';
-  const common = ['password', 'campcount', 'scouts', 'qwerty', '1234567890', 'letmein'];
+  const common = ['password', 'campcount', 'camping', 'qwerty', '1234567890', 'letmein'];
   if (common.some((w) => password.toLowerCase().includes(w))) return 'That password is too easy to guess.';
   return null;
 }

@@ -62,9 +62,9 @@ The **Get ready** checklist on a draft event's Home guides the order. Each step 
 
 1. **Create event** (platform admin): name, first and last day, location. Save, and you land on the new event's Home with the checklist.
 2. **Add staff:** Settings › Staff › Add staff. Pick an existing account or type an email. Choose a role (and an activity for activity leaders). Save. An invite link appears to copy and send.
-3. **Add people:** People › More › Import from MyScout.
+3. **Add people:** People › More › Import from the registration spreadsheet.
    1. Choose the file.
-   2. Match the columns. Known MyScout headers are matched automatically.
+   2. Match the columns. Known the registration spreadsheet headers are matched automatically.
    3. Check the list: new, updated, unchanged.
    4. Review dietary needs.
    5. Import.

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { sectionColours } from '../../shared/lanyardDesign';
-import { textOn } from '../../shared/sections';
+import { levelColours } from '../../shared/lanyardDesign';
+import { textOn } from '../../shared/levels';
 import { dayInZone, dayLabel, timeInZone, todayInZone } from '../../shared/time';
 import { ApiFailure, api } from '../api';
 import { loadSnapshot, saveSnapshot } from '../offline/db';
@@ -19,7 +19,7 @@ import { SignupStatus, usePerson } from './Signup';
 /**
  * A camper's own page: the QR on their lanyard, opened on a phone. It's the
  * one screen most people at camp ever see, so it has its own, brighter look
- * ("Super Splash"): a small pass at the top, then one tab at a time
+ * (the camp pass): a small pass at the top, then one tab at a time
  * (My day, Book, Teams, Food, and the Side Quest once found).
  *
  * If the camp plays the Side Quest and this phone already belongs to someone
@@ -299,8 +299,8 @@ function Page({ view, busy, actions, initialTab, onNotMe }: { view: SignupView; 
   const meals = programme.filter((i) => i.kind === 'meal');
   const teamEvents = view.teamEvents ?? [];
   // Leaders don't book activities, so they don't get the Book tab.
-  // Adults (per the camp's youth sections setting) don't book activities.
-  const isAdult = view.person.kind ? view.person.kind === 'adult' : view.person.sectionWord === 'Leader';
+  // Adults (per the camp's youth levels setting) don't book activities.
+  const isAdult = view.person.kind ? view.person.kind === 'adult' : view.person.levelWord === 'Leader';
   // A link for everyone can switch parts off (the server leaves their data out too).
   const has = (f: LinkFeature) => !view.features || view.features.includes(f);
   const canBook = has('book') && !isAdult && (view.sessions.length > 0 || view.bookings.length > 0);
@@ -386,7 +386,7 @@ function PageFoot({ email, onNotMe }: { email?: string; onNotMe?: () => void }) 
       )}
       {onNotMe && (
         <button type="button" className="pp-link" onClick={onNotMe}>
-          Not you? Use a different membership number
+          Not you? Use a different participant ID
         </button>
       )}
     </footer>
@@ -395,10 +395,10 @@ function PageFoot({ email, onNotMe }: { email?: string; onNotMe?: () => void }) 
 
 const nameSize = (name: string) => (name.length <= 12 ? 'is-l' : name.length <= 20 ? 'is-m' : 'is-s');
 
-/** Who you are, at which camp. Coloured like your section's lanyard band. */
+/** Who you are, at which camp. Coloured like your level's lanyard band. */
 function Pass({ view }: { view: SignupView }) {
-  const word = view.person.sectionWord ?? '';
-  const colour = view.person.sectionColour ?? sectionColours(word).bg;
+  const word = view.person.levelWord ?? '';
+  const colour = view.person.levelColour ?? levelColours(word).bg;
   const first = view.person.firstName ?? view.person.name.split(' ')[0];
   const last = view.person.lastName ?? '';
   // No signal (the saved copy): the camp's name instead of a broken picture.
@@ -927,8 +927,8 @@ function CollectScreen({ result, onDone, onMine }: { result: CollectResult; onDo
   const reduced = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const [shown, setShown] = useState(result.fresh && !reduced ? Math.max(0, s.collected - 1) : s.collected);
   const done = useRef<HTMLButtonElement>(null);
-  // Adults are one quest; everyone else is in their section's quest.
-  const questKey = (result.friend.kind ? result.friend.kind === 'adult' : result.friend.sectionWord === 'Leader') ? 'leaders' : result.friend.section.toLowerCase();
+  // Adults are one quest; everyone else is in their level's quest.
+  const questKey = (result.friend.kind ? result.friend.kind === 'adult' : result.friend.levelWord === 'Leader') ? 'leaders' : result.friend.level.toLowerCase();
   const quest = s.quests.find((q) => q.key === questKey);
   const milestone = result.fresh && (s.collected === 1 || s.collected % 10 === 0 || (quest?.done && quest.collected === quest.total));
 
@@ -985,7 +985,7 @@ function CollectScreen({ result, onDone, onMine }: { result: CollectResult; onDo
     );
   }
 
-  const colour = result.friend.sectionColour ?? sectionColours(result.friend.sectionWord).bg;
+  const colour = result.friend.levelColour ?? levelColours(result.friend.levelWord).bg;
   return (
     <div className={milestone ? 'pp pp-collect is-milestone' : 'pp pp-collect'} role="dialog" aria-modal="true" aria-labelledby="splash-h">
       <div className="pp-collect-body">
@@ -994,7 +994,7 @@ function CollectScreen({ result, onDone, onMine }: { result: CollectResult; onDo
           <span className="pp-ring" />
           {milestone && <span className="pp-ring pp-ring-2" />}
           <div className="pp-card" style={{ ['--card' as string]: colour, ['--card-fg' as string]: textOn(colour) }}>
-            <span className="pp-card-band">{result.friend.sectionWord || 'Camp'}</span>
+            <span className="pp-card-band">{result.friend.levelWord || 'Camp'}</span>
             <span className="pp-card-name">{result.friend.firstName}</span>
             <span className="pp-card-no pp-num">No. {s.collected}</span>
           </div>

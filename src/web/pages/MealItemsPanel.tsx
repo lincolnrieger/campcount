@@ -88,7 +88,7 @@ export function MealItemsPanel({
     void act(() => api(`/events/${eventId}/meals/${meal.id}/items/reorder`, { body: { ids } }), 'Order saved');
   };
 
-  const section = (title: string, list: MealItem[], empty: string) => (
+  const level = (title: string, list: MealItem[], empty: string) => (
     <section className="mi-section">
       <h4>
         {title} <span className="meta num">{list.length}</span>
@@ -198,8 +198,8 @@ export function MealItemsPanel({
         </div>
       )}
       <div className="pg-mi-columns">
-        {section('Served to everyone', main, manage ? 'Nothing yet. Add items, or copy them from another meal.' : 'Nothing listed yet.')}
-        {section('Dietary alternatives', alts, 'No alternatives.')}
+        {level('Served to everyone', main, manage ? 'Nothing yet. Add items, or copy them from another meal.' : 'Nothing listed yet.')}
+        {level('Dietary alternatives', alts, 'No alternatives.')}
       </div>
       {meal.ingredients && (
         <section className="mi-section">

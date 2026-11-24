@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { compareText, sortByName } from '../lib/sort';
 import { z } from 'zod';
 import type { Permission } from '../../shared/permissions';
 import type { AppContext, AppEnv } from '../context';
@@ -36,7 +37,7 @@ reportRoutes.get('/live', async (c) => {
   });
 });
 
-/** Super Splash Side Quest: who has collected the most people (for prizes). Staff only; participants only ever see first names and counts. */
+/** Side Quest: who has collected the most people (for prizes). Staff only; participants only ever see first names and counts. */
 reportRoutes.get('/side-quest', async (c) => {
   const eventId = c.req.param('eventId')!;
   requirePermission(c, 'reports.view', { eventId });
@@ -64,11 +65,11 @@ reportRoutes.get('/side-quest/collections', async (c) => {
       .bind(eventId)
       .all<{ collector_id: string; collected_id: string; created_at: string }>(),
     c.env.DB.prepare(
-      `SELECT r.id, p.first_name, p.preferred_name, p.last_name, r.section, r.group_name, r.kind, r.status FROM registrations r JOIN people p ON p.id = r.person_id
+      `SELECT r.id, p.first_name, p.last_name, r.level, r.group_name, r.kind, r.status FROM registrations r JOIN people p ON p.id = r.person_id
         WHERE r.event_id = ? AND r.id IN (SELECT collector_id FROM side_quest_collections WHERE event_id = ?1 UNION SELECT collected_id FROM side_quest_collections WHERE event_id = ?1)`,
     )
       .bind(eventId)
-      .all<{ id: string; first_name: string; preferred_name: string; last_name: string; section: string; group_name: string; kind: string; status: string }>(),
+      .all<{ id: string; first_name: string; last_name: string; level: string; group_name: string; kind: string; status: string }>(),
   ]);
   return c.json({
     enabled: ev.feature_side_quest === 1,
@@ -76,8 +77,8 @@ reportRoutes.get('/side-quest/collections', async (c) => {
     players: (await c.env.DB.prepare(`SELECT count(*) AS n FROM registrations WHERE event_id = ? AND status = 'active' AND kind = 'youth'`).bind(eventId).first<{ n: number }>())?.n ?? 0,
     people: people.results.map((p) => ({
       id: p.id,
-      name: `${p.preferred_name || p.first_name} ${p.last_name}`.trim(),
-      section: p.section,
+      name: `${p.first_name} ${p.last_name}`.trim(),
+      level: p.level,
       groupName: p.group_name,
       kind: p.kind,
       active: p.status === 'active',
@@ -158,7 +159,7 @@ reportRoutes.get('/whereabouts', async (c) => {
       id: p.id,
       fullName: `${p.firstName} ${p.lastName}`,
       groupName: p.groupName,
-      section: p.section,
+      level: p.level,
       kind: p.kind,
       ...where.get(p.id)!,
     }))
@@ -269,12 +270,14 @@ reportRoutes.get('/exports/:name{[a-z-]+\\.csv}', async (c) => {
   let csv: string;
   if (name === 'catering' || name === 'dietary-list') {
     const { results } = await c.env.DB.prepare(
-      `SELECT d.category, d.item, d.severity, d.note, p.first_name, p.preferred_name, p.last_name, p.member_number, r.group_name
+      `SELECT d.category, d.item, d.severity, d.note, p.first_name, p.last_name, p.participant_id, r.group_name
          FROM dietary_entries d JOIN registrations r ON r.id = d.registration_id JOIN people p ON p.id = r.person_id
-        WHERE d.event_id = ? AND r.status = 'active' ORDER BY d.category, d.item, p.last_name`,
+        WHERE d.event_id = ? AND r.status = 'active'`,
     )
       .bind(eventId)
       .all<Record<string, string>>();
+    // Sorted here: items and names are encrypted in the database.
+    sortByName(results).sort((a, b) => compareText(a.category, b.category) || compareText(a.item, b.item));
     if (name === 'catering') {
       const counts = new Map<string, { category: string; item: string; count: number; anaphylactic: number }>();
       for (const r of results) {
@@ -288,8 +291,8 @@ reportRoutes.get('/exports/:name{[a-z-]+\\.csv}', async (c) => {
     } else {
       csv = toCsv(
         preamble,
-        ['Name', 'Membership number', 'Group', 'Type', 'Requirement', 'Severity', 'Note'],
-        results.map((r) => [`${r.preferred_name || r.first_name} ${r.last_name}`, r.member_number, r.group_name, r.category, r.item, r.severity, r.note]),
+        ['Name', 'Participant ID', 'Group', 'Type', 'Requirement', 'Severity', 'Note'],
+        results.map((r) => [`${r.first_name} ${r.last_name}`, r.participant_id, r.group_name, r.category, r.item, r.severity, r.note]),
       );
     }
   } else {
@@ -307,7 +310,7 @@ reportRoutes.get('/exports/:name{[a-z-]+\\.csv}', async (c) => {
             ctx?.type ?? s.contextKey.split(':')[0],
             ctx?.name ?? '',
             person ? `${person.firstName} ${person.lastName}` : 'Unknown card',
-            person?.memberNumber ?? '',
+            person?.participantId ?? '',
             person?.groupName ?? '',
             s.direction,
             s.method,
@@ -316,7 +319,7 @@ reportRoutes.get('/exports/:name{[a-z-]+\\.csv}', async (c) => {
             s.correctionReason,
           ];
         });
-      csv = toCsv(preamble, ['Time', 'Type', 'Where', 'Name', 'Membership number', 'Group', 'Direction', 'How', 'Result', 'Message', 'Correction reason'], rows);
+      csv = toCsv(preamble, ['Time', 'Type', 'Where', 'Name', 'Participant ID', 'Group', 'Direction', 'How', 'Result', 'Message', 'Correction reason'], rows);
     } else if (name === 'activity-summary') {
       const s = summarise(model).contexts.filter((x) => x.type === 'activity');
       csv = toCsv(
@@ -342,7 +345,7 @@ reportRoutes.get('/exports/:name{[a-z-]+\\.csv}', async (c) => {
         const departures = scans.filter((s) => s.direction === 'out').map((s) => localTime(s.deviceTime, tz));
         rows.push([
           `${person.firstName} ${person.lastName}`,
-          person.memberNumber,
+          person.participantId,
           person.kind,
           person.groupName,
           arrivals.join('; '),
@@ -350,7 +353,7 @@ reportRoutes.get('/exports/:name{[a-z-]+\\.csv}', async (c) => {
           site?.states.get(person.id)?.present ? 'Yes' : 'No',
         ]);
       }
-      csv = toCsv(preamble, ['Name', 'Membership number', 'Youth or adult', 'Group', 'Arrived', 'Departed', 'Still recorded on site'], rows);
+      csv = toCsv(preamble, ['Name', 'Participant ID', 'Youth or adult', 'Group', 'Arrived', 'Departed', 'Still recorded on site'], rows);
     }
   }
 

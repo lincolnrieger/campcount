@@ -10,7 +10,7 @@ The tokens live in [`tokens.css`](tokens.css). Copy it to `src/web/styles/tokens
 | Six or seven text sizes in use | **Five sizes only:** 13, 16, 18, 22 and 32px. |
 | Bold and semibold mixed | **Two weights:** 400 and 600. |
 | Controls 36px with a mouse, 44px on touch, so screens looked different on each device | **Every control is 44px**, everywhere. |
-| Arbitrary gaps | Spacing comes only from the scale. A section is a heading, then 12px, then content; sections are 24px apart (32px on desktop). |
+| Arbitrary gaps | Spacing comes only from the scale. A level is a heading, then 12px, then content; levels are 24px apart (32px on desktop). |
 | Content stretched across wide screens, or sat in odd narrow boxes | Content max 1120px, forms and text 640px, aligned **left** next to the sidebar (not centred). |
 | Things didn't line up | Every block shares the page's left edge. Row content uses the same 16px inner padding. Numbers in tables are right-aligned with `tabular-nums`. |
 | Cards inside cards, and borders everywhere | **One level of container.** A list is a white panel with hairline dividers between rows. Never put a panel inside a panel. |
@@ -20,8 +20,8 @@ The tokens live in [`tokens.css`](tokens.css). Copy it to `src/web/styles/tokens
 | Role | Size / weight / leading | Use |
 | --- | --- | --- |
 | Page title (`h1`) | 22 / 600 / 1.25 | One per page. |
-| Section heading (`h2`) | 18 / 600 / 1.25 | Sections within a page. |
-| Sub-heading (`h3`) | 16 / 600 / 1.5 | Groups inside a section (for example, day headings). |
+| Level heading (`h2`) | 18 / 600 / 1.25 | Levels within a page. |
+| Sub-heading (`h3`) | 16 / 600 / 1.5 | Groups inside a level (for example, day headings). |
 | Body | 16 / 400 / 1.5 | Everything else. |
 | Meta | 13 / 400 / 1.5, `--ink-3` | Secondary lines, timestamps, hints. |
 | Label | 13 / 600 / 1.5, `--ink-2` | Form labels above fields, table headers. Sentence case, **not** uppercase. |
@@ -32,7 +32,7 @@ Use `font-variant-numeric: tabular-nums` for counts, times and tables.
 ## Layout
 
 - **Page:** `padding: var(--page-pad)`. The content column has `max-width: var(--content-max)`.
-- **Sections:** `display: grid; gap: var(--section-gap)`.
+- **Levels:** `display: grid; gap: var(--level-gap)`.
 - **Two-column pages (desktop only):** a 3fr / 2fr grid with a 32px gap. On phones it becomes one column, in source order.
 - **Forms:** one column, max 640px. Two short fields (such as first and last day) may sit side by side from 600px.
 - **Sticky phone action bar:**

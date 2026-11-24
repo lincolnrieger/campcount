@@ -7,7 +7,7 @@ CampCount lets camp staff know **where every young person and leader is** during
 - At **meals** (served, with a dietary alert).
 - At **activities** (signed in, optionally signed out).
 
-Before camp, event managers set up the event, import the roster from MyScout, add activities and meals, and print lanyards. After camp they reconcile, download reports and close the event.
+Before camp, event managers set up the event, import the roster from the registration spreadsheet, add activities and meals, and print lanyards. After camp they reconcile, download reports and close the event.
 
 ## Where and how it's used
 
@@ -39,7 +39,7 @@ Before camp, event managers set up the event, import the roster from MyScout, ad
 6. **Set up an event:**
    - Details and features.
    - Staff.
-   - People: import from MyScout, or add by hand.
+   - People: import from the registration spreadsheet, or add by hand.
    - Activities.
    - Meals.
    - Lanyards.

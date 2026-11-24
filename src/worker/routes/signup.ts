@@ -1,4 +1,6 @@
 import { Hono } from 'hono';
+import { shortCodeKey } from '../lib/vault';
+import { sortByName } from '../lib/sort';
 import { z } from 'zod';
 import { normaliseShortCode } from '../../shared/credentials';
 import { displayName } from '../../shared/names';
@@ -12,14 +14,14 @@ import { auditStatement } from '../services/audit';
 import { hashToken } from '../services/credentials';
 import { contextState, loadContext } from '../services/contexts';
 import { can } from '../services/principal';
-import { addMember, createTeam, findByMemberNumber, participantTeams, removeMember, teamEventRow, teamRow } from '../services/teams';
+import { addMember, createTeam, findByParticipantId, participantTeams, removeMember, teamEventRow, teamRow } from '../services/teams';
 import { teamNameSchema } from '../../shared/schemas';
 import type { LinkFeature } from '../../shared/participantLinks';
 import { ALL_FEATURES, featuresOf, hasFeature, maskOf, participantLinkPatchSchema, participantLinkSchema } from '../../shared/participantLinks';
 import type { MealItem } from '../../shared/mealItems';
 import { ALLERGENS, dietProfile, participantItems } from '../../shared/mealItems';
 import { itemFromRow, loadItems } from './mealItems';
-import { parseSectionSettings, sectionStyle } from '../../shared/sections';
+import { parseLevelSettings, levelStyle } from '../../shared/levels';
 import { bannerUrl } from './banner';
 import { dutiesFor } from './duties';
 import { activitiesDone, collect, meIsValid, readMe, standing, writeMe } from '../services/sideQuest';
@@ -46,8 +48,8 @@ interface SignupEvent {
   feature_self_signup: number;
   feature_side_quest: number;
   signup_code: string | null;
-  section_settings: string | null;
-  youth_sections: string;
+  level_settings: string | null;
+  youth_levels: string;
   contact_email?: string;
 }
 
@@ -97,7 +99,7 @@ const signupOpen = (e: SignupEvent) => e.feature_self_signup === 1 && (e.status 
 interface Pass {
   registrationId: string;
   credentialId: string;
-  /** Opened by typing a membership number (which anyone could type): the page leaves out personal details. */
+  /** Opened by typing a participant ID (which anyone could type): the page leaves out personal details. */
   reduced?: boolean;
   /** From a link for everyone: the parts of the page it switches on (bits, see shared/participantLinks). Unset: all. */
   mask?: number;
@@ -115,7 +117,7 @@ async function readPass(c: AppContext, pass: string): Promise<Pass> {
   const reduced = flag !== null;
   const [registrationId, credentialId, expires] = parts;
   const mac = parts[parts.length - 1];
-  const bad = () => new ApiError(401, 'signed_out', reduced ? 'Your page timed out. Type your membership number again.' : 'Scan your lanyard again to carry on.');
+  const bad = () => new ApiError(401, 'signed_out', reduced ? 'Your page timed out. Type your participant ID again.' : 'Scan your lanyard again to carry on.');
   if ((parts.length !== 4 && !reduced) || !registrationId || !credentialId || !expires || !mac || Number(expires) < Date.now()) throw bad();
   const body = `${registrationId}.${credentialId}.${expires}${reduced ? `.${parts[3]}` : ''}`;
   if (!timingSafeEqualHex(mac, await hmacHex(c.env.AUTH_SECRET, `signup:${body}`))) throw bad();
@@ -143,15 +145,15 @@ interface Person {
   firstName: string;
   lastName: string;
   kind: 'youth' | 'adult';
-  section: string;
+  level: string;
   groupName: string;
 }
 
 async function personFor(c: AppContext, { registrationId, credentialId, reduced, mask }: Pass): Promise<Person> {
   const row = await c.env.DB.prepare(
-    `SELECT r.id, r.group_name, r.kind, r.section, p.first_name, p.preferred_name, p.last_name,
+    `SELECT r.id, r.group_name, r.kind, r.level, p.first_name, p.last_name,
             e.id AS event_id, e.name AS event_name, e.status, e.timezone, e.starts_on, e.ends_on, e.feature_self_signup, e.feature_side_quest, e.signup_code,
-            e.section_settings, e.youth_sections, e.contact_email
+            e.level_settings, e.youth_levels, e.contact_email
        FROM registrations r JOIN people p ON p.id = r.person_id JOIN events e ON e.id = r.event_id
        JOIN credentials cr ON cr.registration_id = r.id AND cr.id = ? AND cr.status = 'active'
       WHERE r.id = ? AND r.status = 'active'`,
@@ -164,11 +166,11 @@ async function personFor(c: AppContext, { registrationId, credentialId, reduced,
     credentialId,
     reduced: reduced === true,
     mask: reduced ? mask : undefined,
-    name: displayName(String(row.first_name), String(row.preferred_name), String(row.last_name)),
-    firstName: String(row.preferred_name || row.first_name),
+    name: displayName(String(row.first_name), String(row.last_name)),
+    firstName: String(row.first_name),
     lastName: String(row.last_name ?? ''),
     kind: row.kind === 'adult' ? 'adult' : 'youth',
-    section: String(row.section ?? ''),
+    level: String(row.level ?? ''),
     groupName: String(row.group_name),
     event: {
       id: String(row.event_id),
@@ -180,8 +182,8 @@ async function personFor(c: AppContext, { registrationId, credentialId, reduced,
       feature_self_signup: Number(row.feature_self_signup),
       feature_side_quest: Number(row.feature_side_quest),
       signup_code: row.signup_code as string | null,
-      section_settings: row.section_settings as string | null,
-      youth_sections: String(row.youth_sections ?? ''),
+      level_settings: row.level_settings as string | null,
+      youth_levels: String(row.youth_levels ?? ''),
       contact_email: String(row.contact_email ?? ''),
     },
   };
@@ -192,9 +194,9 @@ function requireFeature(p: Person, f: LinkFeature) {
   if (!hasFeature(p.mask, f)) throw new ApiError(403, 'forbidden', 'This link doesn’t include that.');
 }
 
-/** The word and colour for someone's section at their camp (Settings › Sections). */
+/** The word and colour for someone's level at their camp (Settings › Levels). */
 function styleOf(p: Person) {
-  return sectionStyle(parseSectionSettings(p.event.section_settings, p.event.youth_sections), p.section);
+  return levelStyle(parseLevelSettings(p.event.level_settings, p.event.youth_levels), p.level);
 }
 
 /**
@@ -275,13 +277,13 @@ async function personView(c: AppContext, base: Person, opts: { sideQuest?: boole
     person: {
       name: p.name,
       firstName: p.firstName,
-      // A typed membership number could be anyone's: no surname or group.
+      // A typed participant ID could be anyone's: no surname or group.
       lastName: p.reduced ? '' : p.lastName,
       kind: p.kind,
       groupName: p.reduced ? '' : p.groupName,
-      section: p.section,
-      sectionWord: styleOf(p).word,
-      sectionColour: styleOf(p).bg,
+      level: p.level,
+      levelWord: styleOf(p).word,
+      levelColour: styleOf(p).bg,
     },
     activitiesDone: done,
     // Only on someone's own link, and only once the camp has turned the game on.
@@ -357,10 +359,10 @@ publicSignupRoutes.post('/identify', async (c) => {
       .first();
   } else {
     const e = await eventByCode(c, input.code);
-    // Typed codes are membership numbers, so guessable: few tries per device, and a reduced page (below).
+    // Typed codes are participant IDs, so guessable: few tries per device, and a reduced page (below).
     await limitPerKey(c, `kiosk-typed:${e.id}:${c.req.header('CF-Connecting-IP') ?? 'unknown'}`, 'Too many codes typed. Wait a minute, or scan the lanyard’s QR code.');
-    row = await c.env.DB.prepare(`SELECT id, registration_id, event_id FROM credentials WHERE event_id = ? AND short_code = ? AND status = 'active'`)
-      .bind(e.id, normaliseShortCode(input.shortCode))
+    row = await c.env.DB.prepare(`SELECT id, registration_id, event_id FROM credentials WHERE event_id = ? AND short_code_key = ? AND status = 'active'`)
+      .bind(e.id, await shortCodeKey(c.env, normaliseShortCode(input.shortCode)))
       .first();
   }
   if (!row) throw notRecognised();
@@ -391,7 +393,7 @@ publicSignupRoutes.post('/identify', async (c) => {
           fresh,
           // A leader's lanyard: not part of the game.
           ...(person.kind !== 'youth' ? { leader: true } : {}),
-          friend: { firstName: person.firstName, section: person.section, kind: person.kind, sectionWord: styleOf(person).word, sectionColour: styleOf(person).bg },
+          friend: { firstName: person.firstName, level: person.level, kind: person.kind, levelWord: styleOf(person).word, levelColour: styleOf(person).bg },
           owner: { firstName: owner.firstName },
           standing: await standing(c.env.DB, person.event.id, owner.registrationId),
         },
@@ -482,7 +484,7 @@ publicSignupRoutes.post('/book', async (c) => {
 async function eventByBookingCode(c: AppContext, code: string): Promise<SignupEvent> {
   if (!/^[A-Za-z0-9_-]{10,64}$/.test(code)) throw notFound();
   const e = await c.env.DB.prepare(
-    `SELECT id, name, status, timezone, starts_on, ends_on, feature_self_signup, feature_side_quest, signup_code, section_settings, youth_sections, contact_email FROM events WHERE booking_code = ?`,
+    `SELECT id, name, status, timezone, starts_on, ends_on, feature_self_signup, feature_side_quest, signup_code, level_settings, youth_levels, contact_email FROM events WHERE booking_code = ?`,
   )
     .bind(code)
     .first<SignupEvent>();
@@ -499,18 +501,18 @@ publicSignupRoutes.get('/link/:code/:activityId', async (c) => {
 });
 
 /**
- * From an emailed link: type a membership number, get booked onto that
+ * From an emailed link: type a participant ID, get booked onto that
  * activity, and land on your own page (the reduced one, since anyone could
  * type a number) to see everything you're booked for and cancel. Says
  * nothing about who a number belongs to until it's typed.
  */
 publicSignupRoutes.post('/link/:code/:activityId', async (c) => {
-  const { memberNumber } = await parseBody(c, z.strictObject({ memberNumber: z.string().trim().regex(/^[A-Za-z0-9 -]{1,24}$/, 'Type your membership number') }));
+  const { participantId } = await parseBody(c, z.strictObject({ participantId: z.string().trim().regex(/^[A-Za-z0-9 -]{1,24}$/, 'Type your participant ID') }));
   await limitPublicNetwork(c, 'signup-book');
   await limitPerKey(c, `link-book:${c.req.header('CF-Connecting-IP') ?? 'unknown'}`, 'Too many tries. Wait a minute and try again.');
   const e = await eventByBookingCode(c, c.req.param('code'));
-  const who = await findByMemberNumber(c.env.DB, e.id, memberNumber);
-  if (!who) throw conflict('That membership number isn’t registered for this camp. Check the number on your Scouts card or in MyScout.');
+  const who = await findByParticipantId(c.env, e.id, participantId);
+  if (!who) throw conflict('That participant ID isn’t registered for this camp. Check the code on your lanyard, or ask a leader.');
   const cred = await c.env.DB.prepare(`SELECT id FROM credentials WHERE registration_id = ? AND status = 'active'`).bind(who.id).first<{ id: string }>();
   if (!cred) throw conflict('Your camp card isn’t ready yet. Try again closer to camp, or ask your leader.');
   const person = await personFor(c, { registrationId: who.id, credentialId: cred.id, reduced: true });
@@ -533,7 +535,7 @@ publicSignupRoutes.post('/link/:code/:activityId', async (c) => {
  * Every meal's items for this person: what's in them (never staff notes),
  * and, if they have dietary needs recorded, what conflicts and their
  * alternative. Loaded when they open Food. A page opened by typing a
- * membership number gets the items without anything about their needs.
+ * participant ID gets the items without anything about their needs.
  */
 publicSignupRoutes.post('/meals', async (c) => {
   const { pass } = await parseBody(c, z.strictObject({ pass: z.string().max(200) }));
@@ -716,7 +718,7 @@ async function linkByCode(c: AppContext, code: string): Promise<{ link: LinkRow;
   const link = await c.env.DB.prepare(`SELECT * FROM participant_links WHERE code = ?`).bind(code).first<LinkRow>();
   if (!link || link.active !== 1) throw notFound();
   const e = await c.env.DB.prepare(
-    `SELECT id, name, status, timezone, starts_on, ends_on, feature_self_signup, feature_side_quest, signup_code, section_settings, youth_sections, contact_email FROM events WHERE id = ?`,
+    `SELECT id, name, status, timezone, starts_on, ends_on, feature_self_signup, feature_side_quest, signup_code, level_settings, youth_levels, contact_email FROM events WHERE id = ?`,
   )
     .bind(link.event_id)
     .first<SignupEvent>();
@@ -743,18 +745,18 @@ publicSignupRoutes.get('/p/:code', async (c) => {
 
 
 /**
- * Type a membership number and get your camp page, with just the parts the
+ * Type a participant ID and get your camp page, with just the parts the
  * link switches on. Anyone could type a number, so it's the reduced page (no
  * surname, group, duties, team-mates or dietary details) and typing is
  * limited per device.
  */
 publicSignupRoutes.post('/p/:code', async (c) => {
-  const { memberNumber } = await parseBody(c, z.strictObject({ memberNumber: z.string().trim().regex(/^[A-Za-z0-9 -]{1,24}$/, 'Type your membership number') }));
+  const { participantId } = await parseBody(c, z.strictObject({ participantId: z.string().trim().regex(/^[A-Za-z0-9 -]{1,24}$/, 'Type your participant ID') }));
   await limitPublicNetwork(c, 'signup-identify');
   await limitPerKey(c, `link-book:${c.req.header('CF-Connecting-IP') ?? 'unknown'}`, 'Too many tries. Wait a minute and try again.');
   const { link, event: e } = await linkByCode(c, c.req.param('code'));
-  const who = await findByMemberNumber(c.env.DB, e.id, memberNumber);
-  if (!who) throw conflict('That membership number isn’t registered for this camp. Check the number on your Scouts card or in MyScout.');
+  const who = await findByParticipantId(c.env, e.id, participantId);
+  if (!who) throw conflict('That participant ID isn’t registered for this camp. Check the code on your lanyard, or ask a leader.');
   const cred = await c.env.DB.prepare(`SELECT id FROM credentials WHERE registration_id = ? AND status = 'active'`).bind(who.id).first<{ id: string }>();
   if (!cred) throw conflict('Your camp page isn’t ready yet. Try again closer to camp, or ask your leader.');
   const person = await personFor(c, { registrationId: who.id, credentialId: cred.id, reduced: true, mask: link.features });
@@ -945,16 +947,17 @@ signupRoutes.get('/activities/:activityId/bookings', async (c) => {
   const eventId = c.req.param('eventId')!;
   requireBookings(c, eventId, c.req.param('activityId'));
   const { results } = await c.env.DB.prepare(
-    `SELECT b.registration_id, b.source, b.created_at, p.first_name, p.preferred_name, p.last_name, r.group_name
+    `SELECT b.registration_id, b.source, b.created_at, p.first_name, p.last_name, r.group_name
        FROM activity_bookings b JOIN registrations r ON r.id = b.registration_id JOIN people p ON p.id = r.person_id
-      WHERE b.activity_id = ? AND b.event_id = ? ORDER BY p.last_name COLLATE NOCASE, p.first_name COLLATE NOCASE`,
+      WHERE b.activity_id = ? AND b.event_id = ?`,
   )
     .bind(c.req.param('activityId'), eventId)
     .all<Record<string, string>>();
+  sortByName(results);
   return c.json({
     bookings: results.map((b) => ({
       registrationId: b.registration_id,
-      name: `${b.preferred_name || b.first_name} ${b.last_name}`,
+      name: `${b.first_name} ${b.last_name}`,
       groupName: b.group_name,
       source: b.source,
       createdAt: b.created_at,
@@ -1062,16 +1065,16 @@ signupRoutes.get('/activities/:activityId/attendance', async (c) => {
       .bind(activityId.data)
       .first<Record<string, string | number | null>>(),
     c.env.DB.prepare(
-      `SELECT r.id, p.first_name, p.preferred_name, p.last_name, r.group_name, r.section, r.kind, r.photo_consent,
-              json_extract(r.extra_fields, '$."Swimming ability"') AS swimming
+      `SELECT r.id, p.first_name, p.last_name, r.group_name, r.level, r.kind, r.photo_consent
          FROM registrations r JOIN people p ON p.id = r.person_id
-        WHERE r.event_id = ? AND r.status = 'active' ORDER BY p.last_name COLLATE NOCASE, p.first_name COLLATE NOCASE`,
+        WHERE r.event_id = ? AND r.status = 'active'`,
     )
       .bind(eventId)
       .all<Record<string, string>>(),
     c.env.DB.prepare(`SELECT registration_id FROM activity_bookings WHERE activity_id = ?`).bind(activityId.data).all<{ registration_id: string }>(),
     contextState(c.env.DB, eventId, ctx),
   ]);
+  sortByName(people.results);
   const booked = new Set(bookings.results.map((b) => b.registration_id));
   const photos = can(principal, 'photo.view_status', { eventId });
   const byId = new Map(people.results.map((p) => [p.id!, p]));
@@ -1081,16 +1084,14 @@ signupRoutes.get('/activities/:activityId/attendance', async (c) => {
     const s = state.states.get(id);
     return {
       id,
-      name: `${p.preferred_name || p.first_name} ${p.last_name}`,
+      name: `${p.first_name} ${p.last_name}`,
       groupName: p.group_name,
-      section: p.kind === 'adult' ? 'Leader' : p.section,
+      level: p.kind === 'adult' ? 'Leader' : p.level,
       booked: booked.has(id),
       present: s?.present ?? false,
       visits: s?.visits ?? 0,
       lastAt: s?.lastAcceptedAt ?? null,
-      ...(photos ? { noPhotos: p.photo_consent === 'no' } : {}),
-      // From Consent2Go: useful for leaders of water activities.
-      ...(p.swimming ? { swimming: p.swimming } : {}),
+      ...(photos ? { noPhotos: p.photo_consent !== 'yes' } : {}),
     };
   };
   return c.json({
@@ -1113,7 +1114,7 @@ signupRoutes.get('/activities/:activityId/attendance', async (c) => {
     canBook: can(principal, 'activities.manage', { eventId }) || can(principal, 'activity.bookings', { eventId, activityId: activityId.data }),
     canCheckIn: can(principal, 'activity.scan', { eventId, activityId: activityId.data }),
     people: [...involved].filter((id) => byId.has(id)).map(row),
-    everyone: people.results.map((p) => ({ id: p.id, name: `${p.preferred_name || p.first_name} ${p.last_name}`, groupName: p.group_name })),
+    everyone: people.results.map((p) => ({ id: p.id, name: `${p.first_name} ${p.last_name}`, groupName: p.group_name })),
   });
 });
 

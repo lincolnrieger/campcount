@@ -17,7 +17,7 @@ interface LinkInfo {
 
 /**
  * One activity's booking page, from a link emailed before camp. Type a
- * membership number, book. Nothing about anyone is shown: only whether it
+ * participant ID, book. Nothing about anyone is shown: only whether it
  * worked.
  */
 export function BookLink() {
@@ -45,7 +45,7 @@ export function BookLink() {
     setResult(null);
     try {
       const res = await api<SignupView & { linkResult: { booked: boolean; already: boolean; activity: string | null; problem: string | null } }>(`/public/signup/link/${code}/${activityId}`, {
-        body: { memberNumber: number.trim() },
+        body: { participantId: number.trim() },
       });
       const r = res.linkResult;
       // Their own page from here: everything they're booked for, and cancel.
@@ -84,7 +84,7 @@ export function BookLink() {
             </p>
             {!info.open ? <p className="book-link-msg">Booking is closed right now.</p> : s.full ? <p className="book-link-msg">This activity is full.</p> : null}
             <form onSubmit={book} className="form" noValidate>
-              <Field id="book-number" label="Membership Number">
+              <Field id="book-number" label="Participant ID">
                 <input className="input book-link-input" inputMode="numeric" autoComplete="off" maxLength={24} value={number} onChange={(e) => setNumber(e.target.value)} />
               </Field>
               <Button type="submit" kind="primary" busy={busy} busyLabel="Opening…" disabled={!number.trim()}>

@@ -30,7 +30,7 @@ Permissions: `activities.manage`, `meals.manage`, `reports.view`, `event.configu
 - [x] Show filter: To come (n) / Here (n) / All; starts on All when nobody booked.
 - [x] "Add someone" when canCheckIn or canBook; opens the add sheet; `?add=1` opens it on load.
 - [x] Search this list (when > 12 people).
-- [x] Rows: name, section · group · swimming, status badge (Here since / Left / Signed in / To come), No photos badge.
+- [x] Rows: name, level · group · swimming, status badge (Here since / Left / Signed in / To come), No photos badge.
 - [x] Check in / Sign out button (canCheckIn and not done); undo on check-in toast (reset).
 - [x] Row ⋯: Move back to To come / Undo check-in (canCheckIn, visits>0, open); Move to another activity… (canMove, booked, not completed); Remove booking (canBook, booked, not present; undo).
 - [x] Empty states per filter / search.
@@ -43,7 +43,7 @@ Permissions: `activities.manage`, `meals.manage`, `reports.view`, `event.configu
 - [x] Loading, load error, deleted source.
 - [x] Modes: new, copy ("Add another session": same settings, starts when source ends, same length), edit.
 - [x] Fields: Name (required), Day (or no set time), Start/End (end optional, start change keeps length), Place, Instructions for leaders.
-- [x] Options: Capacity (digits), Refuse sign-ins when full (only with capacity), Sign out as well as in, Allow repeat visits, Open for self sign-up + Booking required (only when `selfSignup` feature on). Options section opens when the activity already uses one.
+- [x] Options: Capacity (digits), Refuse sign-ins when full (only with capacity), Sign out as well as in, Allow repeat visits, Open for self sign-up + Booking required (only when `selfSignup` feature on). Options level opens when the activity already uses one.
 - [x] Validation: name, end after start; error summary; server field errors.
 - [x] Save → PATCH/POST, toast, navigate to the activity; Cancel → back.
 
@@ -78,7 +78,7 @@ Permissions: `activities.manage`, `meals.manage`, `reports.view`, `event.configu
 - [x] Registration open/closed strip with counts; Open/Close registration (manager, editable).
 - [x] Empty "No teams yet".
 - [x] Team cards: name, count (n/max), Locked + code badge, Ready / Needs N more / Full; ⋯ Add person (not full), Rename team, Delete team… (confirm).
-- [x] Members: name, section · group, Remove (editable).
+- [x] Members: name, level · group, Remove (editable).
 - [x] Add person button (editable, not full) → picker sheet (search, "On a team" badge, move confirm).
 - [x] Team event form: name, day/time, place, fewest/most per team, most teams, notes, registration open; validation; error summary.
 - [x] Team name form (add/rename) with validation.
@@ -95,7 +95,7 @@ Permissions: `activities.manage`, `meals.manage`, `reports.view`, `event.configu
 - [x] Meal form (add/edit): name, day, starts (required), ends, place, menu, additional notes; validation; server errors.
 - [x] Duplicate sheet: day (suggests name), name; error.
 - [x] Import JSON sheet: file or paste, mode replace/add, Check (preview plan: errors, meals with New/Replaces), Import N meals, Cancel; errors.
-- [x] Items panel: Add item, Copy items from another meal (managers); Served to everyone / Dietary alternatives sections, by category (collapsible; open when ≤ 12 items); item row: grip drag to reorder (within category), name toggles details (ingredients, staff notes), chips (TBC, contains, may contain, dietary); alternative line (replaces / for); item ⋯ Edit, Duplicate, Move up/down, Delete… (confirm); meal additional notes.
+- [x] Items panel: Add item, Copy items from another meal (managers); Served to everyone / Dietary alternatives levels, by category (collapsible; open when ≤ 12 items); item row: grip drag to reorder (within category), name toggles details (ingredients, staff notes), chips (TBC, contains, may contain, dietary); alternative line (replaces / for); item ⋯ Edit, Duplicate, Move up/down, Delete… (confirm); meal additional notes.
 - [x] Item form: name, category, ingredients status, ingredients list, contains / may contain / suitable for pickers (+ custom), dietary alternative (replaces, who it's for), staff notes.
 - [x] Copy items sheet: from meal (with counts), pick items (All / None), Copy N items; empty message.
 

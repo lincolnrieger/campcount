@@ -11,7 +11,7 @@ import { getEventRow } from './events';
 
 /**
  * Lanyard artwork an event uploads: one PNG or JPEG per card size and side,
- * drawn behind the name, QR code and section CampCount prints. PNG and JPEG
+ * drawn behind the name, QR code and level CampCount prints. PNG and JPEG
  * only, because those are what the PDF builder can embed (and never SVG).
  */
 export const lanyardTemplateRoutes = new Hono<AppEnv>();

@@ -1,5 +1,5 @@
 import type { DietaryEntryInput } from './schemas';
-import { saysNothing } from './myscout';
+import { saysNothing } from './importFields';
 
 /**
  * Suggested dietary entries from free-text notes ("Peanut allergy, carries

@@ -4,18 +4,13 @@ import { sha256Hex } from '../src/worker/lib/crypto';
 import { hashToken } from '../src/worker/services/credentials';
 import { api, createEvent, createUser, grant, json, testEnv } from './helpers';
 
-const person = (memberNumber: string, o: Record<string, unknown> = {}) => ({
-  memberNumber,
-  firstName: `First${memberNumber}`,
-  preferredName: '',
+const person = (participantId: string, o: Record<string, unknown> = {}) => ({
+  participantId,
+  firstName: `First${participantId}`,
   lastName: 'Person',
   kind: 'youth',
-  section: 'Scouts',
-  groupName: 'Example Troop',
-  position: '',
-  roleLabel: '',
-  team: '',
-  sourceStatus: '',
+  level: 'Seniors',
+  groupName: 'Example Club',
   photoConsent: 'yes',
   dietaryFingerprint: null,
   ...o,
@@ -39,7 +34,7 @@ async function camp(): Promise<Camp> {
   const rows = [
     person('100', { dietaryFingerprint: 'a'.repeat(64), dietary: [{ category: 'allergy', item: 'Peanut', severity: 'anaphylactic', note: '' }] }),
     person('200', { photoConsent: 'no' }),
-    person('300', { kind: 'adult', section: 'Leaders' }),
+    person('300', { kind: 'adult', level: 'Leaders' }),
   ];
   await api(`/events/${eventId}/import/commit`, { cookie: director.cookie, body: { rows } });
   await api(`/events/${eventId}/credentials/issue`, { cookie: director.cookie, body: { mode: 'missing' } });
@@ -93,8 +88,8 @@ describe('scan snapshot', () => {
       expect(text).not.toContain(card.token);
     }
     const snap = JSON.parse(text);
-    // Membership numbers (the typed codes) only go to people who can see the roster.
-    expect(snap.people.every((p: any) => p.memberNumber === undefined)).toBe(true);
+    // Participant IDs (the typed codes) only go to people who can see the roster.
+    expect(snap.people.every((p: any) => p.participantId === undefined)).toBe(true);
     expect(snap.people[0]).not.toHaveProperty('dietaryAlert');
     expect(snap.people.find((p: any) => p.fullName.startsWith('First200')).noPhotos).toBe(true);
     expect(snap.credentials[0].tokenHash).toMatch(/^[0-9a-f]{64}$/);

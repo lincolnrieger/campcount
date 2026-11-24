@@ -41,7 +41,7 @@ The server enforces every permission listed. The UI only hides what a role can't
 | Arrived / Left by hand | `POST E/scans` (method `manual`) | `site.scan` | **Keep** on Home rows and the Person screen. |
 | Live counts per activity and meal | `GET E/live` | `reports.view` | **Move** to the Activities and Meals lists (a "here now" / "served" count on each row). |
 | Scanning phones last seen (sync health) | `GET E/live` | `reports.view` | **Move** to Reports › Check-up. |
-| People list (search, filter by status, section, group, card) | `GET E/registrations` | `roster.view` | **Simplify:**<br>- Search, and one filter select: All, Youth, Leaders, Withdrawn, No card.<br>- Sortable columns on desktop. |
+| People list (search, filter by status, level, group, card) | `GET E/registrations` | `roster.view` | **Simplify:**<br>- Search, and one filter select: All, Youth, Leaders, Withdrawn, No card.<br>- Sortable columns on desktop. |
 | Person: details, where now, history, signed-up activities | `GET E/registrations/:id` | `roster.view` | **Keep** |
 | Edit person details | `PATCH E/registrations/:id` | `roster.edit` | **Keep:** "Edit details" opens a form page. |
 | Dietary needs (view, edit, review) | `PUT E/registrations/:id/dietary` | `dietary.view_detail` / `dietary.edit` | **Keep** on Person. |
@@ -52,7 +52,7 @@ The server enforces every permission listed. The UI only hides what a role can't
 | Delete several people (select mode) | same, many | `roster.edit` | **Keep** in People's More menu ("Select people to delete…"). |
 | Undo a wrong scan (void) from history | `POST E/scans/:scanId/void` | `attendance.correct` | **Keep** on Person history rows ("Undo this scan"). |
 | Add person by hand | `POST E/registrations` | `roster.edit` | **Keep** |
-| Import from MyScout (CSV/XLSX, parsed in the browser; match columns, check, dietary review) | `GET E/import/context`, `POST E/import/preview`, `/import/commit` | `roster.import` | **Keep** as a step-by-step page with clear step numbers. |
+| Import from the registration spreadsheet (CSV/XLSX, parsed in the browser; match columns, check, dietary review) | `GET E/import/context`, `POST E/import/preview`, `/import/commit` | `roster.import` | **Keep** as a step-by-step page with clear step numbers. |
 | Print lanyards (issue missing, PDF) | `POST E/credentials/issue`, `/credentials/print` | `credentials.manage` | **Keep** in People's More menu. |
 | Paper roll sheet (print) | `GET E/registrations` | `roster.view` | **Keep** in People's More menu. |
 
@@ -118,10 +118,10 @@ The server enforces every permission listed. The UI only hides what a role can't
 
 ## Dropped or simplified away
 
-- **Live board "Group by"** (by place, Scout group, section): **drop.** It's one list with filters.
+- **Live board "Group by"** (by place, group, level): **drop.** It's one list with filters.
 - **Collapsible "scanning phones" panel on the dashboard:** **move** to Reports › Check-up.
 - **Meal summary on the dashboard:** **move** to the Meals list.
 - **KPI tiles beyond the three counts:** **drop.**
 - **Breadcrumbs:** **drop.** The sidebar highlight, page title and back button do the job. Breadcrumbs added a third navigation system.
-- **Settings sub-tabs:** **replace** with a Settings index page that lists sections. Each section is its own page with a back link.
-- **The People "Status", "Section", "Group" and "Card" filter selects:** **merge** into one filter select.
+- **Settings sub-tabs:** **replace** with a Settings index page that lists sections. Each level is its own page with a back link.
+- **The People "Status", "Level", "Group" and "Card" filter selects:** **merge** into one filter select.

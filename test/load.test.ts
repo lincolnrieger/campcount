@@ -8,18 +8,13 @@ import { api, createEvent, createUser, grant, json, testEnv } from './helpers';
 
 const CAMP_WIFI = { 'CF-Connecting-IP': '203.0.113.7' };
 
-const person = (memberNumber: string) => ({
-  memberNumber,
-  firstName: `First${memberNumber}`,
-  preferredName: '',
+const person = (participantId: string) => ({
+  participantId,
+  firstName: `First${participantId}`,
   lastName: 'Person',
   kind: 'youth',
-  section: 'Scouts',
-  groupName: 'Example Troop',
-  position: '',
-  roleLabel: '',
-  team: '',
-  sourceStatus: '',
+  level: 'Seniors',
+  groupName: 'Example Club',
   photoConsent: 'yes',
   dietaryFingerprint: null,
 });

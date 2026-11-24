@@ -7,7 +7,7 @@ import type { PersonForm } from '../components/PersonFields';
 import { Button, ErrorSummary, PageHeader, useToast } from '../ui';
 import { useEvent } from './EventLayout';
 
-const FIELD_LABEL: Record<string, string> = { firstName: 'pf-first', lastName: 'pf-last', memberNumber: 'pf-member' };
+const FIELD_LABEL: Record<string, string> = { firstName: 'pf-first', lastName: 'pf-last', participantId: 'pf-member' };
 
 /** People › Add person: one person by hand. They go straight on the event with a lanyard. */
 export function AddPerson() {
@@ -24,15 +24,14 @@ export function AddPerson() {
     e.preventDefault();
     const local: Record<string, string> = {};
     if (!person.firstName.trim()) local.firstName = 'Enter their first name';
-    if (!person.lastName.trim()) local.lastName = 'Enter their last name';
-    if (!person.notMember && !person.memberNumber.trim()) local.memberNumber = 'Enter their membership number, or tick "Not a Scouts member"';
+    if (person.participantId.trim() && !/^[A-Za-z0-9-]{1,20}$/.test(person.participantId.trim())) local.participantId = 'Use letters, numbers and dashes only';
     setErrors(local);
     setFailure(null);
     if (Object.keys(local).length) return;
     setBusy(true);
     try {
-      const res = await api<{ registrationId?: string }>(`/events/${event.id}/registrations`, { body: personBody(person) });
-      toast(`Added ${person.preferredName || person.firstName} ${person.lastName}`);
+      const res = await api<{ registrationId?: string }>(`/events/${event.id}/registrations`, { body: personBody(person, event.levels) });
+      toast(`Added ${person.firstName} ${person.lastName}`.trim());
       navigate(res.registrationId ? `${people}/${res.registrationId}` : people, { replace: true });
     } catch (err) {
       if (err instanceof ApiFailure) {
@@ -52,18 +51,16 @@ export function AddPerson() {
 
   return (
     <>
-      <PageHeader title="Add person" back={{ to: people, label: 'People' }} help="They join the event straight away with a lanyard. For lots of people, use Import & check instead." />
+      <PageHeader title="Add person" back={{ to: people, label: 'People' }} help="They join the event straight away with a lanyard. For lots of people, use Import instead." />
       <form className="form" onSubmit={submit} noValidate>
         <ErrorSummary errors={summary} />
         <PersonFields
-          youthSections={event.sections.filter((x) => x.youth).map((x) => x.name)}
+          levels={event.levels}
           value={person}
           onChange={setPerson}
           askPhotos={event.features.photo}
           askDietary={event.features.dietary}
           errors={errors}
-          youthLabel="Youth"
-          adultLabel="Leader or helper"
         />
         <div className="btn-row form-actions">
           <Button type="submit" kind="primary" busy={busy} busyLabel="Adding…">

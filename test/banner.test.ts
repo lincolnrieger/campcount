@@ -4,18 +4,13 @@ import { api, createEvent, createUser, grant, json } from './helpers';
 // A 1×1 PNG.
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
-const person = (memberNumber: string, kind: 'youth' | 'adult') => ({
-  memberNumber,
-  firstName: `P${memberNumber}`,
-  preferredName: '',
+const person = (participantId: string, kind: 'youth' | 'adult') => ({
+  participantId,
+  firstName: `P${participantId}`,
   lastName: 'Person',
   kind,
-  section: kind === 'adult' ? 'Leaders' : 'Scouts',
+  level: kind === 'adult' ? 'Leaders' : 'Seniors',
   groupName: 'Example Group',
-  position: '',
-  roleLabel: '',
-  team: '',
-  sourceStatus: '',
   photoConsent: 'yes',
   dietaryFingerprint: null,
 });

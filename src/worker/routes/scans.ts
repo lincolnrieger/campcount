@@ -1,4 +1,6 @@
 import { Hono } from 'hono';
+import { seal } from '../lib/vault';
+import { sortByName } from '../lib/sort';
 import { setCookie } from 'hono/cookie';
 import { z } from 'zod';
 import { normaliseShortCode } from '../../shared/credentials';
@@ -51,7 +53,7 @@ export function codeHash(eventId: string, code: string): Promise<string> {
 /**
  * Everything a scanning device needs to work offline for one context: who is
  * on the roster (display fields only), credential hashes, and current state.
- * Raw tokens are never included. Typed codes are membership numbers, so their
+ * Raw tokens are never included. Typed codes are participant IDs, so their
  * hashes only slow down, not stop, someone holding the device: the numbers
  * themselves go only to people who can see the roster.
  */
@@ -69,7 +71,7 @@ async function snapshot(c: AppContext) {
 
   const [people, credentials, dietary, bookings, timeline] = await Promise.all([
     c.env.DB.prepare(
-      `SELECT r.id, p.member_number, p.first_name, p.preferred_name, p.last_name, r.kind, r.section, r.group_name, r.photo_consent, r.status,
+      `SELECT r.id, p.participant_id, p.first_name, p.last_name, r.kind, r.level, r.group_name, r.photo_consent, r.status,
               r.car_rego_asked_at
          FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.event_id = ?`,
     )
@@ -102,12 +104,12 @@ async function snapshot(c: AppContext) {
       const state = states.get(p.id!);
       return {
         id: p.id,
-        name: displayName(p.first_name!, p.preferred_name!, p.last_name!),
+        name: displayName(p.first_name!, p.last_name!),
         // Full name for staff search on the scanner (lanyards only show the initial).
-        fullName: `${p.preferred_name || p.first_name} ${p.last_name}`,
-        ...(showNumbers ? { memberNumber: p.member_number } : {}),
+        fullName: `${p.first_name} ${p.last_name}`,
+        ...(showNumbers ? { participantId: p.participant_id } : {}),
         group: p.group_name,
-        section: p.section,
+        level: p.level,
         kind: p.kind,
         withdrawn: p.status === 'withdrawn',
         booked: booked.has(p.id!),
@@ -395,7 +397,7 @@ async function recent(c: AppContext) {
   const { ctx } = await authorisedContext(c, eventId, params.data.type, params.data.id ?? null);
   const { results } = await c.env.DB.prepare(
     `SELECT s.id, s.registration_id, s.direction, s.method, s.device_time, s.outcome, s.outcome_reason,
-            p.first_name, p.preferred_name, p.last_name,
+            p.first_name, p.last_name,
             EXISTS (SELECT 1 FROM scans v WHERE v.supersedes_id = s.id) AS voided
        FROM scans s LEFT JOIN registrations r ON r.id = s.registration_id LEFT JOIN people p ON p.id = r.person_id
       WHERE s.event_id = ? AND s.context_type = ? AND s.context_id IS ? AND s.outcome <> 'void'
@@ -407,7 +409,7 @@ async function recent(c: AppContext) {
     scans: results.map((s) => ({
       id: s.id,
       registrationId: s.registration_id,
-      name: s.first_name ? displayName(String(s.first_name), String(s.preferred_name ?? ''), String(s.last_name ?? '')) : 'Unknown card',
+      name: s.first_name ? displayName(String(s.first_name), String(s.last_name ?? '')) : 'Unknown card',
       direction: s.direction,
       method: s.method,
       deviceTime: s.device_time,
@@ -471,20 +473,20 @@ scanRoutes.get('/meals/:mealId/served', async (c) => {
   const { ctx } = await authorisedContext(c, eventId, 'meal', mealId.data);
   const { states } = replay(ctx.rules, await loadTimeline(c.env.DB, eventId, ctx));
   const { results } = await c.env.DB.prepare(
-    `SELECT r.id, p.first_name, p.preferred_name, p.last_name, r.group_name, r.kind
+    `SELECT r.id, p.first_name, p.last_name, r.group_name, r.kind
        FROM registrations r JOIN people p ON p.id = r.person_id
-      WHERE r.event_id = ? AND r.status = 'active'
-      ORDER BY p.last_name COLLATE NOCASE, p.first_name COLLATE NOCASE`,
+      WHERE r.event_id = ? AND r.status = 'active'`,
   )
     .bind(eventId)
     .all<Record<string, string>>();
+  sortByName(results);
   return c.json({
     meal: { id: ctx.id, name: ctx.name },
     people: results.map((r) => {
       const state = states.get(r.id!);
       return {
         id: r.id,
-        name: `${r.preferred_name || r.first_name} ${r.last_name}`,
+        name: `${r.first_name} ${r.last_name}`,
         group: r.group_name,
         kind: r.kind,
         servedAt: state?.present ? state.lastAcceptedAt : null,
@@ -516,7 +518,7 @@ scanRoutes.post('/registrations/:registrationId/rego', async (c) => {
   const res = await c.env.DB.prepare(
     `UPDATE registrations SET car_rego = COALESCE(?, car_rego), car_rego_asked_at = COALESCE(car_rego_asked_at, ?), updated_at = ? WHERE id = ? AND event_id = ? AND kind = 'adult'`,
   )
-    .bind(rego ? rego.toUpperCase() : null, now, now, id.data, eventId)
+    .bind(rego ? await seal(c.env, rego.toUpperCase()) : null, now, now, id.data, eventId)
     .run();
   if (res.meta.changes !== 1) throw notFound();
   await auditStatement(c.env.DB, {

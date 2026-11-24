@@ -21,7 +21,7 @@ Permissions and states
 - [x] Phone note: the designer works best on a bigger screen.
 
 Add (editable only)
-- [x] Text, QR code, Image (upload), Background (upload, sent to back), Rectangle, Circle, Section band, No-photo mark.
+- [x] Text, QR code, Image (upload), Background (upload, sent to back), Rectangle, Circle, Level band, No-photo mark.
 - [x] Person details (one per `FIELD_IDS`): adds a field text element.
 - [x] Upload accepts png/jpeg/webp; failure toasts the error; input resets.
 - [x] New element becomes selected.
@@ -50,8 +50,8 @@ Keyboard (editable, not while typing)
 Element panel (when something is selected)
 - [x] Name heading + Done (close) button.
 - [x] Locked note + Unlock button.
-- [x] Text: words textarea (max 400), insert person detail at cursor, font picker (6 fonts with samples), size number (4–120 pt) + slider (4–72), weight select (disabled if font has one weight), align left/centre/right, capital letters toggle, wrap toggle (explanation: otherwise shrinks to fit), colour (with section text colour, camp colour).
-- [x] Shape: rectangle/circle, fill (none, section), border colour (sets width 0.5 when first given), border width, corners (rect only), see-through slider.
+- [x] Text: words textarea (max 400), insert person detail at cursor, font picker (6 fonts with samples), size number (4–120 pt) + slider (4–72), weight select (disabled if font has one weight), align left/centre/right, capital letters toggle, wrap toggle (explanation: otherwise shrinks to fit), colour (with level text colour, camp colour).
+- [x] Shape: rectangle/circle, fill (none, level), border colour (sets width 0.5 when first given), border width, corners (rect only), see-through slider.
 - [x] Image: fit (Show all / Fill the box) with explanation, corners, see-through, "Add another image" (upload).
 - [x] QR: note (always black on white, at least 15 mm).
 - [x] No-photo mark: note (shows the mark chosen in card settings).
@@ -104,7 +104,7 @@ Preview and download
 
 ## Added in the rework
 
-- Print: filter chips with counts (All / Not printed / Printed), a "No photo consent" chip, a section filter, counts in the group and section dropdowns, "Clear filters", a select-all checkbox for everyone shown, "Mark printed" for the chosen (same endpoint as "Mark not printed"), a sticky bar at the bottom with the count, pages and Download PDF (progress shows there), print settings and filters remembered for the browser tab (per camp), "/" to search.
+- Print: filter chips with counts (All / Not printed / Printed), a "No photo consent" chip, a level filter, counts in the group and level dropdowns, "Clear filters", a select-all checkbox for everyone shown, "Mark printed" for the chosen (same endpoint as "Mark not printed"), a sticky bar at the bottom with the count, pages and Download PDF (progress shows there), print settings and filters remembered for the browser tab (per camp), "/" to search.
 - Design: design problems as a one-line banner with Fix (selects the element) or Details (opens card settings), save status beside the tabs, arrange tools straight under the selected item's name, explanations moved into (i) tips, a two-column layout when the page is narrower (sidebar on a laptop or tablet).
 
 Every item above was checked in a browser (Playwright at 1280, 1024 and phone widths), including a PDF download.

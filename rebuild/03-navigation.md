@@ -59,7 +59,7 @@ Everything deeper is a **sub-page** with a back button, never another row of tab
 - **Sidebar:** 240px wide, fixed.
   - Top: the brand.
   - Then Events and Scan.
-  - Then the current event's name and its sections, indented under it.
+  - Then the current event's name and its levels, indented under it.
   - Then Admin (platform admins only).
   - Bottom: your name, which links to Account.
 - **No breadcrumbs.** The sidebar highlight plus the page title plus the back link are enough.
@@ -83,7 +83,7 @@ Keep current addresses wherever they still make sense, so bookmarks and printed 
 | `/events/:id` | Event Home | Everyone on the event |
 | `/events/:id/people` | People | `roster.view` |
 | `/events/:id/people/add` | Add person | `roster.edit` |
-| `/events/:id/people/import` | Import from MyScout | `roster.import` |
+| `/events/:id/people/import` | Import from the registration spreadsheet | `roster.import` |
 | `/events/:id/people/lanyards` | Print lanyards | `credentials.manage` |
 | `/events/:id/people/roll-sheet` | Paper roll sheet | `roster.view` |
 | `/events/:id/people/:registrationId` | Person | `roster.view` |

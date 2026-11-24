@@ -17,7 +17,7 @@ Keep these non-visual modules. They hold logic that already works and is tested 
 | `src/web/import/xlsx.ts` | XLSX parsing in the browser |
 | `src/web/lanyards/pdf.ts`, `components/LanyardCard.tsx`, `components/QrCode.tsx` | Lanyard and poster PDFs, and the QR rendering. The printed card design can stay. |
 | `src/web/confirmDelete.ts` | Its logic (counting scans before delete). Rewire it to use the new ConfirmDialog instead of `window.confirm`. |
-| `src/shared/*` | Schemas, permissions, time zones, scan rules, MyScout mapping, names, sections, search |
+| `src/shared/*` | Schemas, permissions, time zones, scan rules, the registration spreadsheet mapping, names, levels, search |
 | Page logic | Reuse the data-handling parts of the current pages (which API calls, what payloads, how results are interpreted). Rewrite all JSX and CSS. |
 
 ## What to replace
@@ -92,7 +92,7 @@ For each screen:
 ## Phase 3: Swap, clean, verify
 
 1. Point `App.tsx` at the new screens. Delete `src/web/pages/`, the old components and `styles.css`. Remove unused dependencies, if there are any.
-2. Update `docs/ui-structure.md` to describe the new structure (replace the old sections).
+2. Update `docs/ui-structure.md` to describe the new structure (replace the old levels).
 3. Run all checks: `npx tsc -b && npx eslint . && npx vitest run && npm run build`. The server tests must still pass untouched.
 4. Run the UI check script (below) and fix everything it finds.
 5. Do the walkthrough in `09-acceptance.md` as every role.

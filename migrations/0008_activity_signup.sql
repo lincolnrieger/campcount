@@ -1,5 +1,5 @@
 -- 1. The public registration page is removed: the roster is managed by the
---    event team (MyScout import or Add person). Requests and settings go.
+--    event team (the registration spreadsheet import or Add person). Requests and settings go.
 DROP TABLE registration_requests;
 DROP INDEX events_registration_code;
 ALTER TABLE events DROP COLUMN registration_code;

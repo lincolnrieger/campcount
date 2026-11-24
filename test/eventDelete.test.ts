@@ -11,14 +11,14 @@ async function campWithRecords() {
   const personId = crypto.randomUUID();
   const regId = crypto.randomUUID();
   await testEnv.DB.batch([
-    testEnv.DB.prepare(`INSERT INTO people (id, member_number, first_name, last_name, created_at, updated_at) VALUES (?, ?, 'Sam', 'Lee', ?, ?)`).bind(
+    testEnv.DB.prepare(`INSERT INTO people (id, participant_id, first_name, last_name, created_at, updated_at) VALUES (?, ?, 'Sam', 'Lee', ?, ?)`).bind(
       personId,
       `T${personId.slice(0, 8)}`,
       now,
       now,
     ),
     testEnv.DB.prepare(
-      `INSERT INTO registrations (id, event_id, person_id, kind, section, group_name, created_at, updated_at) VALUES (?, ?, ?, 'youth', 'Cubs', 'Test Pack', ?, ?)`,
+      `INSERT INTO registrations (id, event_id, person_id, kind, level, group_name, created_at, updated_at) VALUES (?, ?, ?, 'youth', 'Juniors', 'Test Club', ?, ?)`,
     ).bind(regId, eventId, personId, now, now),
     testEnv.DB.prepare(
       `INSERT INTO scans (id, event_id, context_type, registration_id, direction, method, device_time, server_time, device_id, actor_user_id, outcome)

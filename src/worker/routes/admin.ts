@@ -239,7 +239,9 @@ const LOG_PAGE = 100;
 /**
  * Everything CampCount has recorded, newest first: every scan (who, where,
  * by whom, and the result) and every change in the audit log (sign-ins,
- * edits, deletions, exports). Filter by event, kind and free text.
+ * edits, deletions, exports). Filter by event, kind and free text. Participant
+ * names and IDs are encrypted, so the text search covers places, staff,
+ * events and actions, not participants.
  */
 adminRoutes.get('/log', async (c) => {
   requirePermission(c, 'platform.audit.read');
@@ -264,8 +266,7 @@ adminRoutes.get('/log', async (c) => {
              LEFT JOIN users u ON u.id = s.actor_user_id
              LEFT JOIN stations st ON st.id = s.actor_station_id
             WHERE s.device_time < ?1 AND (?2 IS NULL OR s.event_id = ?2)
-              AND (?3 IS NULL OR p.first_name || ' ' || p.last_name LIKE ?3 OR p.preferred_name LIKE ?3 OR p.member_number LIKE ?3
-                   OR a.name LIKE ?3 OR m.name LIKE ?3 OR u.display_name LIKE ?3 OR st.name LIKE ?3)
+              AND (?3 IS NULL OR a.name LIKE ?3 OR m.name LIKE ?3 OR u.display_name LIKE ?3 OR st.name LIKE ?3)
             ORDER BY s.device_time DESC LIMIT ${LOG_PAGE}`,
         )
           .bind(before, q.eventId ?? null, like)
@@ -288,7 +289,7 @@ adminRoutes.get('/log', async (c) => {
              LEFT JOIN events te ON l.target_type = 'event' AND te.id = l.target_id
             WHERE l.at < ?1 AND (?2 IS NULL OR l.event_id = ?2)
               AND (?3 IS NULL OR l.action LIKE ?3 OR au.display_name LIKE ?3 OR tu.display_name LIKE ?3
-                   OR tp.first_name || ' ' || tp.last_name LIKE ?3 OR ta.name LIKE ?3 OR tm.name LIKE ?3 OR e.name LIKE ?3)
+                   OR ta.name LIKE ?3 OR tm.name LIKE ?3 OR e.name LIKE ?3)
             ORDER BY l.at DESC, l.id DESC LIMIT ${LOG_PAGE}`,
         )
           .bind(before, q.eventId ?? null, like)

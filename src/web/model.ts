@@ -27,7 +27,7 @@ export interface TeamMember {
   registrationId: string;
   name: string;
   groupName: string;
-  section: string;
+  level: string;
   source: 'manual' | 'self_signup';
 }
 
@@ -59,18 +59,16 @@ export interface Meal {
 
 export interface Registration {
   id: string;
-  memberNumber: string;
+  participantId: string;
   firstName: string;
-  preferredName: string;
   lastName: string;
   displayName: string;
   kind: 'youth' | 'adult';
-  section: string;
+  level: string;
   groupName: string;
-  position: string;
   status: 'active' | 'withdrawn';
   shortCode: string | null;
-  photoConsent?: 'yes' | 'no' | 'unknown';
+  photoConsent?: 'yes' | 'no';
   dietary?: DietaryEntryInput[];
   dietaryFingerprint?: string | null;
 }

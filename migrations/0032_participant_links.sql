@@ -1,5 +1,5 @@
--- Links for everyone (emailed before camp): open one, type a membership
--- number, and see your camp page with only the parts the link switches on
+-- Links for everyone (emailed before camp): open one, type a participant
+-- ID, and see your camp page with only the parts the link switches on
 -- (programme, booking, teams, food). A camp can have several.
 CREATE TABLE participant_links (
   id          TEXT PRIMARY KEY,

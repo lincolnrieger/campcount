@@ -1,18 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { api, createEvent, createUser, grant, json } from './helpers';
 
-const person = (memberNumber: string, kind: 'youth' | 'adult', firstName: string) => ({
-  memberNumber,
+const person = (participantId: string, kind: 'youth' | 'adult', firstName: string) => ({
+  participantId,
   firstName,
-  preferredName: '',
   lastName: 'Person',
   kind,
-  section: kind === 'adult' ? 'Leaders' : 'Scouts',
+  level: kind === 'adult' ? 'Leaders' : 'Seniors',
   groupName: 'Example Group',
-  position: '',
-  roleLabel: '',
-  team: '',
-  sourceStatus: '',
   photoConsent: 'yes',
   dietaryFingerprint: null,
 });

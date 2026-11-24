@@ -12,8 +12,8 @@ In scope:
 
 1. Staff accounts, roles and event-scoped permissions.
 2. Event creation, a feature toggle per event, and the event lifecycle.
-3. **Privacy-filtering import** of the MyScout export (CSV), covering youth
-   and adults.
+3. **Privacy-filtering import** of any registration spreadsheet (.xlsx or
+   CSV), covering youth and adults, read on the device.
 4. Dietary review step, so only dietary information is kept (see §4).
 5. QR credentials and **printable lanyard cards** for every participant and
    leader.
@@ -49,38 +49,30 @@ Permissions are fixed in code; roles are data. A user can hold several
 assignments. Every API route declares the permission it requires, and the
 server checks it. A permission matrix test enumerates every route × role.
 
-## 3. Data we keep from the MyScout export
+## 3. Data we keep from an imported spreadsheet
 
-The import is an **allowlist**. The file is parsed **in the browser**. Only
-the columns below are ever sent to the server. The raw file is never
-uploaded or stored.
+The import is an **allowlist**. The file is read **on the importing device**
+and never uploaded. Columns are matched to fields by name on the device (no
+AI, nothing sent); the manager checks each match or chooses "Don't send".
+Nothing is sent until they press Import, and then only these fields. The
+server rejects anything else.
 
-**Extra columns (added November 2026).** The event manager can also tick up
-to 12 other columns to keep on each person's profile, such as a team, patrol,
-bus, tent or a MyScout custom field. These are stored under the column's own
-name. Columns whose names suggest contact, medical or identity details
-(email, phone, address, medical, allergy, birth, parent, emergency and
-similar) are never offered, and stay on the manager's computer.
-
-| MyScout column | Stored as | Purpose |
+| Field | Stored as | Purpose |
 |---|---|---|
-| `member_number` | person.member_number (unique) | Matching, annual report |
-| `first_name`, `preferred_name`, `last_name` | person names | Display, badge |
-| `Role` | registration.kind (youth / adult) + role label | Leader workflows, reports |
-| `formation` | registration.group | Display, reports |
-| `position` | registration.position | Shows section/role for adults |
-| `Team` | registration.team | Optional grouping |
-| `Status`, `Approval Status` | registration.source_status | Shown to the Director only |
-| `photo_approval` | registration.photo_consent (yes / no / unknown) | Photo indicator |
-| `medical_conditions` | **Not stored.** Shown only during dietary review (§4). | Source of dietary text |
+| First name (required; full or initial) | person.first_name, encrypted | Display, lanyard |
+| Last name (optional; full, initial or none) | person.last_name, encrypted | Display, lanyard |
+| Participant ID (optional; one is made if absent) | person.participant_id, encrypted, plus a keyed hash for lookups | Matching, typed lanyard code |
+| Group (optional) | registration.group_name, encrypted | Display, reports |
+| Level (optional) | registration.level, encrypted; youth or adult from the camp's level settings | Lanyard band, youth totals |
+| Photo consent (optional) | registration.photo_consent: yes or no (anything unclear is no) | Photo indicator |
+| Dietaries (optional) | **Not stored.** Read on the device during dietary review (§4). | Source of dietary entries |
 
-**Never sent to the server**, among others: address, phone, email, DOB,
-gender, school, Medicare number, doctor, ambulance fund, religion,
-disability, cultural background, all guardian fields, and WWC/police check
-fields.
-
-[DEFAULT] Section (Joeys / Cubs / Scouts / Venturers / Rovers / Leader) is
-taken from `formation` and `position`, and the Director can correct it.
+**Never sent to the server**: every other column, including address, phone,
+email, date of birth, Medicare number, medical conditions, medication,
+swimming ability, doctor, guardian and emergency contacts. If the manager
+leaves "Keep the other columns on this device" on, those columns are kept in
+that browser only (IndexedDB), shown on each person's page on that device,
+and wiped on sign-out.
 
 ## 4. Dietary requirements
 
@@ -118,13 +110,13 @@ close.
 - A reissue revokes the old card.
 - Lanyard cards print from the browser onto A4 sheets with cut marks:
   - **[DEFAULT]** front: preferred first name and last initial, group,
-    section colour band, QR code, manual code;
-  - no membership number or full surname on the card.
+    level colour band, QR code, manual code;
+  - no participant ID or full surname on the card.
 - **[OPEN]** Card size. Recommendation: 90 × 120 mm, which suits standard
   lanyard pouches. Alternatively credit-card size, 86 × 54 mm.
 
 What the scanner shows after a scan (as you asked): first name and last
-initial, membership number, group. It also shows the "No photos" indicator
+initial, participant ID, group. It also shows the "No photos" indicator
 when consent is No or unknown.
 
 ## 6. Scanning rules
@@ -162,9 +154,9 @@ when consent is No or unknown.
 
 | Data | Kept until |
 |---|---|
-| Dietary entries, photo consent, credentials | 90 days after event close |
+| Dietary entries, photo consent, car registrations, credentials | 90 days after event close |
 | Registrations and attendance records | 2 years (for the annual report) |
-| Person record (membership no. + names) | 2 years after last event |
+| Person record (participant ID + names) | 2 years after last event |
 | Aggregate statistics | Indefinitely |
 | Audit log | 7 years (contains no sensitive values) |
 

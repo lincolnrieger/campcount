@@ -2,23 +2,22 @@
 export const SHORT_CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTVWXYZ';
 export const SHORT_CODE_LENGTH = 8;
 
-/** Show a code: random codes as K7QM-3XRP; membership numbers as they are. */
+/** Show a code: random codes as K7QM-3XRP; participant IDs as they are. */
 export function formatShortCode(code: string): string {
   return isShortCode(code) && /[A-Z]/.test(code) ? `${code.slice(0, 4)}-${code.slice(4)}` : code;
 }
 
 /**
- * The typed code on someone's lanyard: their membership number
- * (from MyScout or Consent2Go), normalised. Null for people without one
- * (guests get a random code instead).
+ * The typed code on someone's lanyard: their participant ID, normalised.
+ * Null for people without one (they get a random code instead).
  */
-export function memberCardCode(memberNumber: string | null | undefined): string | null {
-  if (!memberNumber || /^GUEST-/i.test(memberNumber)) return null;
-  const code = normaliseShortCode(memberNumber);
+export function memberCardCode(participantId: string | null | undefined): string | null {
+  if (!participantId || /^GUEST-/i.test(participantId)) return null;
+  const code = normaliseShortCode(participantId);
   return /^[A-Z0-9]{3,20}$/.test(code) ? code : null;
 }
 
-/** Could this be a lanyard code someone typed (a membership number or a random code)? */
+/** Could this be a lanyard code someone typed (a participant ID or a random code)? */
 export function isTypedCode(code: string): boolean {
   return /^[A-Z0-9]{3,20}$/.test(code);
 }

@@ -1,6 +1,6 @@
 import type { EventFeatures, EventStatus, LanyardSettings } from '../shared/schemas';
 import type { Permission } from '../shared/permissions';
-import type { SectionSetting } from '../shared/sections';
+import type { LevelSetting } from '../shared/levels';
 
 export interface EventSummary {
   id: string;
@@ -21,12 +21,12 @@ export interface EventSummary {
   /** How lanyards mark someone without photo consent. */
   lanyard: LanyardSettings;
   logoUrl: string | null;
-  /** Sections that count as youth at this camp; everyone else is an adult. */
+  /** Levels that count as youth at this camp; everyone else is an adult. */
   /** Who people email about the camp (shown on booking links). */
   contactEmail: string;
-  youthSections: string[];
-  /** The camp's sections: names, lanyard words, colours, youth (Settings › Sections). */
-  sections: SectionSetting[];
+  youthLevels: string[];
+  /** The camp's levels: names, lanyard words, colours, youth (Settings › Levels). */
+  levels: LevelSetting[];
   permissions: Permission[];
 }
 

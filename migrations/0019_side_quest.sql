@@ -1,4 +1,4 @@
--- Super Splash Side Quest: a secret game. When a participant's phone (opened
+-- Side Quest: a secret game. When a participant's phone (opened
 -- from their own lanyard) opens another participant's lanyard link, it
 -- "collects" that person. Off unless the camp turns it on.
 ALTER TABLE events ADD COLUMN feature_side_quest INTEGER NOT NULL DEFAULT 0 CHECK (feature_side_quest IN (0, 1));

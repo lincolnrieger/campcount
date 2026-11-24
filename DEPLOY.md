@@ -3,6 +3,34 @@
 This is the short, ordered list. The detailed runbook is
 [`docs/operations.md`](docs/operations.md).
 
+
+## Before deploying the encrypted, minimal-data release (migration 0036)
+
+Do these **in order**. The migration deletes columns, so it can't be undone
+except by restoring the database.
+
+1. **Bookmark a restore point.** In Cloudflare, D1 › campcount-production ›
+   Time Travel: note the current time (or run
+   `npx wrangler d1 time-travel info campcount-production`). If anything goes
+   wrong you can restore to it.
+2. **Add the `DATA_KEY` secret** (Workers & Pages › campcount › Settings ›
+   Variables and Secrets › Add › Secret). Make it 64 random hex characters:
+   `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+   Save a copy in a password manager. Without it the app shows "not fully set
+   up" and does nothing; if it's ever lost, participant data can't be read.
+3. **Merge to `main`.** The deploy applies `0036_minimal_participant_data.sql`,
+   which renames membership number to participant ID and section to level,
+   and removes preferred names, positions, role and status labels, team
+   labels and extra imported columns (including any medication or swimming
+   details). Photo consent becomes Yes or No.
+4. **Open the app once.** On its first request the Worker encrypts every
+   existing name, participant ID, group, level, car registration, dietary
+   detail and typed lanyard code, and fills in the lookup hashes. Check
+   Workers logs for `sealed_existing`.
+5. **Check:** `/api/health` shows `{"ok":true}`; People lists names as
+   before; in D1's console, `SELECT first_name FROM people LIMIT 3` shows only
+   `enc1.…` values.
+
 ## 1. Upgrade Cloudflare to Workers Paid (required)
 
 The free plan will not hold a camp of 300–400 people:
@@ -39,7 +67,7 @@ whole account straight away.
    - applies database migrations `0016_load_indexes.sql` (new indexes) and
      `0017_lanyard_designer.sql` (two new tables for lanyard designs and their
      images), `0018_scanner_bookings.sql` (scanners can add people to come)
-     and `0019_side_quest.sql` (the Side Quest switch and its table) and `0020_member_number_codes.sql` (lanyard codes become membership numbers) and `0021_leader_roster.sql` (the leader roster) and `0022_event_banners.sql` (the participant page banner) and `0023_intake.sql` then `0024_drop_intake.sql` (Import & check now keeps nothing on the server) and `0025_youth_sections.sql` (which sections count as youth) and `0026_section_settings.sql` (camp section names, words and colours), `0027_team_locks.sql`, `0028_car_rego.sql` and `0029_booking_links.sql`. All
+     and `0019_side_quest.sql` (the Side Quest switch and its table) and `0020_member_number_codes.sql` (lanyard codes become participant IDs) and `0021_leader_roster.sql` (the leader roster) and `0022_event_banners.sql` (the participant page banner) and `0023_intake.sql` then `0024_drop_intake.sql` (Import & check now keeps nothing on the server) and `0025_youth_sections.sql` (which levels count as youth) and `0026_section_settings.sql` (camp level names, words and colours), `0027_team_locks.sql`, `0028_car_rego.sql` and `0029_booking_links.sql`. All
      only add things, so they're safe while the old version is running;
    - creates the two new rate limits (`AUTH_NETWORK_LIMITER`,
      `PUBLIC_NETWORK_LIMITER`) from `wrangler.jsonc`.
@@ -50,8 +78,8 @@ whole account straight away.
 
 In **Workers & Pages › campcount › Settings**:
 
-- **Variables and Secrets:** `AUTH_SECRET` is there as a **Secret**, 64
-  random hex characters. The other values (`ENVIRONMENT`, `ROOT_DOMAIN`,
+- **Variables and Secrets:** `AUTH_SECRET` and `DATA_KEY` are there as
+  **Secrets**, each 64 random hex characters. The other values (`ENVIRONMENT`, `ROOT_DOMAIN`,
   `EMAIL_FROM`) come from `wrangler.jsonc`.
 - **Domains & Routes:** `campcount.com` and the route `*.campcount.com/*`
   (see the README's Camp addresses section).
@@ -62,8 +90,8 @@ In **Workers & Pages › campcount › Settings**:
 Then open these in a browser:
 
 - `https://campcount.com/api/health` should show `{"ok":true}`. If it
-  shows `ok:false` or an error, the database or `AUTH_SECRET` isn't set up.
-- `https://campcount.com/robots.txt` should show `Disallow: /`.
+  shows `ok:false` or an error, the database, `AUTH_SECRET` or `DATA_KEY` isn't set up.
+- `https://campcount.com/robots.txt` should show `Disallow: /api/` (pages stay fetchable so search engines can read their `noindex`).
 
 ## 4. Monitoring (15 minutes, once)
 
@@ -137,6 +165,7 @@ Then open these in a browser:
 | Name | Kind | Where |
 | --- | --- | --- |
 | `AUTH_SECRET` | Secret | Dashboard › Variables and Secrets |
+| `DATA_KEY` | Secret (encrypts participant data; keep a safe copy) | Dashboard › Variables and Secrets |
 | `ENVIRONMENT` | Variable | `wrangler.jsonc` |
 | `ROOT_DOMAIN` | Variable | `wrangler.jsonc` |
 | `EMAIL_FROM` | Variable | `wrangler.jsonc` |

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import type { DietaryEntryInput } from '../../shared/schemas';
-import { kindForSection, sectionStyle } from '../../shared/sections';
+import { kindForLevel, levelStyle } from '../../shared/levels';
 import { dayInZone, dayLabel, timeInZone, timeRange } from '../../shared/time';
 import { ApiFailure, api } from '../api';
 import { DietaryEditor, describeEntry } from '../components/DietaryEditor';
@@ -14,26 +14,22 @@ import { useApi } from '../useApi';
 import { Badge, Banner, Button, ButtonLink, Field, Icon, InfoTip, LoadError, Loading, Menu, PageHeader, Section, Sheet, SkeletonHeader, SkeletonRows, useConfirm, useToast } from '../ui';
 import type { MenuItem, Tone } from '../ui';
 import { useEvent } from './EventLayout';
+import { clearLocalColumns, loadLocalColumns } from '../import/localColumns';
 
 interface PersonData {
   registration: {
     id: string;
-    memberNumber: string;
+    participantId: string;
     firstName: string;
-    preferredName: string;
     lastName: string;
     displayName: string;
     kind: 'youth' | 'adult';
     carRego?: string | null;
-    section: string;
+    level: string;
     groupName: string;
-    position: string;
     status: 'active' | 'withdrawn';
     shortCode: string | null;
-    team?: string;
-    /** Extra columns kept from an import, like { Bus: '2' }. */
-    extra?: Record<string, string>;
-    photoConsent?: 'yes' | 'no' | 'unknown';
+    photoConsent?: 'yes' | 'no';
     dietary?: DietaryEntryInput[];
   };
   can: { edit: boolean; editDietary: boolean; cards: boolean };
@@ -116,7 +112,7 @@ export function Person() {
     );
   if (!data) return null;
   const r = data.registration;
-  const fullName = `${r.preferredName || r.firstName} ${r.lastName}`;
+  const fullName = `${r.firstName} ${r.lastName}`.trim();
   const tz = event.timezone;
   const allergy = r.dietary?.some((d) => d.category === 'allergy');
   const canMark = event.status === 'open' && event.features.site && can('site.scan') && data.where?.site && r.status === 'active';
@@ -261,7 +257,7 @@ export function Person() {
         back={back}
         summary={
           <>
-            <span>{[r.section, r.kind === 'adult' && r.position, r.groupName].filter(Boolean).join(' · ')}</span>
+            <span>{[r.level, r.groupName].filter(Boolean).join(' · ')}</span>
             {r.status === 'withdrawn' && <Badge tone="error">Withdrawn</Badge>}
             {r.photoConsent === 'no' && <Badge tone="error">No photos</Badge>}
             {allergy && <Badge tone="error">{anaphylactic ? 'Anaphylactic' : 'Allergy'}</Badge>}
@@ -426,7 +422,7 @@ export function Person() {
           <LanyardPanel
             eventId={event.id}
             registrationId={r.id}
-            section={r.section}
+            level={r.level}
             shortCode={r.shortCode}
             canShowQr={!!data.can.cards}
             actions={
@@ -462,23 +458,16 @@ export function Person() {
                 <dt>Name</dt>
                 <dd>
                   {r.firstName} {r.lastName}
-                  {r.preferredName && ` (goes by ${r.preferredName})`}
                 </dd>
               </div>
               <div>
-                <dt>Membership number</dt>
-                <dd>{r.memberNumber || 'Not a member'}</dd>
+                <dt>Participant ID</dt>
+                <dd>{r.participantId}</dd>
               </div>
               <div>
-                <dt>Section</dt>
-                <dd>{r.section}</dd>
+                <dt>Level</dt>
+                <dd>{r.level}</dd>
               </div>
-              {r.kind === 'adult' && (
-                <div>
-                  <dt>Role</dt>
-                  <dd>{r.position || 'Leader'}</dd>
-                </div>
-              )}
               {r.kind === 'adult' && (
                 <div>
                   <dt>Car rego</dt>
@@ -486,25 +475,13 @@ export function Person() {
                 </div>
               )}
               <div>
-                <dt>Scout group</dt>
+                <dt>Group</dt>
                 <dd>{r.groupName || 'Not recorded'}</dd>
               </div>
-              {r.team && (
-                <div>
-                  <dt>Team</dt>
-                  <dd>{r.team}</dd>
-                </div>
-              )}
-              {Object.entries(r.extra ?? {}).map(([k, v]) => (
-                <div key={k}>
-                  <dt>{k}</dt>
-                  <dd>{v}</dd>
-                </div>
-              ))}
               {r.photoConsent && (
                 <div>
-                  <dt>Photos</dt>
-                  <dd>{r.photoConsent === 'yes' ? 'OK to photograph' : r.photoConsent === 'no' ? 'No photos' : 'Not recorded'}</dd>
+                  <dt>Photo consent</dt>
+                  <dd>{r.photoConsent === 'yes' ? 'Yes' : 'No'}</dd>
                 </div>
               )}
               {data.can.cards && (
@@ -514,6 +491,7 @@ export function Person() {
                 </div>
               )}
             </dl>
+            <OnThisDevice eventId={event.id} participantId={r.participantId} />
           </Section>
         </div>
       </div>
@@ -590,33 +568,27 @@ function DetailsForm({ r, back, path, onSaved }: { r: PersonData['registration']
   const { event } = useEvent();
   const [f, setF] = useState({
     firstName: r.firstName,
-    preferredName: r.preferredName,
     lastName: r.lastName,
-    memberNumber: r.memberNumber,
-    kind: r.kind,
-    section: r.section,
+    participantId: r.participantId,
+    level: r.level,
     groupName: r.groupName,
-    position: r.position,
     photoConsent: r.photoConsent,
     carRego: r.carRego ?? '',
   });
-  const [extra, setExtra] = useState<Record<string, string>>(r.extra ?? {});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
-  const name = `${r.preferredName || r.firstName} ${r.lastName}`;
+  const name = `${r.firstName} ${r.lastName}`.trim();
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     const local: Record<string, string> = {};
-    if (!f.firstName.trim()) local.firstName = 'Enter a first name';
-    if (!f.lastName.trim()) local.lastName = 'Enter a last name';
+    if (!f.firstName.trim()) local.firstName = 'Enter a first name or initial';
     setErrors(local);
     if (Object.keys(local).length) return;
     const body: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(f)) if (v !== undefined && v !== (r as unknown as Record<string, unknown>)[k]) body[k] = v;
-    if (JSON.stringify(extra) !== JSON.stringify(r.extra ?? {})) body.extra = extra;
     setBusy(true);
     setFailure(null);
     try {
@@ -632,8 +604,7 @@ function DetailsForm({ r, back, path, onSaved }: { r: PersonData['registration']
     }
   }
 
-  const adultSection = kindForSection(f.section, event.youthSections ?? []) === 'adult';
-  const extraKeys = Object.keys(r.extra ?? {});
+  const adultLevel = kindForLevel(f.level, event.levels) === 'adult';
   return (
     <>
       <PageHeader title="Edit details" back={back} summary={name} />
@@ -645,14 +616,11 @@ function DetailsForm({ r, back, path, onSaved }: { r: PersonData['registration']
             <Field id="p-first" label="First name" error={errors.firstName}>
               <input className="input" value={f.firstName} onChange={set('firstName')} autoComplete="off" />
             </Field>
-            <Field id="p-last" label="Last name" error={errors.lastName}>
+            <Field id="p-last" label="Last name" optional hint="Or just an initial" error={errors.lastName}>
               <input className="input" value={f.lastName} onChange={set('lastName')} autoComplete="off" />
             </Field>
-            <Field id="p-pref" label="Goes by" optional hint="Shown on their lanyard">
-              <input className="input" value={f.preferredName} onChange={set('preferredName')} autoComplete="off" />
-            </Field>
-            <Field id="p-member" label="Membership number" error={errors.memberNumber}>
-              <input className="input" inputMode="numeric" value={f.memberNumber} onChange={set('memberNumber')} autoComplete="off" />
+            <Field id="p-member" label="Participant ID" error={errors.participantId}>
+              <input className="input" value={f.participantId} onChange={set('participantId')} autoComplete="off" />
             </Field>
           </div>
         </fieldset>
@@ -660,59 +628,39 @@ function DetailsForm({ r, back, path, onSaved }: { r: PersonData['registration']
           <legend className="person-form-legend">At camp</legend>
           <div className="person-form-grid">
             <Field
-              id="p-section"
-              label="Section"
+              id="p-level"
+              label="Level"
               hint={
                 <>
-                  Counts as {adultSection ? 'an adult' : 'youth'}{' '}
-                  <InfoTip label="Which sections count as youth">Set which sections count as youth in Settings › Event details › Youth sections.</InfoTip>
+                  Counts as {adultLevel ? 'an adult' : 'youth'}{' '}
+                  <InfoTip label="Which levels count as youth">Set which levels count as youth in Settings › Levels.</InfoTip>
                 </>
               }
             >
-              <select className="select" value={f.section} onChange={set('section')}>
-                {(event.sections.some((x) => x.name === f.section) ? event.sections.map((x) => x.name) : [f.section, ...event.sections.map((x) => x.name)]).map((s) => (
+              <select className="select" value={f.level} onChange={set('level')}>
+                {(event.levels.some((x) => x.name === f.level) ? event.levels.map((x) => x.name) : [f.level, ...event.levels.map((x) => x.name)]).map((s) => (
                   <option key={s}>{s}</option>
                 ))}
               </select>
             </Field>
-            <Field id="p-group" label="Scout group" optional>
+            <Field id="p-group" label="Group" optional>
               <input className="input" value={f.groupName} onChange={set('groupName')} autoComplete="off" />
             </Field>
-            {adultSection && (
-              <Field id="p-position" label="Role" optional hint="Cub Leader, cook, first aider…">
-                <input className="input" value={f.position} onChange={set('position')} autoComplete="off" />
-              </Field>
-            )}
             {r.kind === 'adult' && (
               <Field id="p-rego" label="Car rego" optional hint="Their car on site">
                 <input className="input" value={f.carRego} maxLength={20} onChange={set('carRego')} autoComplete="off" />
               </Field>
             )}
             {f.photoConsent !== undefined && (
-              <Field id="p-photo" label="Photos">
+              <Field id="p-photo" label="Photo consent">
                 <select className="select" value={f.photoConsent} onChange={set('photoConsent')}>
-                  <option value="yes">OK to photograph</option>
-                  <option value="no">No photos</option>
-                  <option value="unknown">Not recorded</option>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
                 </select>
               </Field>
             )}
           </div>
         </fieldset>
-        {extraKeys.length > 0 && (
-          <fieldset className="person-form-group">
-            <legend className="person-form-legend">
-              From the import <InfoTip label="About these details">Clear a box to remove that detail.</InfoTip>
-            </legend>
-            <div className="person-form-grid">
-              {extraKeys.map((k, i) => (
-                <Field key={k} id={`p-extra-${i}`} label={k} optional>
-                  <input className="input" value={extra[k] ?? ''} onChange={(e) => setExtra({ ...extra, [k]: e.target.value })} autoComplete="off" />
-                </Field>
-              ))}
-            </div>
-          </fieldset>
-        )}
         <div className="btn-row form-actions">
           <Button type="submit" kind="primary" busy={busy} busyLabel="Saving…">
             Save changes
@@ -725,27 +673,27 @@ function DetailsForm({ r, back, path, onSaved }: { r: PersonData['registration']
 }
 
 /**
- * Their section, as on their lanyard, and their lanyard's QR code on screen
+ * Their level, as on their lanyard, and their lanyard's QR code on screen
  * (to scan straight off this page). The QR is a live lanyard, so only people
  * who can print lanyards see it.
  */
 function LanyardPanel({
   eventId,
   registrationId,
-  section,
+  level,
   shortCode,
   canShowQr,
   actions,
 }: {
   eventId: string;
   registrationId: string;
-  section: string;
+  level: string;
   shortCode: string | null;
   canShowQr: boolean;
   actions?: ReactNode;
 }) {
   const { event } = useEvent();
-  const style = sectionStyle(event.sections, section);
+  const style = levelStyle(event.levels, level);
   const [qr, setQr] = useState<boolean[][] | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -766,7 +714,7 @@ function LanyardPanel({
       live = false;
     };
   }, [eventId, registrationId, shortCode, canShowQr]);
-  const word = style.word || section;
+  const word = style.word || level;
   return (
     <Section title="Lanyard" id="lanyard" actions={actions}>
       <div className="panel person-lanyard">
@@ -774,7 +722,7 @@ function LanyardPanel({
           <span className="person-section" style={{ background: style.bg, color: style.fg }}>
             {word}
           </span>
-          {word.toLowerCase() !== section.toLowerCase() && <p className="meta">Section: {section}</p>}
+          {word.toLowerCase() !== level.toLowerCase() && <p className="meta">Level: {level}</p>}
           {shortCode ? <p className="code person-code">{shortCode}</p> : <p className="meta">No lanyard issued yet.</p>}
         </div>
         {shortCode && canShowQr ? (
@@ -789,5 +737,55 @@ function LanyardPanel({
         ) : null}
       </div>
     </Section>
+  );
+}
+
+/**
+ * Columns from an import that were kept on this device only (never sent to
+ * CampCount). Shown just to whoever imported on this device, until sign-out.
+ */
+function OnThisDevice({ eventId, participantId }: { eventId: string; participantId: string }) {
+  const [cols, setCols] = useState<{ headers: string[]; values: string[] } | null>(null);
+  useEffect(() => {
+    let live = true;
+    void loadLocalColumns(eventId)
+      .then((l) => {
+        const values = l?.byId[participantId.toUpperCase()];
+        if (live && l && values) setCols({ headers: l.headers, values });
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [eventId, participantId]);
+  if (!cols) return null;
+  const shown = cols.headers.map((h, i) => [h, cols.values[i] ?? ''] as const).filter(([, v]) => v);
+  if (shown.length === 0) return null;
+  return (
+    <details className="panel panel-pad on-this-device">
+      <summary>
+        <Icon name="lock" size={16} /> On this device only ({shown.length})
+      </summary>
+      <p className="meta">From the spreadsheet you imported here. Never sent to CampCount; removed when you sign out.</p>
+      <dl className="person-dl">
+        {shown.map(([h, v]) => (
+          <div key={h}>
+            <dt>{h}</dt>
+            <dd>{v}</dd>
+          </div>
+        ))}
+      </dl>
+      <Button
+        small
+        kind="ghost"
+        onClick={() =>
+          void clearLocalColumns(eventId).then(() => {
+            setCols(null);
+          })
+        }
+      >
+        Remove from this device
+      </Button>
+    </details>
   );
 }

@@ -10,8 +10,9 @@ import { auditStatement } from '../services/audit';
 import { loadEventModel, openItems } from '../services/reports';
 import { can, eventPermissions } from '../services/principal';
 import { resolveSite } from '../services/site';
-import { syncKindsStatement } from '../services/rosterWrites';
-import { SECTIONS, parseSectionSettings, parseYouthSections } from '../../shared/sections';
+import { syncKinds } from '../services/rosterWrites';
+import { seal } from '../lib/vault';
+import { parseLevelSettings } from '../../shared/levels';
 
 export interface EventRow {
   id: string;
@@ -40,8 +41,8 @@ export interface EventRow {
   photo_marker_colour: string;
   photo_marker_label: number;
   lanyard_print_band: number;
-  youth_sections: string;
-  section_settings: string | null;
+  youth_levels: string;
+  level_settings: string | null;
   contact_email: string;
   /** From event_logos, when the query includes it. */
   logo_updated_at?: string | null;
@@ -82,8 +83,8 @@ export function eventDto(row: EventRow) {
       printBand: row.lanyard_print_band !== 0,
     } satisfies LanyardSettings,
     contactEmail: row.contact_email ?? '',
-    youthSections: parseYouthSections(row.youth_sections),
-    sections: parseSectionSettings(row.section_settings, row.youth_sections),
+    youthLevels: parseLevelSettings(row.level_settings, row.youth_levels).filter((s) => s.youth).map((s) => s.name),
+    levels: parseLevelSettings(row.level_settings, row.youth_levels),
     logoUrl: row.logo_updated_at ? `/api/events/${row.id}/logo?v=${encodeURIComponent(row.logo_updated_at)}` : null,
   };
 }
@@ -225,29 +226,27 @@ eventRoutes.patch('/:eventId', async (c) => {
   for (const [key, value] of Object.entries(input.features ?? {})) {
     if (value !== undefined) set(FEATURE_COLUMNS[key as keyof EventFeatures], value ? 1 : 0);
   }
-  if (input.youthSections !== undefined && input.sections === undefined) set('youth_sections', JSON.stringify([...new Set(input.youthSections)].filter((x) => x !== 'Leaders')));
-  // Sections: renames move everyone in them; an added section can go only once it's empty.
+  if (input.youthLevels !== undefined && input.levels === undefined) set('youth_levels', JSON.stringify([...new Set(input.youthLevels)]));
+  // Levels: renames move everyone in them; an added level can go only once it's empty.
   const renames: { from: string; to: string }[] = [];
-  if (input.sections !== undefined) {
-    const list = input.sections;
+  // Levels are encrypted, so who is in which one is worked out here, not in SQL.
+  let people: { id: string; level: string }[] = [];
+  if (input.levels !== undefined) {
+    const list = input.levels;
     const names = list.map((x) => x.name.toLowerCase());
-    if (new Set(names).size !== names.length) throw badRequest('Two sections have the same name.');
-    for (const b of SECTIONS) if (list.filter((x) => x.base === b).length !== 1) throw badRequest('The built-in sections can be renamed, but not removed.');
-    const before = parseSectionSettings(row.section_settings, row.youth_sections);
+    if (new Set(names).size !== names.length) throw badRequest('Two levels have the same name.');
+    const before = parseLevelSettings(row.level_settings, row.youth_levels);
     for (const x of list) if (x.from && x.from !== x.name && before.some((b) => b.name === x.from)) renames.push({ from: x.from, to: x.name });
     const kept = new Set(list.map((x) => x.from ?? x.name));
     const removed = before.filter((b) => !kept.has(b.name)).map((b) => b.name);
+    people = (await c.env.DB.prepare(`SELECT id, level FROM registrations WHERE event_id = ?`).bind(eventId).all<{ id: string; level: string }>()).results;
     if (removed.length) {
-      const inUse = await c.env.DB.prepare(
-        `SELECT section, count(*) AS n FROM registrations WHERE event_id = ? AND section IN (SELECT value FROM json_each(?)) GROUP BY section`,
-      )
-        .bind(eventId, JSON.stringify(removed))
-        .all<{ section: string; n: number }>();
-      if (inUse.results.length) throw conflict(`Move everyone out of ${inUse.results.map((r) => `${r.section} (${r.n})`).join(', ')} before removing it.`);
+      const inUse = removed.map((l) => ({ level: l, n: people.filter((p) => p.level === l).length })).filter((x) => x.n > 0);
+      if (inUse.length) throw conflict(`Move everyone out of ${inUse.map((r) => `${r.level} (${r.n})`).join(', ')} before removing it.`);
     }
-    const stored = list.map(({ name, base, word, colour, youth }) => ({ name, base, word, colour: colour.toUpperCase(), youth: base === 'Leaders' ? false : youth }));
-    set('section_settings', JSON.stringify(stored));
-    set('youth_sections', JSON.stringify(stored.filter((x) => x.youth).map((x) => x.name)));
+    const stored = list.map(({ name, word, colour, youth }) => ({ name, word, colour: colour.toUpperCase(), youth }));
+    set('level_settings', JSON.stringify(stored));
+    set('youth_levels', JSON.stringify(stored.filter((x) => x.youth).map((x) => x.name)));
   }
   if (sets.length === 0) return c.json({ event: eventDto(row) });
 
@@ -258,14 +257,13 @@ eventRoutes.patch('/:eventId', async (c) => {
   set('updated_at', nowIso());
   await c.env.DB.batch([
     // Column names come from the fixed map above, never from the client.
-    // Renamed sections: everyone in them moves with the name (via a placeholder, so swapping two names works).
-    ...renames.map((r, i) =>
-      c.env.DB.prepare(`UPDATE registrations SET section = ? WHERE event_id = ? AND section = ?`).bind(`__rename_${i}__`, eventId, r.from),
-    ),
-    ...renames.map((r, i) => c.env.DB.prepare(`UPDATE registrations SET section = ? WHERE event_id = ? AND section = ?`).bind(r.to, eventId, `__rename_${i}__`)),
+    // Renamed levels: everyone in them moves with the name (each person once, so swapping two names works).
+    ...(await Promise.all(
+      people
+        .filter((p) => renames.some((r) => r.from === p.level))
+        .map(async (p) => c.env.DB.prepare(`UPDATE registrations SET level = ? WHERE id = ?`).bind(await seal(c.env, renames.find((r) => r.from === p.level)!.to), p.id)),
+    )),
     c.env.DB.prepare(`UPDATE events SET ${sets.join(', ')} WHERE id = ?`).bind(...values, eventId),
-    // Everyone's youth or adult follows the new setting.
-    ...(input.youthSections !== undefined || input.sections !== undefined ? [syncKindsStatement(c.env.DB, eventId)] : []),
     auditStatement(c.env.DB, {
       actor: { type: 'user', id: (principal as { userId: string }).userId },
       action: 'event.update',
@@ -275,6 +273,8 @@ eventRoutes.patch('/:eventId', async (c) => {
       detail: { fields: Object.keys(input).join(',') },
     }),
   ]);
+  // Everyone's youth or adult follows the new setting.
+  if (input.youthLevels !== undefined || input.levels !== undefined) await syncKinds(c.env, eventId);
   return c.json({ event: eventDto((await getEventRow(c.env.DB, eventId))!) });
 });
 

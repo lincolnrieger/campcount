@@ -36,7 +36,7 @@ interface Person extends Where {
   id: string;
   fullName: string;
   groupName: string;
-  section: string;
+  level: string;
   kind: string;
 }
 interface WhereData {
@@ -65,7 +65,7 @@ function placeOf(p: Person, tz: string): { label: string; tone: Tone } {
 const ORDER: Record<string, number> = { never: 0, on: 1, off: 2 };
 const PAGE = 50;
 const FILTER_TITLE: Record<Filter, string> = { all: 'Everyone', on: 'On site', off: 'Left camp', never: 'Not arrived', activity: 'At activities' };
-const sectionOf = (p: Person) => (p.kind === 'adult' ? 'Leader' : p.section);
+const levelOf = (p: Person) => (p.kind === 'adult' ? 'Leader' : p.level);
 
 /**
  * An event's home. Open: who's here and who's missing, with one-tap
@@ -245,7 +245,7 @@ function WhereEveryoneIs() {
   const reloadLive = live.reload;
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useRemembered<Filter>(`home:${event.id}:filter`, 'all');
-  const [section, setSection] = useRemembered<string>(`home:${event.id}:section`, '');
+  const [level, setLevel] = useRemembered<string>(`home:${event.id}:level`, '');
   const [limit, setLimit] = useState(PAGE);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -289,10 +289,10 @@ function WhereEveryoneIs() {
   const active: Filter = !tracked && filter !== 'all' && filter !== 'activity' ? 'all' : filter;
   const count = (v: 'on' | 'off' | 'never') => people.filter((p) => p.site === v).length;
   const atActivities = people.filter((p) => p.activities.length > 0).length;
-  const sections = [...new Set(people.map(sectionOf))].filter(Boolean).sort();
+  const levels = [...new Set(people.map(levelOf))].filter(Boolean).sort();
   const shown = people
     .filter((p) => active === 'all' || (active === 'activity' ? p.activities.length > 0 : p.site === active))
-    .filter((p) => !section || sectionOf(p) === section)
+    .filter((p) => !level || levelOf(p) === level)
     .filter((p) => matchesSearch(query, p.fullName, p.groupName))
     .sort(
       (a, b) =>
@@ -306,7 +306,7 @@ function WhereEveryoneIs() {
     setFilter(active === f ? 'all' : f);
     setLimit(PAGE);
   };
-  const filtered = active !== 'all' || section !== '';
+  const filtered = active !== 'all' || level !== '';
 
   const action = (p: Person) =>
     canMark && p.site !== null ? (
@@ -350,11 +350,11 @@ function WhereEveryoneIs() {
           <h2 id="people-heading" className="home-list-title">
             {FILTER_TITLE[active]}
           </h2>
-          <SearchField id="find-person" label="Find a person" placeholder="Name or Scout group" value={query} onChange={(v) => (setQuery(v), setLimit(PAGE))} slash />
-          {sections.length > 1 && (
-            <select className="select" aria-label="Section" value={section} onChange={(e) => (setSection(e.target.value), setLimit(PAGE))}>
-              <option value="">All sections</option>
-              {sections.map((s) => (
+          <SearchField id="find-person" label="Find a person" placeholder="Name or group" value={query} onChange={(v) => (setQuery(v), setLimit(PAGE))} slash />
+          {levels.length > 1 && (
+            <select className="select" aria-label="Level" value={level} onChange={(e) => (setLevel(e.target.value), setLimit(PAGE))}>
+              <option value="">All levels</option>
+              {levels.map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>
@@ -367,7 +367,7 @@ function WhereEveryoneIs() {
               kind="ghost"
               onClick={() => {
                 setFilter('all');
-                setSection('');
+                setLevel('');
               }}
             >
               Show everyone
@@ -384,15 +384,15 @@ function WhereEveryoneIs() {
         </Toolbar>
 
         {shown.length === 0 ? (
-          <EmptyState title={query ? `No one matches "${query}"` : 'No one here'}>{query ? 'Check the spelling, or search by Scout group.' : undefined}</EmptyState>
+          <EmptyState title={query ? `No one matches "${query}"` : 'No one here'}>{query ? 'Check the spelling, or search by group.' : undefined}</EmptyState>
         ) : wide ? (
           <div className="table-wrap">
             <table className="table">
               <thead>
                 <tr>
                   <th scope="col">Name</th>
-                  <th scope="col">Section</th>
-                  <th scope="col">Scout group</th>
+                  <th scope="col">Level</th>
+                  <th scope="col">Group</th>
                   <th scope="col">Where</th>
                   {canMark && (
                     <th scope="col" className="cell-action">
@@ -411,7 +411,7 @@ function WhereEveryoneIs() {
                           {p.fullName}
                         </Link>
                       </td>
-                      <td>{sectionOf(p)}</td>
+                      <td>{levelOf(p)}</td>
                       <td>{p.groupName}</td>
                       <td>
                         <Badge tone={place.tone}>{place.label}</Badge>
@@ -435,7 +435,7 @@ function WhereEveryoneIs() {
                         {p.fullName}
                       </Link>
                     </span>
-                    <span className="row-meta">{[sectionOf(p), p.groupName].filter(Boolean).join(' · ')}</span>
+                    <span className="row-meta">{[levelOf(p), p.groupName].filter(Boolean).join(' · ')}</span>
                     <span>
                       <Badge tone={place.tone}>{place.label}</Badge>
                     </span>

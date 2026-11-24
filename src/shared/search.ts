@@ -1,7 +1,7 @@
 /**
  * Name search used across CampCount. One letter finds everyone whose first
  * or last name starts with it ("L" finds Lily and Lee); longer text matches
- * anywhere in the full name, or a membership number or code.
+ * anywhere in the full name, or a participant ID or code.
  */
 export function matchesSearch(query: string, fullName: string, ...extra: (string | null | undefined)[]): boolean {
   const q = query.trim().toLowerCase();

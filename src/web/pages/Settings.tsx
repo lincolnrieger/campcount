@@ -28,7 +28,7 @@ const CHANGES: Partial<Record<EventStatus, { label: string; title: string; body:
   draft: { label: 'Return to draft', title: 'Return this event to draft?', body: 'You can set it up again and open it when ready.', done: 'Event is a draft again' },
 };
 
-/** Settings: one card per section this person can change, then the event's status. */
+/** Settings: one card per level this person can change, then the event's status. */
 export function SettingsIndex() {
   const { event, can, reload, base: eventBase, onSite } = useEvent();
   const { me } = useSession();
@@ -40,7 +40,7 @@ export function SettingsIndex() {
 
   const rows = [
     can('event.configure') && { to: 'event', icon: 'events', title: 'Event details', meta: 'Name, dates, location, features' },
-    can('event.configure') && { to: 'sections', icon: 'layers', title: 'Sections', meta: `${plural(event.sections.length, 'section')} · names, colours` },
+    can('event.configure') && { to: 'levels', icon: 'layers', title: 'Levels', meta: `${plural(event.levels.length, 'level')} · names, colours` },
     can('event.configure') && { to: 'banner', icon: 'image', title: 'Participant page banner', meta: 'Top of each participant’s page' },
     can('event.configure') && { to: 'lanyards', icon: 'band', title: 'Lanyards', meta: 'Card design, no-photo marker' },
     can('staff.manage') && { to: 'staff', icon: 'team', title: 'Staff', meta: staff.data ? `${plural(staff.data.staff.length, 'person', 'people')} · roles` : 'Who works here, and their roles' },

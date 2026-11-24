@@ -171,17 +171,12 @@ describe('meal items API', () => {
       body: {
         rows: [
           {
-            memberNumber: '100',
+            participantId: '100',
             firstName: 'Ava',
-            preferredName: '',
             lastName: 'Example',
             kind: 'youth',
-            section: 'Scouts',
+            level: 'Seniors',
             groupName: '',
-            position: '',
-            roleLabel: '',
-            team: '',
-            sourceStatus: '',
             photoConsent: 'yes',
             dietaryFingerprint: null,
             dietary: [{ category: 'medical_diet', item: 'Gluten free (coeliac)', severity: 'standard', note: '' }],

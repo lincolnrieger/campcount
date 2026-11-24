@@ -13,9 +13,20 @@ to recover the system. Keep a printed copy at camp HQ.
    team** (meal scanning and "Who's eaten") or another **Event manager**. People can sign themselves up at `/sign-up`
    first, or are created automatically when added by email.
 2. **Turn on only the features you need** (Settings › Event).
-3. **Fill the People list** (expected attendees): import the MyScout
-   participant export (People, ⋯, Import from MyScout), including adults, or
-   add someone with **Add person**.
+3. **Fill the People list** (People › Import), or add someone with **Add person**:
+   - Choose a spreadsheet (.xlsx or .csv). It's read on your device; the file
+     is never uploaded.
+   - CampCount matches the columns by name (no AI, nothing sent). Check each
+     field: First name (required), Last name, Group, Level, Participant ID,
+     Dietaries and Photo consent. Choose "Don't send" for anything you don't
+     need. First and last names can be sent in full or as initials only, and
+     the last name can be left out.
+   - Nothing is sent until you press **Import**, and then only those fields,
+     encrypted. Every other column (addresses, contacts, medical notes…) stays
+     in your file, or, if you leave "Keep the other columns on this device"
+     on, in this browser only, until you sign out.
+   - New level names in the file are added to Settings › Levels. Names that
+     sound like adults (Leaders, Staff, Helpers…) count as adults.
 4. **Add activities and meals.** Give each meal a day and time (Meals tab)
    so scanners can pick it by day. Activities can run all camp, or on a
    day with a start and end time. For an activity that runs several times,
@@ -23,15 +34,6 @@ to recover the system. Keep a printed copy at camp HQ.
    next time slot, which you can adjust. Each session is scanned separately,
    and the Scan tab marks whatever is on now. Scanners can scan the gate and every
    activity; Meal team can scan every meal.
-4b. **Import Consent2Go** (People, ⋯, Import from Consent2Go), after MyScout:
-   - Use the Excel export with every group's tab. Section comes from the tab
-     name (Joeys, Scouts, Venturers; everyone else is a leader). "Student ID"
-     must be the membership number: that's how people are matched.
-   - People already imported from MyScout keep their name, section and
-     group. Consent2Go adds photo consent, dietary needs (reviewed before
-     saving), swimming ability and medication permissions. Blanks never
-     wipe anything. Anyone not in MyScout yet is added.
-   - Parent and emergency contacts never leave your computer.
 5. **Design and print lanyards** (People, ⋯, Design lanyards, then the Print tab):
    - Design the front and back on a computer: card size (CR80 or large),
      text, the person's details, colours, images and the camp logo. Changes
@@ -103,8 +105,8 @@ to recover the system. Keep a printed copy at camp HQ.
 
 - **Live tab (where is everyone):** totals for on site, left camp and not
   arrived, then everyone grouped **by where they are** (each activity with
-  its headcount, on site, left camp, not arrived), **by Scout group** or
-  **by section**. Tap a heading to fold it away, tap a total to filter, or
+  its headcount, on site, left camp, not arrived), **by group** or
+  **by level**. Tap a heading to fold it away, tap a total to filter, or
   search by name or group. It updates every 30 seconds.
 - **People tab:** search anyone (one letter is enough) and tap them to see
   where they are now, every scan in order, their lanyard (Show card,
@@ -144,18 +146,18 @@ proof of where someone is now and **not** a substitute for an emergency
 headcount or roll call. In an emergency, follow the organisation's emergency
 procedure and do a physical headcount.
 
-## Super Splash Side Quest (optional, secret)
+## Side Quest (optional, secret)
 
 A game for campers, off unless you turn it on (Settings › Event details ›
-Super Splash Side Quest). Don't announce it: kids find it.
+Side Quest). Don't announce it: kids find it.
 
 - When a camper opens their own lanyard QR on their phone, that phone
   becomes theirs. If they then scan someone else's lanyard with the phone
   camera, they **collect** that person: a full-screen "Splash!" with how
   many friends they've collected, out of how many at camp, and their place
   on the Side Quest table. Scanning someone twice shows "Bah bahhhh!".
-- Their page then shows the Side Quest: quests to collect every Joey, Cub,
-  Scout, Venturer, Rover, and all the leaders and event team, and a short
+- Their page then shows the Side Quest: quests to collect every Mini, Junior,
+  Senior, Explorer, Ranger, and all the leaders and event team, and a short
   table (top three, plus the people either side of them, first names only).
 - Staff see the full leaderboard, with full names, under Reports, for prizes.
 - The kiosk and typed codes never collect. A parent's phone with siblings:
@@ -166,7 +168,7 @@ Super Splash Side Quest). Don't announce it: kids find it.
 ## Practising with demo mode
 
 Platform admins can open Admin, then Demo camps, to create a practice camp
-of made-up people (membership numbers start with `DEMO`). It comes with
+of made-up people (participant IDs start with `DEMO`). It comes with
 activities, meals, lanyard cards and demo accounts for each role.
 
 - **View as** (the eye button at the top of every page) shows any event,

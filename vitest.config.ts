@@ -14,6 +14,7 @@ export default defineConfig(async () => {
             ENVIRONMENT: 'test',
             ROOT_DOMAIN: 'campcount.test',
             AUTH_SECRET: 'test-secret-not-for-production-0123456789',
+            DATA_KEY: 'test-data-key-not-for-production-0123456789',
           },
         },
       }),

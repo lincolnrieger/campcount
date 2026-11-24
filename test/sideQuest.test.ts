@@ -1,18 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { api, createEvent, createUser, grant, json, testEnv } from './helpers';
 
-const row = (memberNumber: string, firstName: string, section: string, kind = 'youth') => ({
-  memberNumber,
+const row = (participantId: string, firstName: string, level: string, kind = 'youth') => ({
+  participantId,
   firstName,
-  preferredName: '',
   lastName: 'Splash',
   kind,
-  section,
-  groupName: 'Example Troop',
-  position: '',
-  roleLabel: '',
-  team: '',
-  sourceStatus: '',
+  level,
+  groupName: 'Example Club',
   photoConsent: 'yes',
   dietaryFingerprint: null,
 });
@@ -25,11 +20,11 @@ async function camp(sideQuest = true) {
   await grant(manager.id, 'event_manager', eventId);
   const base = 800000 + Math.floor(Math.random() * 90000);
   const people = [
-    row(String(base + 1), 'Ava', 'Scouts'),
-    row(String(base + 2), 'Ben', 'Rovers'),
-    row(String(base + 3), 'Cal', 'Rovers'),
+    row(String(base + 1), 'Ava', 'Seniors'),
+    row(String(base + 2), 'Ben', 'Rangers'),
+    row(String(base + 3), 'Cal', 'Rangers'),
     row(String(base + 4), 'Dee', 'Leaders', 'adult'),
-    row(String(base + 5), 'Eli', 'Cubs'),
+    row(String(base + 5), 'Eli', 'Juniors'),
   ];
   await api(`/events/${eventId}/import/commit`, { cookie: manager.cookie, body: { rows: people } });
   await api(`/events/${eventId}/credentials/issue`, { cookie: manager.cookie, body: { mode: 'missing' } });
@@ -58,7 +53,7 @@ function phone() {
   };
 }
 
-describe('Super Splash Side Quest', () => {
+describe('Side Quest', () => {
   it('collects friends on your own phone, counts each once, and ranks you', async () => {
     const c = await camp();
     const ava = phone();
@@ -69,7 +64,7 @@ describe('Super Splash Side Quest', () => {
 
     const first = await ava.open(c.token('Ben'));
     expect(first.body.collect.fresh).toBe(true);
-    expect(first.body.collect.friend).toMatchObject({ firstName: 'Ben', sectionWord: 'Rover' });
+    expect(first.body.collect.friend).toMatchObject({ firstName: 'Ben', levelWord: 'Ranger' });
     // Totals count young people only (Dee is a leader).
     expect(first.body.collect.standing).toMatchObject({ collected: 1, total: 3, rank: 1, players: 1 });
     // The friend's own page (bookings, pass) is never shown on someone else's phone.
@@ -90,9 +85,9 @@ describe('Super Splash Side Quest', () => {
       ['Ava S.', 2, true],
     ]);
 
-    // Quests: every youth section (no leaders quest).
+    // Quests: every youth level (no leaders quest).
     const quests = (await eli.open(c.token('Eli'))).body.sideQuest.quests;
-    expect(quests.find((q: { key: string }) => q.key === 'rovers')).toMatchObject({ collected: 2, total: 2, done: true });
+    expect(quests.find((q: { key: string }) => q.key === 'rangers')).toMatchObject({ collected: 2, total: 2, done: true });
     expect(quests.find((q: { key: string }) => q.key === 'leaders')).toBeUndefined();
   });
 
@@ -170,7 +165,7 @@ describe('Super Splash Side Quest', () => {
     const ava = phone();
     await ava.open(c.token('Ava'));
     const benCollect = await ava.open(c.token('Ben'));
-    expect(benCollect.body.collect.friend.sectionColour).toMatch(/^#[0-9A-F]{6}$/i);
+    expect(benCollect.body.collect.friend.levelColour).toMatch(/^#[0-9A-F]{6}$/i);
     await ava.open(c.token('Cal'));
     const ben = phone();
     await ben.open(c.token('Ben'));
