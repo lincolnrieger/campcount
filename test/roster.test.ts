@@ -10,10 +10,8 @@ const row = (participantId: string, overrides: Record<string, unknown> = {}) => 
   level: 'Juniors',
   groupName: 'Example Junior Unit',
   photoConsent: 'yes',
-  dietaryFingerprint: null,
   ...overrides,
 });
-const FP = (n: number) => n.toString(16).padStart(64, '0');
 
 async function setup(features: { dietary?: boolean } = { dietary: true }) {
   const admin = await createUser({ platformAdmin: true });
@@ -114,28 +112,32 @@ describe('roster import', () => {
     expect((await json(res)).error.message).toContain('4001');
   });
 
-  it('stores reviewed dietary entries and flags unreviewed dietary changes', async () => {
+  it('stores reviewed dietary entries, keeps nothing about the notes, and skips people already reviewed', async () => {
     const { eventId, director } = await setup();
     const reviewed = row('5001', {
-      dietaryFingerprint: FP(1),
+      hasDietaryNotes: true,
       dietary: [{ category: 'allergy', item: 'Peanut', severity: 'anaphylactic', note: '' }],
     });
-    const unreviewed = row('5002', { dietaryFingerprint: FP(2) });
-    const res = await json(await api(`/events/${eventId}/import/commit`, { cookie: director.cookie, body: { rows: [reviewed, unreviewed] } }));
+    const unreviewed = row('5002', { hasDietaryNotes: true });
+    const res = await json(await api(`/events/${eventId}/import/commit`, { cookie: director.cookie, body: { rows: [reviewed, unreviewed, row('5003')] } }));
     expect(res.counts.dietaryPending).toBe(1);
 
     const { registrations } = await json(await api(`/events/${eventId}/registrations`, { cookie: director.cookie }));
     const a = registrations.find((r: any) => r.participantId === '5001');
     expect(a.dietary).toEqual([{ category: 'allergy', item: 'Peanut', severity: 'anaphylactic', note: '' }]);
-    expect(a.dietaryFingerprint).toBe(FP(1));
-    const b = registrations.find((r: any) => r.participantId === '5002');
-    expect(b.dietaryFingerprint).toBeNull(); // still awaiting review
+    expect(a.dietaryReviewed).toBe(true);
+    expect(registrations.find((r: any) => r.participantId === '5002').dietaryReviewed).toBe(false); // still awaiting review
+    // Nothing derived from notes is stored: only a reviewed yes/no.
+    const raw = await testEnv.DB.prepare(`SELECT DISTINCT dietary_source_hash, dietary_checked FROM registrations WHERE event_id = ?`).bind(eventId).all();
+    expect(raw.results).toEqual(expect.arrayContaining([{ dietary_source_hash: null, dietary_checked: '["*"]' }, { dietary_source_hash: null, dietary_checked: null }]));
 
-    // Same text next time: nothing to review for 5001; 5002 is still pending.
+    // Next time: 5001 was reviewed, so it's skipped; 5002 is still pending.
     const preview = await json(
-      await api(`/events/${eventId}/import/preview`, { cookie: director.cookie, body: { rows: [row('5001', { dietaryFingerprint: FP(1) }), unreviewed] } }),
+      await api(`/events/${eventId}/import/preview`, { cookie: director.cookie, body: { rows: [row('5001', { hasDietaryNotes: true }), unreviewed] } }),
     );
     expect(preview.plan.rows.map((r: any) => r.dietaryPending)).toEqual([false, true]);
+    const context = await json(await api(`/events/${eventId}/import/context`, { cookie: director.cookie }));
+    expect(context).toEqual({ dietaryEnabled: true, canEditDietary: true, reviewed: ['5001'] });
   });
 
   it('only people with dietary.edit can submit dietary entries', async () => {
@@ -143,10 +145,10 @@ describe('roster import', () => {
     await createRole('roster_clerk', ['event.view', 'roster.view', 'roster.import']);
     const manager = await createUser();
     await grant(manager.id, 'roster_clerk', eventId);
-    const withDietary = row('6001', { dietaryFingerprint: FP(3), dietary: [] });
+    const withDietary = row('6001', { hasDietaryNotes: true, dietary: [] });
     expect((await api(`/events/${eventId}/import/commit`, { cookie: manager.cookie, body: { rows: [withDietary] } })).status).toBe(403);
     // But they can import the roster; dietary stays pending for the director.
-    const ok = await json(await api(`/events/${eventId}/import/commit`, { cookie: manager.cookie, body: { rows: [row('6001', { dietaryFingerprint: FP(3) })] } }));
+    const ok = await json(await api(`/events/${eventId}/import/commit`, { cookie: manager.cookie, body: { rows: [row('6001', { hasDietaryNotes: true })] } }));
     expect(ok.counts.dietaryPending).toBe(1);
   });
 
@@ -154,7 +156,7 @@ describe('roster import', () => {
     const { eventId, director } = await setup({ dietary: false });
     const res = await api(`/events/${eventId}/import/commit`, {
       cookie: director.cookie,
-      body: { rows: [row('7001', { dietaryFingerprint: FP(4), dietary: [] })] },
+      body: { rows: [row('7001', { hasDietaryNotes: true, dietary: [] })] },
     });
     expect(res.status).toBe(400);
   });
@@ -165,7 +167,7 @@ describe('roster visibility', () => {
     const { eventId, director } = await setup();
     await api(`/events/${eventId}/import/commit`, {
       cookie: director.cookie,
-      body: { rows: [row('8001', { dietaryFingerprint: FP(5), dietary: [{ category: 'preference', item: 'Vegetarian', severity: 'standard', note: '' }] })] },
+      body: { rows: [row('8001', { hasDietaryNotes: true, dietary: [{ category: 'preference', item: 'Vegetarian', severity: 'standard', note: '' }] })] },
     });
     await createRole('roster_viewer', ['event.view', 'roster.view', 'photo.view_status']);
     const clerk = await createUser();

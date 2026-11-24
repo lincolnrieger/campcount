@@ -12,7 +12,6 @@ const person = (participantId: string, kind: 'youth' | 'adult') => ({
   level: kind === 'adult' ? 'Leaders' : 'Seniors',
   groupName: 'Example Group',
   photoConsent: 'yes',
-  dietaryFingerprint: null,
 });
 
 describe('participant page banner', () => {

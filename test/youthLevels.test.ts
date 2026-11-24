@@ -10,7 +10,6 @@ const row = (participantId: string, level: string, kind: 'youth' | 'adult' = 'yo
   level,
   groupName: '',
   photoConsent: 'yes',
-  dietaryFingerprint: null,
 });
 
 describe('youth levels', () => {

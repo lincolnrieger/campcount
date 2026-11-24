@@ -45,12 +45,12 @@ export async function runMaintenance(env: Env, now = nowIso()): Promise<{ sensit
       // Who collected whom in the Side Quest: a map of children's friendships, so it goes with the sensitive data.
       env.DB.prepare(`DELETE FROM side_quest_collections WHERE event_id = ?`).bind(id),
       env.DB.prepare(
-        `UPDATE registrations SET photo_consent = 'no', dietary_source_hash = NULL, dietary_review_pending = 0, dietary_checked = NULL, car_rego = NULL, updated_at = ? WHERE event_id = ?`,
+        `UPDATE registrations SET photo_consent = 'no', dietary_review_pending = 0, dietary_checked = NULL, car_rego = NULL, updated_at = ? WHERE event_id = ?`,
       ).bind(now, id),
       env.DB.prepare(
         `UPDATE credentials SET token_ciphertext = '', status = 'revoked', revoked_at = COALESCE(revoked_at, ?) WHERE event_id = ?`,
       ).bind(now, id),
-      env.DB.prepare(`UPDATE events SET sensitive_purged_at = ?, fingerprint_key = lower(hex(randomblob(32))) WHERE id = ?`).bind(now, id),
+      env.DB.prepare(`UPDATE events SET sensitive_purged_at = ? WHERE id = ?`).bind(now, id),
       auditStatement(env.DB, { actor: { type: 'system' }, action: 'retention.purge_sensitive', eventId: id }),
     ]);
   }

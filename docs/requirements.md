@@ -89,8 +89,12 @@ Proposed flow:
    - **Short note**: up to 80 characters, dietary only.
 3. Only those structured entries go to the server. The original text is
    discarded.
-4. On re-import, rows whose text has changed are flagged for review again.
-   The browser compares a hash; the text is never stored.
+4. Nothing about the notes is kept: not the text, and not any hash or
+   fingerprint of it. Only whether each person's dietary needs have been
+   reviewed (yes or no) is stored. On re-import, people already reviewed are
+   skipped; "Review everyone again" shows them too, beside what's recorded.
+   CampCount can't tell if a note changed after it was reviewed, so use that
+   switch when dietary needs may have changed.
 
 The meal scanner shows a **coloured and labelled alert**, for example
 "ALLERGY — peanut (anaphylactic)". Only Meal Team and meal stations see

@@ -33,9 +33,13 @@ to recover the system. Keep a printed copy at camp HQ.
    - For each spreadsheet after the first, open "Columns to add from this
      file" and tick only what it should bring in (for example photo consent
      and dietaries). Its ID and name columns are still used to match people.
-   - **Dietaries:** tick every column that holds dietary needs. The dietary
-     review shows each column separately for every person, and you choose
-     what to record. The column text itself is never sent.
+   - **Dietaries:** tick every column that holds dietary needs (from every
+     file). The dietary review shows each column separately for every person,
+     and you choose what to record. The notes are never sent or kept, and
+     neither is anything made from them: CampCount only remembers who has
+     been reviewed. People already reviewed are skipped next time; switch on
+     **Review everyone again** on the Check step if dietary needs may have
+     changed.
    - **Levels in this file:** choose the level each name in the file goes
      under. Several names can share one level (for example "Early Bird Youth"
      and "Full Participant Youth" both under Youth), or pick "Another new

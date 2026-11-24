@@ -11,7 +11,6 @@ const row = (participantId: string, firstName: string) => ({
   level: 'Seniors',
   groupName: 'Example Club',
   photoConsent: 'yes',
-  dietaryFingerprint: null,
 });
 
 const nameOf = async (participantId: string) =>

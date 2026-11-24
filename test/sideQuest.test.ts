@@ -9,7 +9,6 @@ const row = (participantId: string, firstName: string, level: string, kind = 'yo
   level,
   groupName: 'Example Club',
   photoConsent: 'yes',
-  dietaryFingerprint: null,
 });
 
 async function camp(sideQuest = true) {

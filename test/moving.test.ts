@@ -10,7 +10,6 @@ const person = (participantId: string) => ({
   level: 'Seniors',
   groupName: 'Example Club',
   photoConsent: 'yes',
-  dietaryFingerprint: null,
 });
 
 async function camp() {

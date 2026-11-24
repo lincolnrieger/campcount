@@ -169,8 +169,8 @@ export const importRowSchema = z.strictObject({
   level: trimmed(40).default(''),
   groupName: trimmed(120).default(''),
   photoConsent: z.enum(['yes', 'no']).default('no'),
-  /** Keyed hash of the source dietary text, to detect changes. Never the text. */
-  dietaryFingerprint: z.string().regex(/^[0-9a-f]{64}$/).nullable().default(null),
+  /** Whether the files have dietary notes for this person (yes or no: never the notes, nor anything made from them). */
+  hasDietaryNotes: z.boolean().default(false),
   /** Present only when the dietary text was reviewed in this import. */
   dietary: z.array(dietaryEntrySchema).max(10).optional(),
 });
@@ -192,8 +192,6 @@ export const registrationPatchSchema = z.strictObject({
 
 export const dietaryUpdateSchema = z.strictObject({
   entries: z.array(dietaryEntrySchema).max(10),
-  /** Import & check: fingerprints of the notes that were read (never the notes). */
-  checkedNotes: z.array(z.string().regex(/^[a-z0-9]{1,16}$/)).max(4).optional(),
 });
 
 // ---------------------------------------------------------------- registration

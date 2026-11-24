@@ -50,7 +50,7 @@ rosterRoutes.get('/registrations', async (c) => {
 
   const { results } = await c.env.DB.prepare(
     `SELECT r.id, p.participant_id, p.first_name, p.last_name, r.kind, r.level, r.group_name,
-            r.photo_consent, r.status, r.car_rego, r.dietary_source_hash, r.dietary_checked,
+            r.photo_consent, r.status, r.car_rego, r.dietary_checked,
             (SELECT short_code FROM credentials cr WHERE cr.registration_id = r.id AND cr.status = 'active') AS short_code
        FROM registrations r JOIN people p ON p.id = r.person_id
       WHERE r.event_id = ?`,
@@ -88,7 +88,7 @@ rosterRoutes.get('/registrations', async (c) => {
       shortCode: r.short_code ? formatShortCode(r.short_code) : null,
       ...(withPhoto ? { photoConsent: r.photo_consent } : {}),
       ...(withDietary
-        ? { dietary: dietary.get(r.id!) ?? [], dietaryFingerprint: r.dietary_source_hash, dietaryChecked: r.dietary_checked ? (JSON.parse(r.dietary_checked) as string[]) : null }
+        ? { dietary: dietary.get(r.id!) ?? [], dietaryReviewed: r.dietary_checked !== null }
         : {}),
     })),
   });
@@ -282,7 +282,7 @@ rosterRoutes.put('/registrations/:registrationId/dietary', async (c) => {
   requirePermission(c, 'dietary.edit', { eventId });
   const user = requireUser(c);
   const id = regParam(c.req.param('registrationId'));
-  const { entries, checkedNotes } = await parseBody(c, dietaryUpdateSchema);
+  const { entries } = await parseBody(c, dietaryUpdateSchema);
   const event = await editableEvent(c, eventId);
   if (event.feature_dietary !== 1) throw conflict('Dietary requirements are switched off for this event.');
   const exists = await c.env.DB.prepare(`SELECT 1 FROM registrations WHERE id = ? AND event_id = ?`).bind(id, eventId).first();
@@ -291,12 +291,8 @@ rosterRoutes.put('/registrations/:registrationId/dietary', async (c) => {
   await c.env.DB.batch([
     c.env.DB.prepare(`DELETE FROM dietary_entries WHERE registration_id = ?`).bind(id),
     ...(await Promise.all(entries.map((e) => dietaryInsert(c.env, eventId, '?', [id], e, user.userId, now)))).flat(),
-    // Checked: which notes were read (from Import & check), or just that someone has (edited elsewhere).
-    c.env.DB.prepare(`UPDATE registrations SET dietary_review_pending = 0, dietary_checked = COALESCE(?, dietary_checked, '["*"]'), updated_at = ? WHERE id = ?`).bind(
-      checkedNotes ? JSON.stringify(checkedNotes) : null,
-      now,
-      id,
-    ),
+    // Reviewed: a yes or no, nothing about any notes.
+    c.env.DB.prepare(`UPDATE registrations SET dietary_review_pending = 0, dietary_checked = '["*"]', updated_at = ? WHERE id = ?`).bind(now, id),
     // Never the values themselves.
     auditStatement(c.env.DB, { actor: { type: 'user', id: user.userId }, action: 'dietary.update', eventId, targetType: 'registration', targetId: id, detail: { entries: entries.length } }),
   ]);
@@ -375,17 +371,16 @@ rosterRoutes.get('/import/context', async (c) => {
   const eventId = c.req.param('eventId')!;
   const principal = requirePermission(c, 'roster.import', { eventId });
   const event = await editableEvent(c, eventId);
-  const row = await c.env.DB.prepare(`SELECT fingerprint_key FROM events WHERE id = ?`).bind(eventId).first<{ fingerprint_key: string }>();
+  // Who has had their dietary needs reviewed: a yes or no, nothing about the notes.
   const { results } = await c.env.DB.prepare(
-    `SELECT p.participant_id, r.dietary_source_hash FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.event_id = ?`,
+    `SELECT p.participant_id FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.event_id = ? AND r.dietary_checked IS NOT NULL`,
   )
     .bind(eventId)
-    .all<{ participant_id: string; dietary_source_hash: string | null }>();
+    .all<{ participant_id: string }>();
   return c.json({
-    fingerprintKey: row!.fingerprint_key,
     dietaryEnabled: event.feature_dietary === 1,
     canEditDietary: can(principal, 'dietary.edit', { eventId }),
-    reviewedFingerprints: Object.fromEntries(results.map((r) => [r.participant_id, r.dietary_source_hash])),
+    reviewed: results.map((r) => r.participant_id),
   });
 });
 
@@ -393,7 +388,7 @@ async function loadExisting(db: D1Database, eventId: string): Promise<ExistingRe
   const { results } = await db
     .prepare(
       `SELECT r.id AS registration_id, p.participant_id, p.first_name, p.last_name, r.kind, r.level,
-              r.group_name, r.photo_consent, r.status, r.dietary_source_hash
+              r.group_name, r.photo_consent, r.status, r.dietary_checked
          FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.event_id = ?`,
     )
     .bind(eventId)

@@ -70,7 +70,8 @@ export interface Registration {
   shortCode: string | null;
   photoConsent?: 'yes' | 'no';
   dietary?: DietaryEntryInput[];
-  dietaryFingerprint?: string | null;
+  /** Their dietary needs have been reviewed. */
+  dietaryReviewed?: boolean;
 }
 
 /** Where someone is right now. */

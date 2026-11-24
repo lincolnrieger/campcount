@@ -9,7 +9,6 @@ const row = (participantId: string, kind: 'youth' | 'adult') => ({
   level: kind === 'adult' ? 'Leaders' : 'Seniors',
   groupName: '',
   photoConsent: 'yes',
-  dietaryFingerprint: null,
 });
 
 describe('car rego', () => {

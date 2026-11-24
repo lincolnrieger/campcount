@@ -10,7 +10,8 @@ export interface ExistingRegistration {
   group_name: string;
   photo_consent: string;
   status: 'active' | 'withdrawn';
-  dietary_source_hash: string | null;
+  /** Set once their dietary needs have been reviewed. */
+  dietary_checked: string | null;
 }
 
 export type RowAction = 'create' | 'update' | 'unchanged';
@@ -20,7 +21,7 @@ export interface RowPlan {
   participantId: string;
   action: RowAction;
   changes: string[];
-  /** The source dietary text changed and has not been reviewed in this import. */
+  /** They have dietary notes in the files, weren't reviewed before, and aren't reviewed in this import. */
   dietaryPending: boolean;
 }
 
@@ -85,8 +86,8 @@ export function planImport(rows: ImportRow[], existing: ExistingRegistration[], 
   const byId = new Map(existing.map((e) => [e.participant_id.toUpperCase(), e]));
   const planned: RowPlan[] = rows.map((row, index) => {
     const current = byId.get(row.participantId.toUpperCase());
-    const dietaryChanged = (current?.dietary_source_hash ?? null) !== row.dietaryFingerprint;
-    const dietaryPending = row.dietary === undefined && dietaryChanged && (row.dietaryFingerprint !== null || current !== undefined);
+    // Nothing is kept about the notes themselves, so anyone reviewed before stays reviewed.
+    const dietaryPending = row.dietary === undefined && row.hasDietaryNotes && !current?.dietary_checked;
     if (!current) {
       return { index, participantId: row.participantId, action: 'create', changes: [], dietaryPending };
     }

@@ -51,12 +51,12 @@ export async function rowStatements(
     db
       .prepare(
         `INSERT INTO registrations (id, event_id, person_id, kind, level, group_name, photo_consent, status,
-            dietary_source_hash, dietary_review_pending, created_at, updated_at)
+            dietary_checked, dietary_review_pending, created_at, updated_at)
          VALUES (?, ?, ${PERSON_BY_ID}, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
          ON CONFLICT (event_id, person_id) DO UPDATE SET
            kind = excluded.kind, level = excluded.level, group_name = excluded.group_name,
            photo_consent = excluded.photo_consent, status = 'active',
-           dietary_source_hash = CASE WHEN ? THEN registrations.dietary_source_hash ELSE excluded.dietary_source_hash END,
+           dietary_checked = COALESCE(excluded.dietary_checked, registrations.dietary_checked),
            dietary_review_pending = excluded.dietary_review_pending,
            updated_at = excluded.updated_at`,
       )
@@ -68,12 +68,11 @@ export async function rowStatements(
         level,
         group,
         row.photoConsent,
-        // A brand-new registration with unreviewed dietary text starts with no fingerprint, so it stays flagged.
-        dietaryPending ? null : row.dietaryFingerprint,
+        // Reviewed in this import: remembered as a yes (never anything about the notes).
+        row.dietary !== undefined ? '["*"]' : null,
         dietaryPending ? 1 : 0,
         now,
         now,
-        dietaryPending ? 1 : 0,
       ),
   ];
   if (row.dietary !== undefined) {
@@ -169,7 +168,7 @@ export function toImportRow(p: PersonEntry & { participantId: string }): ImportR
     level: p.level,
     groupName: p.groupName,
     photoConsent: p.photoConsent,
-    dietaryFingerprint: null,
+    hasDietaryNotes: false,
     dietary: p.dietary,
   };
 }
