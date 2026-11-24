@@ -12,7 +12,7 @@ why, and what is still open.
 | Network drop behaviour | Keep scanning on the device and sync when connected. |
 | First event size | ~300 participants, ~10 activity leaders, 2 camp directors. |
 | Largest event | ~400 people. Up to ~4 events per year. |
-| Volunteer identity | Volunteers have Scouts SA Microsoft 365 accounts, but tenant policy can be strict. |
+| Volunteer identity | Volunteers have organisation Microsoft 365 accounts, but tenant policy can be strict. |
 | Devices | Mostly personal phones; also want generic/shared "activity sign-in" or "meal sign-in" stations. |
 | Participant source | MyScout export (Excel). Possibly Humanitix for some activity registrations, or manual entry. Open to lightweight public self-registration (name, email, phone; no account). |
 | Adults | Included in the import, with a flag/role to distinguish them. |
@@ -40,7 +40,7 @@ why, and what is still open.
   retention schedule. Attendance facts are kept long enough for the annual
   report.
 - **D-005 Passwordless sign-in.** Email one-time code or link, with passkeys.
-  Entra ID (M365) SSO is optional later, if Scouts SA IT grants app consent.
+  Entra ID (M365) SSO is optional later, if the organisation's IT grants app consent.
   Login links must survive Microsoft Defender Safe Links pre-fetching (no
   single-use GET).
 - **D-006 Station mode.** A director can pair a shared device to a single

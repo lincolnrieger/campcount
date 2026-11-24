@@ -8,7 +8,7 @@ export function formatShortCode(code: string): string {
 }
 
 /**
- * The typed code on someone's lanyard: their Scouts SA membership number
+ * The typed code on someone's lanyard: their membership number
  * (from MyScout or Consent2Go), normalised. Null for people without one
  * (guests get a random code instead).
  */

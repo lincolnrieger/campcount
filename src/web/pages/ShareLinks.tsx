@@ -26,7 +26,7 @@ const PRESETS: { name: string; features: LinkFeature[]; about: string }[] = [
 ];
 
 const HELP =
-  'One link for all participants. They type their Scouts SA membership number and see their own camp page, with only the parts you switch on. Surnames, groups, team-mates and dietary details are never shown. Changes apply the next time someone opens the link. Each person’s own lanyard QR still opens their full page. Typing numbers is limited per device, so nobody can try lots of numbers.';
+  'One link for all participants. They type their membership number and see their own camp page, with only the parts you switch on. Surnames, groups, team-mates and dietary details are never shown. Changes apply the next time someone opens the link. Each person’s own lanyard QR still opens their full page. Typing numbers is limited per device, so nobody can try lots of numbers.';
 
 /**
  * People › Links for everyone: one link to send to every participant. They

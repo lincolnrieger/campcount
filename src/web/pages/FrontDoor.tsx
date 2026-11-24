@@ -23,7 +23,7 @@ export function FrontDoor() {
           <Link className="door-choice" to={`/p/${event.participantCode}`}>
             <span className="door-text">
               <strong>Participant</strong>
-              <span>Youth and leaders: use your Scouts SA membership number</span>
+              <span>Youth and leaders: use your membership number</span>
             </span>
             <Icon name="chevron" size={22} />
           </Link>

@@ -26,7 +26,7 @@ to recover the system. Keep a printed copy at camp HQ.
 4b. **Import Consent2Go** (People, ⋯, Import from Consent2Go), after MyScout:
    - Use the Excel export with every group's tab. Section comes from the tab
      name (Joeys, Scouts, Venturers; everyone else is a leader). "Student ID"
-     must be the Scouts SA membership number: that's how people are matched.
+     must be the membership number: that's how people are matched.
    - People already imported from MyScout keep their name, section and
      group. Consent2Go adds photo consent, dietary needs (reviewed before
      saving), swimming ability and medication permissions. Blanks never
@@ -141,7 +141,7 @@ to recover the system. Keep a printed copy at camp HQ.
 
 Scan records show who was scanned, where, by whom and when. They are **not**
 proof of where someone is now and **not** a substitute for an emergency
-headcount or roll call. In an emergency, follow the Scouts SA emergency
+headcount or roll call. In an emergency, follow the organisation's emergency
 procedure and do a physical headcount.
 
 ## Super Splash Side Quest (optional, secret)
@@ -289,8 +289,8 @@ The job runs daily at 03:17 UTC and records each purge in the audit log.
    - Cloudflare logs hold request metadata only. No request bodies are
      logged.
 3. **Notify:**
-   - Tell the Scouts SA privacy officer immediately.
-   - Under the Notifiable Data Breaches scheme, Scouts SA decides whether
+   - Tell the organisation's privacy officer immediately.
+   - Under the Notifiable Data Breaches scheme, the organisation decides whether
      an eligible data breach has occurred and must assess it within 30
      days.
 4. **Recover:**

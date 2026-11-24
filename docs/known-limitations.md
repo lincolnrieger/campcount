@@ -14,7 +14,7 @@ mitigation or a planned fix.
 - **Event templates.**
 - **Passkeys.** Sign-in is by password, or by emailed code for first sign-in
   and forgotten passwords.
-- **Microsoft 365 (Entra ID) sign-in.** This needs Scouts SA IT approval.
+- **Microsoft 365 (Entra ID) sign-in.** This needs the organisation's IT approval.
 - **Editing dietary entries outside an import.** For now, change the note
   in MyScout and re-import.
 
@@ -70,7 +70,7 @@ mitigation or a planned fix.
 - **Retention:** the purge runs once a day. Times are UTC, so "90 days" may
   be off by up to a day.
 - **Sign-in email:** it relies on Cloudflare Email Service. If the email is
-  filtered as spam by Scouts SA Microsoft 365, add the sender to the allow
+  filtered as spam by the organisation's Microsoft 365, add the sender to the allow
   list.
 - **Restore rehearsal:** restore has not been rehearsed against a real
   Cloudflare account yet (no account connected). Do this before the first
@@ -81,7 +81,7 @@ mitigation or a planned fix.
 
 ## Governance (not software)
 
-- A privacy impact assessment and Scouts SA privacy officer sign-off are
+- A privacy impact assessment and privacy officer sign-off are
   needed before production use with real member data.
 - Production access (Cloudflare account, GitHub, platform admins) should be
   held by at least two people.

@@ -130,7 +130,7 @@ Then open these in a browser:
   - Scans made after that time are lost from the server. Phones that
     still hold them will upload them again.
 - **A suspected data breach:** follow "Security incident response" in
-  `docs/operations.md`, and tell the Scouts SA privacy officer.
+  `docs/operations.md`, and tell the organisation's privacy officer.
 
 ## Environment values (names only)
 
