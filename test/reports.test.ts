@@ -4,18 +4,13 @@ import { runMaintenance } from '../src/worker/services/maintenance';
 import { csvCell } from '../src/worker/services/reports';
 import { api, createEvent, createUser, grant, json, testEnv } from './helpers';
 
-const person = (memberNumber: string, o: Record<string, unknown> = {}) => ({
-  memberNumber,
-  firstName: `Kid${memberNumber}`,
-  preferredName: '',
+const person = (participantId: string, o: Record<string, unknown> = {}) => ({
+  participantId,
+  firstName: `Kid${participantId}`,
   lastName: 'Example',
   kind: 'youth',
-  section: 'Cubs',
-  groupName: 'Example Pack',
-  position: '',
-  roleLabel: '',
-  team: '',
-  sourceStatus: '',
+  level: 'Juniors',
+  groupName: 'Example Club',
   photoConsent: 'yes',
   dietaryFingerprint: null,
   ...o,
@@ -195,7 +190,7 @@ describe('retention', () => {
     const closed = await testEnv.DB.prepare(`SELECT closed_at FROM events WHERE id = ?`).bind(c.eventId).first<{ closed_at: string }>();
     const at = (days: number) => new Date(Date.parse(closed!.closed_at) + days * 86400_000).toISOString();
 
-    await testEnv.DB.prepare(`UPDATE registrations SET extra_fields = '{"Medical":"Asthma"}' WHERE event_id = ?`).bind(c.eventId).run();
+    await testEnv.DB.prepare(`UPDATE registrations SET car_rego = 'enc1.AAAAAAAAAAAAAAAAAAAAAAAAAA' WHERE event_id = ?`).bind(c.eventId).run();
     const regs = await testEnv.DB.prepare(`SELECT id FROM registrations WHERE event_id = ? LIMIT 2`).bind(c.eventId).all<{ id: string }>();
     await testEnv.DB.prepare(`INSERT INTO side_quest_collections (event_id, collector_id, collected_id, created_at) VALUES (?, ?, ?, ?)`)
       .bind(c.eventId, regs.results[0]!.id, regs.results[1]!.id, new Date().toISOString())
@@ -208,9 +203,9 @@ describe('retention', () => {
     const creds = await testEnv.DB.prepare(`SELECT DISTINCT status, token_ciphertext FROM credentials WHERE event_id = ?`).bind(c.eventId).all();
     expect(creds.results).toEqual([{ status: 'revoked', token_ciphertext: '' }]);
     const consent = await testEnv.DB.prepare(`SELECT DISTINCT photo_consent FROM registrations WHERE event_id = ?`).bind(c.eventId).all();
-    expect(consent.results).toEqual([{ photo_consent: 'unknown' }]);
-    const extra = await testEnv.DB.prepare(`SELECT DISTINCT extra_fields FROM registrations WHERE event_id = ?`).bind(c.eventId).all();
-    expect(extra.results).toEqual([{ extra_fields: '{}' }]);
+    expect(consent.results).toEqual([{ photo_consent: 'no' }]);
+    const rego = await testEnv.DB.prepare(`SELECT DISTINCT car_rego FROM registrations WHERE event_id = ?`).bind(c.eventId).all();
+    expect(rego.results).toEqual([{ car_rego: null }]);
     const quest = await testEnv.DB.prepare(`SELECT count(*) AS n FROM side_quest_collections WHERE event_id = ?`).bind(c.eventId).first<{ n: number }>();
     expect(quest!.n).toBe(0);
 

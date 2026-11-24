@@ -28,8 +28,7 @@ import { Schedule } from './pages/Schedule';
 import { TeamEventPage, TeamEvents } from './pages/Teams';
 import { LeaderRoster } from './pages/LeaderRoster';
 import { BannerSettings } from './pages/BannerSettings';
-import { SectionsSettings } from './pages/SectionsSettings';
-import { Intake } from './pages/Intake';
+import { LevelsSettings } from './pages/LevelsSettings';
 import { BookingLinks } from './pages/BookingLinks';
 const BookLink = lazy(() => import('./pages/BookLink').then((m) => ({ default: m.BookLink })));
 const SideQuest = lazy(() => import('./pages/SideQuest').then((m) => ({ default: m.SideQuest })));
@@ -152,13 +151,13 @@ function SiteHome() {
     return <Navigate to={`/events/${event.id}/scan/${contextType}${contextId ? `/${contextId}` : ''}`} replace />;
   }
   if (hasHome(event, true)) return <EventHome />;
-  // Nothing for them on Home: open their first section instead (Scan, Activities…).
+  // Nothing for them on Home: open their first level instead (Scan, Activities…).
   const first = eventSections(event, true)[0];
   if (scanOnly(event) || !first) return <Navigate to="/scan" replace />;
   return <Navigate to={`/${first.to}`} replace />;
 }
 
-/** Main site: an event's Home, or its first section when Home has nothing for this person. */
+/** Main site: an event's Home, or its first level when Home has nothing for this person. */
 function PlatformEventHome() {
   const { event, base } = useEvent();
   if (hasHome(event, false)) return <EventHome />;
@@ -206,8 +205,7 @@ function EventSiteApp({ site }: { site: Extract<SiteInfo, { kind: 'event' }> }) 
             <Route path="scan" element={<ScanHub />} />
             <Route path="people" element={<Roster />} />
             <Route path="people/add" element={<AddPerson />} />
-            <Route path="people/import" element={<Intake />} />
-            <Route path="people/import/columns" element={<Import />} />
+            <Route path="people/import" element={<Import />} />
             <Route path="people/lanyards" element={<LanyardDesigner />} />
             <Route path="people/lanyards/print" element={<LanyardPrint />} />
             <Route path="people/roll-sheet" element={<RollSheet />} />
@@ -234,7 +232,7 @@ function EventSiteApp({ site }: { site: Extract<SiteInfo, { kind: 'event' }> }) 
               <Route index element={<SettingsIndex />} />
               <Route path="event" element={<EventDetails />} />
               <Route path="banner" element={<BannerSettings />} />
-              <Route path="sections" element={<SectionsSettings />} />
+              <Route path="levels" element={<LevelsSettings />} />
               <Route path="staff" element={<Staff />} />
               <Route path="staff/add" element={<AddStaff />} />
               <Route path="stations" element={<Stations />} />
@@ -291,8 +289,7 @@ function PlatformApp() {
             <Route index element={<PlatformEventHome />} />
             <Route path="people" element={<Roster />} />
             <Route path="people/add" element={<AddPerson />} />
-            <Route path="people/import" element={<Intake />} />
-            <Route path="people/import/columns" element={<Import />} />
+            <Route path="people/import" element={<Import />} />
             <Route path="people/lanyards" element={<LanyardDesigner />} />
             <Route path="people/lanyards/print" element={<LanyardPrint />} />
             <Route path="people/roll-sheet" element={<RollSheet />} />
@@ -319,7 +316,7 @@ function PlatformApp() {
               <Route index element={<SettingsIndex />} />
               <Route path="event" element={<EventDetails />} />
               <Route path="banner" element={<BannerSettings />} />
-              <Route path="sections" element={<SectionsSettings />} />
+              <Route path="levels" element={<LevelsSettings />} />
               <Route path="staff" element={<Staff />} />
               <Route path="staff/add" element={<AddStaff />} />
               <Route path="stations" element={<Stations />} />

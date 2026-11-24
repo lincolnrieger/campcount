@@ -1,8 +1,6 @@
 import { z } from 'zod';
-import { SECTIONS } from './sections';
 import { BRAND_COLOR_PATTERN, subdomainProblem } from './site';
 
-export { SECTIONS };
 
 const trimmed = (max: number) => z.string().trim().max(max);
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use the format YYYY-MM-DD');
@@ -41,7 +39,7 @@ export const eventFeaturesSchema = z.strictObject({
   dietary: z.boolean(),
   photo: z.boolean(),
   selfSignup: z.boolean(),
-  /** The secret Super Splash Side Quest (participants collect each other's lanyards). */
+  /** The secret Side Quest (participants collect each other's lanyards). */
   sideQuest: z.boolean(),
 });
 
@@ -52,9 +50,9 @@ export type PhotoMarker = (typeof PHOTO_MARKERS)[number];
 export const lanyardSettingsSchema = z.strictObject({
   photoMarker: z.enum(PHOTO_MARKERS),
   photoMarkerColour: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Choose a colour like #B3261E'),
-  /** Print a small "No photos" next to the section. */
+  /** Print a small "No photos" next to the level. */
   photoMarkerLabel: z.boolean(),
-  /** With uploaded front artwork: print the coloured section band over it (or only the section word). */
+  /** With uploaded front artwork: print the coloured level band over it (or only the level word). */
   printBand: z.boolean(),
 });
 
@@ -96,21 +94,20 @@ export const updateEventSchema = z
     lanyard: lanyardSettingsSchema.partial(),
     /** Who people email about the camp, e.g. to change a booking. Empty for none. */
     contactEmail: z.union([z.literal(''), z.email('Enter an email address like camp@example.org').max(200)]),
-    /** Sections that count as youth at this camp; everyone else (and Leaders always) is an adult. */
-    youthSections: z.array(trimmed(40).min(1)).max(40),
-    /** The camp's sections (Settings › Sections). `from` is the name it had, for renames. */
-    sections: z
+    /** Levels that count as youth at this camp; everyone else is an adult. */
+    youthLevels: z.array(trimmed(40).min(1)).max(40),
+    /** The camp's levels (Settings › Levels). `from` is the name it had, for renames. */
+    levels: z
       .array(
         z.strictObject({
           from: trimmed(40).optional(),
-          name: trimmed(40).min(1, 'Give each section a name'),
-          base: z.enum([...SECTIONS, 'custom']),
+          name: trimmed(40).min(1, 'Give each level a name'),
           word: trimmed(20),
           colour: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Choose a colour'),
           youth: z.boolean(),
         }),
       )
-      .min(SECTIONS.length)
+      .min(1, 'Keep at least one level')
       .max(40),
   })
   .partial();
@@ -154,51 +151,41 @@ export type DietaryEntryInput = z.infer<typeof dietaryEntrySchema>;
  * guarantee that nothing else from the source file (addresses, Medicare
  * numbers, guardian details, free-text medical notes) can ever be stored.
  */
-/** Up to 12 extra columns kept from an import, as { "column name": "value" }. An empty value removes that field. */
-export const MAX_EXTRA_FIELDS = 12;
-export const extraFieldsSchema = z
-  .record(z.string().trim().min(1).max(40), z.string().trim().max(200))
-  .refine((o) => Object.keys(o).length <= MAX_EXTRA_FIELDS, `Keep at most ${MAX_EXTRA_FIELDS} extra columns`);
+/** A participant ID: letters, numbers and dashes. */
+export const participantIdSchema = z.string().trim().regex(/^[A-Za-z0-9-]{1,20}$/, 'Participant ID can only have letters, numbers and dashes');
 
 export const importRowSchema = z.strictObject({
-  memberNumber: z.string().trim().regex(/^[A-Za-z0-9-]{1,20}$/, 'Membership number is missing or invalid'),
+  /** Empty when the file has none: the server reuses the ID of someone already on this camp with the same name, or makes one. */
+  participantId: z.union([z.literal(''), participantIdSchema]).default(''),
+  /** A full first name, or just an initial. */
   firstName: trimmed(60).min(1, 'First name is missing'),
-  preferredName: trimmed(60).default(''),
-  lastName: trimmed(60).min(1, 'Last name is missing'),
-  kind: z.enum(['youth', 'adult']),
-  /** A section name. The server files anything it doesn't know under the camp's own name for it, or Other. */
-  section: trimmed(40).min(1),
+  /** A full last name, an initial, or nothing. */
+  lastName: trimmed(60).default(''),
+  /** Worked out by the server from the level; anything sent is ignored. */
+  kind: z.enum(['youth', 'adult']).default('youth'),
+  /** A level name. New names are added to the camp's levels. Empty: the camp's first level. */
+  level: trimmed(40).default(''),
   groupName: trimmed(120).default(''),
-  position: trimmed(120).default(''),
-  roleLabel: trimmed(60).default(''),
-  team: trimmed(60).default(''),
-  sourceStatus: trimmed(160).default(''),
-  photoConsent: z.enum(['yes', 'no', 'unknown']),
-  /** Keyed hash of the source dietary/medical text, to detect changes. Never the text. */
-  dietaryFingerprint: z.string().regex(/^[0-9a-f]{64}$/).nullable(),
-  /** Present only when the director reviewed this row's dietary text in this import. */
+  photoConsent: z.enum(['yes', 'no']).default('no'),
+  /** Keyed hash of the source dietary text, to detect changes. Never the text. */
+  dietaryFingerprint: z.string().regex(/^[0-9a-f]{64}$/).nullable().default(null),
+  /** Present only when the dietary text was reviewed in this import. */
   dietary: z.array(dietaryEntrySchema).max(10).optional(),
-  /** Extra columns chosen in this import. Merged into what's already there; absent leaves them as they are. */
-  extra: extraFieldsSchema.optional(),
 });
 export type ImportRow = z.infer<typeof importRowSchema>;
 
 /** Editing one person on an event (People page). Only the fields an import would bring in. */
 export const registrationPatchSchema = z.strictObject({
-  memberNumber: importRowSchema.shape.memberNumber.optional(),
-  firstName: importRowSchema.shape.firstName.optional(),
-  preferredName: trimmed(60).optional(),
-  lastName: importRowSchema.shape.lastName.optional(),
+  participantId: participantIdSchema.optional(),
+  firstName: trimmed(60).min(1, 'Enter a first name').optional(),
+  lastName: trimmed(60).optional(),
   kind: z.enum(['youth', 'adult']).optional(),
-  section: trimmed(40).min(1).optional(),
+  level: trimmed(40).min(1).optional(),
   /** A leader's car registration, for contacting them about it at camp. */
   carRego: trimmed(20).optional(),
   groupName: trimmed(120).optional(),
-  position: trimmed(120).optional(),
-  photoConsent: z.enum(['yes', 'no', 'unknown']).optional(),
+  photoConsent: z.enum(['yes', 'no']).optional(),
   status: z.enum(['active', 'withdrawn']).optional(),
-  /** Replaces all extra fields. */
-  extra: extraFieldsSchema.optional(),
 });
 
 export const dietaryUpdateSchema = z.strictObject({
@@ -212,16 +199,14 @@ export const dietaryUpdateSchema = z.strictObject({
 /** One person, as entered on the public registration page or by an event manager. */
 export const personEntrySchema = z.strictObject({
   firstName: trimmed(60).min(1, 'Enter a first name'),
-  preferredName: trimmed(60).default(''),
-  lastName: trimmed(60).min(1, 'Enter a last name'),
-  /** Null for people who aren't members (a guest number is made for them). */
-  memberNumber: z.string().trim().regex(/^[A-Za-z0-9-]{1,20}$/, 'Check the membership number').nullable(),
+  lastName: trimmed(60).default(''),
+  /** Null when they don't have one (an ID is made for them). */
+  participantId: participantIdSchema.nullable(),
   kind: z.enum(['youth', 'adult']),
-  /** A section name. The server files anything it doesn't know under the camp's own name for it, or Other. */
-  section: trimmed(40).min(1),
+  /** A level name. New names are added to the camp's levels. */
+  level: trimmed(40).min(1),
   groupName: trimmed(120).default(''),
-  position: trimmed(120).default(''),
-  photoConsent: z.enum(['yes', 'no', 'unknown']),
+  photoConsent: z.enum(['yes', 'no']),
   dietary: z.array(dietaryEntrySchema).max(10).default([]),
 });
 export type PersonEntry = z.infer<typeof personEntrySchema>;
@@ -229,13 +214,6 @@ export type PersonEntry = z.infer<typeof personEntrySchema>;
 export const importRequestSchema = z.strictObject({
   rows: z.array(importRowSchema).min(1).max(2000),
   withdrawMissing: z.boolean().default(false),
-  sourceLabel: trimmed(120).default(''),
-  /**
-   * Where the file came from. MyScout is the registration list. Consent2Go
-   * adds consent, dietary needs and details to people already registered:
-   * it never changes their name, section or group, and never withdraws anyone.
-   */
-  source: z.enum(['myscout', 'consent2go']).default('myscout'),
 });
 
 // ---------------------------------------------------------------- activities, meals, stations, scans

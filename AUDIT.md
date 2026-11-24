@@ -44,7 +44,7 @@ and stays simple.
   and passes `requirePermission` for that camp. `/api/admin/*` needs a
   platform permission and is unreachable from a camp's own address.
 - **Sensitive data:** dietary entries (health), photo consent, extra
-  imported columns, member numbers and names of children. The data map and
+  imported columns, participant ID and names of children. The data map and
   retention rules are in `docs/requirements.md` §3 and §8. The threat
   model is in `docs/architecture.md` §5.
 
@@ -57,7 +57,7 @@ exposure, a cross-camp leak, or the gate or meals failing on the day.
 | --- | --- | --- | --- | --- | --- | --- |
 | L-1 | Critical | Load | `routes/auth.ts`, `routes/signup.ts`, `routes/scans.ts` | Sign-in, pairing and **all participant sign-up** allowed 10 requests a minute per internet address. A camp's phones share one address (camp Wi-Fi or mobile carrier), so a sign-up rush would stop after about 10 people. | Tight limit per person or email (10/min); per-address ceiling of 300/min (staff) or 1,500/min (sign-up). `src/worker/lib/rateLimit.ts`. | Fixed. Test: 60 participants on one address all succeed. Fails on the old code. |
 | L-2 | Critical | Load / cost | Cloudflare plan | Free plan: 5M database rows read per day. The live dashboard reads every scan every 30 seconds per screen, so the cap is hit mid-camp and the database stops answering until midnight UTC. Free CPU (10 ms) is also below what password sign-in needs. | Upgrade to Workers Paid. Dashboards also made cheaper (P-3). | **You:** [DEPLOY.md](DEPLOY.md) §1 |
-| S-1 | High | Security | `routes/roster.ts`, `services/rosterWrites.ts` | People records are shared across camps by membership number. Import, add-by-hand and edit all overwrote names, so **Camp A could rename a child on Camp B's roster and lanyards**. | Names of someone also on another camp change only if the editor can edit every camp they're on. Otherwise: kept on import and add, refused (with a clear message) on edit. | Fixed. `test/crossCamp.test.ts`, which fails on the old code. |
+| S-1 | High | Security | `routes/roster.ts`, `services/rosterWrites.ts` | People records are shared across camps by participant ID. Import, add-by-hand and edit all overwrote names, so **Camp A could rename a child on Camp B's roster and lanyards**. | Names of someone also on another camp change only if the editor can edit every camp they're on. Otherwise: kept on import and add, refused (with a clear message) on edit. | Fixed. `test/crossCamp.test.ts`, which fails on the old code. |
 | S-2 | High | Privacy | `routes/staff.ts:82` | Any camp manager could list the name and email of every account on the platform. | List only people who've worked on camps this manager runs. Platform admins see all. Anyone can still be added by email. | Fixed. Test in `accounts.test.ts`. |
 | P-1 | High | Load | `migrations/` | Every sign-up request read every booking in every camp (no index on bookings by person). | Migration `0016_load_indexes.sql` (additive): bookings by person and by camp, registrations by person, scans by card. | Fixed. Verified with `EXPLAIN QUERY PLAN`. |
 | S-3 | High | Supply chain | `package-lock.json` | Hono 4.13.13 had advisories, including a router bug that can skip `*` middleware. CampCount's site wall, session and CSRF checks are `*` middleware. | Hono 4.13.19 (patch). Dev tools updated within their ranges. | Fixed. `npm audit`: 0. |

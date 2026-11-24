@@ -16,7 +16,8 @@ meal scanning that keeps working with patchy signal, and close-out reports.
   privilege escalation, append-only audit log
 - Events with per-event features and a draft → open → completed → archived
   lifecycle
-- MyScout import (.xlsx/CSV) filtered in the browser, with dietary review
+- Spreadsheet import (.xlsx/CSV) read on the device: choose the fields to send (names can be initials), with dietary review; everything else stays on the device
+- Participant names, IDs, groups, levels and dietary details encrypted in the database (AES-256-GCM)
 - QR lanyards with typed backup codes, designed in the app (People › Design
   lanyards): front and back, text in six fonts, per-person details, colours,
   shapes, images and backgrounds, on a standard CR80 card (portrait or
@@ -43,7 +44,7 @@ Requires Node 22.
 
 ```sh
 npm install
-printf 'AUTH_SECRET=%s\n' "$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")" > .dev.vars
+printf 'AUTH_SECRET=%s\nDATA_KEY=%s\n' "$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")" "$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")" > .dev.vars
 npm run db:migrate:local
 node scripts/create-admin.mjs "Your Name" you@example.com > /tmp/admin.sql
 npx wrangler d1 execute DB --local --env dev --file=/tmp/admin.sql
@@ -84,8 +85,12 @@ Settings:
 - **Build configuration**
   - Build command: `npm run build`
   - Deploy command: `npm run deploy` (applies migrations, then deploys)
-- **Variables and Secrets:** add a **secret** `AUTH_SECRET` (64 random hex
-  characters). It signs sign-in codes and encrypts card tokens.
+- **Variables and Secrets:** add two **secrets**, each 64 random hex
+  characters, and keep a copy of both somewhere safe (a password manager):
+  - `AUTH_SECRET` signs sign-in codes and encrypts card tokens.
+  - `DATA_KEY` encrypts participant data (names, participant IDs, groups,
+    levels, dietary details). **If it's lost, that data can't be read
+    again.** Never change it casually.
 - **Email Service:** enable sending for the domain the `EMAIL_FROM` address
   uses, so sign-in codes can be emailed.
 - **Domains:** attach `campcount.com` once the domain is on the account.

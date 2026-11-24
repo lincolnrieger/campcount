@@ -1,5 +1,5 @@
 /**
- * Delimited-text parser (RFC 4180 plus the variations Excel and MyScout
+ * Delimited-text parser (RFC 4180 plus the variations Excel and other
  * produce): UTF-8 BOM, CRLF or LF, quoted fields with embedded delimiters,
  * newlines and doubled quotes, and comma / tab / semicolon delimiters.
  */

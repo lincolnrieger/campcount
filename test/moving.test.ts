@@ -2,18 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { hashToken } from '../src/worker/services/credentials';
 import { api, createEvent, createUser, grant, json, testEnv } from './helpers';
 
-const person = (memberNumber: string) => ({
-  memberNumber,
-  firstName: `Mover${memberNumber}`,
-  preferredName: '',
+const person = (participantId: string) => ({
+  participantId,
+  firstName: `Mover${participantId}`,
   lastName: 'Person',
   kind: 'youth',
-  section: 'Scouts',
-  groupName: 'Example Troop',
-  position: '',
-  roleLabel: '',
-  team: '',
-  sourceStatus: '',
+  level: 'Seniors',
+  groupName: 'Example Club',
   photoConsent: 'yes',
   dietaryFingerprint: null,
 });

@@ -112,7 +112,7 @@ export async function readSheets(file: ArrayBuffer): Promise<{ name: string; row
   return out;
 }
 
-/** The first worksheet only (MyScout exports have one). */
+/** The first worksheet only. */
 export async function readFirstSheet(file: ArrayBuffer): Promise<string[][]> {
   const sheets = await readSheets(file);
   return sheets[0]?.rows ?? [];

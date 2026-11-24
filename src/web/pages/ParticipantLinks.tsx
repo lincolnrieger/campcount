@@ -9,7 +9,7 @@ interface ParticipantLink {
   registrationId: string;
   name: string;
   kind: 'youth' | 'adult';
-  section: string;
+  level: string;
   groupName: string;
   shortCode: string;
   link: string;
@@ -38,7 +38,7 @@ export function ParticipantLinks() {
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [query, setQuery] = useState('');
   const [group, setGroup] = useState('');
-  const [section, setSection] = useState('');
+  const [level, setLevel] = useState('');
   const back = { to: `${base}/links`, label: 'Links' };
 
   const load = useCallback(async () => {
@@ -60,8 +60,8 @@ export function ParticipantLinks() {
   }, [load]);
 
   const groups = useMemo(() => [...new Set((links ?? []).map((l) => l.groupName))].filter(Boolean).sort(), [links]);
-  const sections = useMemo(() => [...new Set((links ?? []).map((l) => l.section))].filter(Boolean).sort(), [links]);
-  const shown = (links ?? []).filter((l) => (!group || l.groupName === group) && (!section || l.section === section) && matchesSearch(query, l.name, l.groupName, l.shortCode));
+  const levels = useMemo(() => [...new Set((links ?? []).map((l) => l.level))].filter(Boolean).sort(), [links]);
+  const shown = (links ?? []).filter((l) => (!group || l.groupName === group) && (!level || l.level === level) && matchesSearch(query, l.name, l.groupName, l.shortCode));
 
   async function copy(text: string, what: string) {
     try {
@@ -85,8 +85,8 @@ export function ParticipantLinks() {
   function download() {
     const slug = event.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     downloadCsv(`${slug}-participant-links.csv`, [
-      ['Name', 'Group', 'Section', 'Youth or adult', 'Lanyard code', 'Link'],
-      ...shown.map((l) => [l.name, l.groupName, l.section, l.kind === 'adult' ? 'Adult' : 'Youth', l.shortCode, l.link]),
+      ['Name', 'Group', 'Level', 'Youth or adult', 'Lanyard code', 'Link'],
+      ...shown.map((l) => [l.name, l.groupName, l.level, l.kind === 'adult' ? 'Adult' : 'Youth', l.shortCode, l.link]),
     ]);
   }
 
@@ -131,7 +131,7 @@ export function ParticipantLinks() {
       </>
     );
 
-  const filtered = Boolean(query || group || section);
+  const filtered = Boolean(query || group || level);
   return (
     <>
       {header}
@@ -163,10 +163,10 @@ export function ParticipantLinks() {
                   ))}
                 </select>
               )}
-              {sections.length > 1 && (
-                <select className="select" aria-label="Section" value={section} onChange={(e) => setSection(e.target.value)}>
-                  <option value="">All sections</option>
-                  {sections.map((g) => (
+              {levels.length > 1 && (
+                <select className="select" aria-label="Level" value={level} onChange={(e) => setLevel(e.target.value)}>
+                  <option value="">All levels</option>
+                  {levels.map((g) => (
                     <option key={g} value={g}>
                       {g}
                     </option>
@@ -180,7 +180,7 @@ export function ParticipantLinks() {
                   onClick={() => {
                     setQuery('');
                     setGroup('');
-                    setSection('');
+                    setLevel('');
                   }}
                 >
                   Clear
@@ -214,7 +214,7 @@ export function ParticipantLinks() {
                           <strong>{l.name}</strong>
                           <div className="meta num">
                             {l.shortCode}
-                            {l.section ? ` · ${l.section}` : ''}
+                            {l.level ? ` · ${l.level}` : ''}
                           </div>
                         </td>
                         <td>{l.groupName}</td>

@@ -1,3 +1,5 @@
+import type { VaultEnv } from '../lib/vault';
+import { participantKey } from '../lib/vault';
 import { displayName } from '../../shared/names';
 import { conflict, notFound } from '../lib/errors';
 import { nowIso } from '../lib/time';
@@ -27,7 +29,7 @@ export interface TeamMember {
   registrationId: string;
   name: string;
   groupName: string;
-  section: string;
+  level: string;
   source: 'manual' | 'self_signup';
 }
 
@@ -72,7 +74,7 @@ export async function loadTeamEvents(db: D1Database, eventId: string, only?: Set
       .all<{ id: string; activity_id: string; name: string; locked: number; join_code: string | null }>(),
     db
       .prepare(
-        `SELECT m.team_id, m.registration_id, m.source, p.first_name, p.preferred_name, p.last_name, r.group_name, r.section, r.kind
+        `SELECT m.team_id, m.registration_id, m.source, p.first_name, p.last_name, r.group_name, r.level, r.kind
            FROM team_members m JOIN registrations r ON r.id = m.registration_id JOIN people p ON p.id = r.person_id
           WHERE m.event_id = ? ORDER BY m.joined_at`,
       )
@@ -84,9 +86,9 @@ export async function loadTeamEvents(db: D1Database, eventId: string, only?: Set
     const list = byTeam.get(m.team_id!) ?? [];
     list.push({
       registrationId: m.registration_id!,
-      name: displayName(m.first_name!, m.preferred_name!, m.last_name!),
+      name: displayName(m.first_name!, m.last_name!),
       groupName: m.group_name!,
-      section: m.kind === 'adult' ? 'Leader' : m.section!,
+      level: m.kind === 'adult' ? 'Leader' : m.level!,
       source: m.source as TeamMember['source'],
     });
     byTeam.set(m.team_id!, list);
@@ -129,15 +131,13 @@ export function newJoinCode(): string {
   return [...bytes].map((b) => chars[b % chars.length]).join('');
 }
 
-/** Someone at this camp by membership number (as on their lanyard), if they're active. */
-export async function findByMemberNumber(db: D1Database, eventId: string, memberNumber: string) {
-  const k = memberNumber.replace(/\s+/g, '').toUpperCase().replace(/^0+(?=.)/, '');
-  return db
-    .prepare(
-      `SELECT r.id, r.kind FROM registrations r JOIN people p ON p.id = r.person_id
-        WHERE r.event_id = ? AND r.status = 'active' AND ltrim(upper(replace(p.member_number, ' ', '')), '0') = ?`,
-    )
-    .bind(eventId, k)
+/** Someone at this camp by participant ID (as on their lanyard), if they're active. Found by keyed hash: IDs are encrypted. */
+export async function findByParticipantId(env: VaultEnv & { DB: D1Database }, eventId: string, participantId: string) {
+  return env.DB.prepare(
+    `SELECT r.id, r.kind FROM registrations r JOIN people p ON p.id = r.person_id
+      WHERE r.event_id = ? AND r.status = 'active' AND p.participant_key = ?`,
+  )
+    .bind(eventId, await participantKey(env, participantId))
     .first<{ id: string; kind: string }>();
 }
 

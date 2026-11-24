@@ -15,7 +15,7 @@ interface LinkInfo {
 }
 
 /**
- * A link for everyone, emailed before camp (/p/<code>). Type a membership
+ * A link for everyone, emailed before camp (/p/<code>). Type a participant
  * number and your camp page opens, with only the parts the link switches on.
  * Anyone could type a number, so the page leaves out surnames, groups,
  * team-mates and dietary details. The page is kept for this browser tab
@@ -69,7 +69,7 @@ export function JoinLink() {
     setOpening(true);
     setProblem(null);
     try {
-      setView(await api<SignupView>(`/public/signup/p/${code}`, { body: { memberNumber: number.trim() } }));
+      setView(await api<SignupView>(`/public/signup/p/${code}`, { body: { participantId: number.trim() } }));
       setNumber('');
       window.scrollTo({ top: 0 });
     } catch (err) {
@@ -104,7 +104,7 @@ export function JoinLink() {
             </header>
             <form onSubmit={open} noValidate>
               <label htmlFor="join-number" className="field-label">
-                Membership Number
+                Participant ID
               </label>
               <div className="join-row">
                 <input

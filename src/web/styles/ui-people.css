@@ -517,3 +517,22 @@
 .intake-diet .form-actions {
   background: var(--surface);
 }
+
+/* Person › "On this device only": columns kept from an import on this device, never sent. */
+.on-this-device {
+  margin-top: var(--space-3, 12px);
+}
+.on-this-device > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  min-height: 44px;
+}
+.on-this-device .person-dl {
+  margin: 8px 0;
+}
+.local-columns {
+  margin-top: 16px;
+}

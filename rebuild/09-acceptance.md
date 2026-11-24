@@ -27,7 +27,7 @@ The rebuild is done when every box below is ticked. If one can't be ticked, it g
 - [ ] Body text is 16px on every screen. Only the five type sizes appear (search the CSS for `font-size`: only tokens).
 - [ ] Every button, input and select is 44px tall.
 - [ ] No raw px, rem or hex values in component CSS, other than the allowed exceptions.
-- [ ] Every page's content starts on the same left edge, and section spacing is identical across pages.
+- [ ] Every page's content starts on the same left edge, and level spacing is identical across pages.
 - [ ] No panel inside a panel. No gradients, emoji, illustrations or pill shapes.
 - [ ] One primary button per screen, always in the same place (header right on desktop, sticky bottom bar on phones).
 - [ ] No sideways scrolling at 320, 390, 768, 1024, 1280 or 1440px.

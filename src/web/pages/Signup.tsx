@@ -247,7 +247,7 @@ export function SignupKiosk() {
                 void identify({ shortCode: typed });
               }}
             >
-              <Field id="kiosk-code" label="Or type your membership number (it’s on your card)">
+              <Field id="kiosk-code" label="Or type your participant ID (it’s on your card)">
                 <input
                   className="input input-code"
                   autoCapitalize="characters"

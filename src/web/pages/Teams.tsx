@@ -563,7 +563,7 @@ export function TeamEventPage() {
                         <li key={m.registrationId} className={searching && matchesSearch(q, m.name, m.groupName) ? 'is-match' : undefined}>
                           <span className="row-main">
                             <span className="row-title">{m.name}</span>
-                            <span className="row-meta">{[m.section, m.groupName].filter(Boolean).join(' · ')}</span>
+                            <span className="row-meta">{[m.level, m.groupName].filter(Boolean).join(' · ')}</span>
                           </span>
                           {editable && (
                             <Button

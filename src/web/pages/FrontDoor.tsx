@@ -4,8 +4,8 @@ import { Icon } from '../ui';
 import { useSiteEvent } from '../site';
 
 /**
- * The front of a camp's own address (supersplash.campcount.com): are you a
- * participant or leader (type your membership number, see the parts of your
+ * The front of a camp's own address (<camp>.campcount.com): are you a
+ * participant or leader (type your participant ID, see the parts of your
  * page the camp has switched on) or staff (sign in)?
  */
 export function FrontDoor() {
@@ -23,7 +23,7 @@ export function FrontDoor() {
           <Link className="door-choice" to={`/p/${event.participantCode}`}>
             <span className="door-text">
               <strong>Participant</strong>
-              <span>Youth and leaders: use your membership number</span>
+              <span>Participants and leaders: use your participant ID</span>
             </span>
             <Icon name="chevron" size={22} />
           </Link>

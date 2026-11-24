@@ -1,5 +1,5 @@
-import type { SectionSetting } from '../../shared/sections';
-import { sectionStyle } from '../../shared/sections';
+import type { LevelSetting } from '../../shared/levels';
+import { levelStyle } from '../../shared/levels';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Navigate } from 'react-router';
@@ -222,12 +222,12 @@ export function LanyardDesigner() {
                 <AddButton icon="layers" label="Background" onClick={() => pick('background')} />
                 <AddButton icon="square" label="Rectangle" onClick={() => add(makeElement(design, 'rect'))} />
                 <AddButton icon="circle" label="Circle" onClick={() => add(makeElement(design, 'ellipse'))} />
-                <AddButton icon="band" label="Section band" onClick={() => add(makeElement(design, 'band'))} />
+                <AddButton icon="band" label="Level band" onClick={() => add(makeElement(design, 'band'))} />
                 <AddButton icon="noPhoto" label="No-photo mark" onClick={() => add(makeElement(design, 'marker'))} />
               </div>
               <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp" className="visually-hidden" tabIndex={-1} aria-hidden="true" onChange={(e) => void onFile(e.target.files?.[0])} />
               <h3 className="studio-label studio-label-tip">
-                Person details <InfoTip label="About person details">Fills in for each person: their name, section, code and so on.</InfoTip>
+                Person details <InfoTip label="About person details">Fills in for each person: their name, level, code and so on.</InfoTip>
               </h3>
               <div className="studio-chips">
                 {FIELD_IDS.map((f) => (
@@ -316,7 +316,7 @@ export function LanyardDesigner() {
             label={`The ${side} of the card, as it will print for ${person.name}`}
           />
           <div className="studio-footer">
-            <PreviewPicker eventId={event.id} sections={event.sections} canList={can('roster.view')} value={preview} onChange={setPreview} />
+            <PreviewPicker eventId={event.id} levels={event.levels} canList={can('roster.view')} value={preview} onChange={setPreview} />
             {event.features.photo && <Toggle checked={noPhotos} onChange={setNoPhotos} label="No photo consent" />}
             <span className="meta studio-hint">
               {CARD_FORMATS[design.format].label}, {design.orientation}
@@ -438,11 +438,11 @@ function SaveStatus({ state, message, onRetry, editable }: { state: string; mess
 }
 
 /** Preview the card with a real person from the camp, or the sample. */
-function PreviewPicker({ eventId, sections, canList, value, onChange }: { eventId: string; sections: SectionSetting[]; canList: boolean; value: CardPerson; onChange: (p: CardPerson) => void }) {
+function PreviewPicker({ eventId, levels, canList, value, onChange }: { eventId: string; levels: LevelSetting[]; canList: boolean; value: CardPerson; onChange: (p: CardPerson) => void }) {
   const [people, setPeople] = useState<(CardPerson & { id: string })[] | null>(null);
   useEffect(() => {
     if (!canList) return;
-    api<{ registrations: { id: string; displayName?: string; firstName: string; preferredName: string; lastName: string; kind: 'youth' | 'adult'; section: string; groupName: string; shortCode: string | null; status: string; photoConsent?: string }[] }>(`/events/${eventId}/registrations`)
+    api<{ registrations: { id: string; displayName?: string; firstName: string; preferredName: string; lastName: string; kind: 'youth' | 'adult'; level: string; groupName: string; shortCode: string | null; status: string; photoConsent?: string }[] }>(`/events/${eventId}/registrations`)
       .then((r) =>
         setPeople(
           r.registrations
@@ -454,16 +454,16 @@ function PreviewPicker({ eventId, sections, canList, value, onChange }: { eventI
               firstName: x.preferredName || x.firstName,
               lastName: x.lastName,
               kind: x.kind,
-              section: x.section,
+              level: x.level,
               groupName: x.groupName,
-              style: sectionStyle(sections, x.section),
+              style: levelStyle(levels, x.level),
               shortCode: x.shortCode ?? SAMPLE_PERSON.shortCode,
               qr: SAMPLE_PERSON.qr,
             })),
         ),
       )
       .catch(() => setPeople([]));
-  }, [eventId, canList, sections]);
+  }, [eventId, canList, levels]);
   const current = people?.find((p) => p.name === value.name && p.groupName === value.groupName)?.id ?? '';
   return (
     <div className="studio-preview-pick">
@@ -674,7 +674,7 @@ function ElementPanel({
             </div>
           </PanelGroup>
           <PanelGroup>
-            <ColourField label="Colour" value={el.colour} section="text" extra={brand} onChange={(v) => editable && onSet({ colour: v } as Partial<TextElement>)} />
+            <ColourField label="Colour" value={el.colour} level="text" extra={brand} onChange={(v) => editable && onSet({ colour: v } as Partial<TextElement>)} />
           </PanelGroup>
         </>
       )}
@@ -693,10 +693,10 @@ function ElementPanel({
             />
           </PanelGroup>
           <PanelGroup>
-            <ColourField label="Fill" value={el.fill} allowNone section="fill" extra={brand} onChange={(v) => editable && onSet({ fill: v } as Partial<ShapeElement>)} />
+            <ColourField label="Fill" value={el.fill} allowNone level="fill" extra={brand} onChange={(v) => editable && onSet({ fill: v } as Partial<ShapeElement>)} />
           </PanelGroup>
           <PanelGroup title="Border">
-            <ColourField label="Border colour" value={el.stroke} allowNone section="fill" extra={brand} onChange={(v) => editable && onSet({ stroke: v, strokeWidth: v !== 'none' && el.strokeWidth === 0 ? 0.5 : el.strokeWidth } as Partial<ShapeElement>)} />
+            <ColourField label="Border colour" value={el.stroke} allowNone level="fill" extra={brand} onChange={(v) => editable && onSet({ stroke: v, strokeWidth: v !== 'none' && el.strokeWidth === 0 ? 0.5 : el.strokeWidth } as Partial<ShapeElement>)} />
             <div className="studio-row">
               <Num id="prop-stroke" label="Border width" value={el.strokeWidth} min={0} max={10} step={0.25} disabled={!editable} onChange={(v) => onSet({ strokeWidth: v } as Partial<ShapeElement>)} />
               {el.shape === 'rect' && <Num id="prop-radius" label="Corners" value={el.radius} min={0} max={60} step={0.5} disabled={!editable} onChange={(v) => onSet({ radius: v } as Partial<ShapeElement>)} />}

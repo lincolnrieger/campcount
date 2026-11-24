@@ -32,18 +32,18 @@ import type { SortState } from '../ui';
 import { useEvent } from './EventLayout';
 
 type Filter = 'all' | 'youth' | 'adult' | 'nocard' | 'withdrawn';
-type Column = 'name' | 'group' | 'section' | 'card';
+type Column = 'name' | 'group' | 'level' | 'card';
 interface MoreFilters {
-  section: string;
+  level: string;
   group: string;
   allergy: boolean;
   noPhotos: boolean;
 }
-const NO_MORE: MoreFilters = { section: '', group: '', allergy: false, noPhotos: false };
-const SORT_LABEL: Record<Column, string> = { name: 'Name', section: 'Section', group: 'Scout group', card: 'Lanyard' };
+const NO_MORE: MoreFilters = { level: '', group: '', allergy: false, noPhotos: false };
+const SORT_LABEL: Record<Column, string> = { name: 'Name', level: 'Level', group: 'Group', card: 'Lanyard' };
 
-const fullName = (r: Registration) => `${r.preferredName || r.firstName} ${r.lastName}`;
-const roleOf = (r: Registration) => (r.kind === 'adult' ? r.position || 'Leader' : r.section);
+const fullName = (r: Registration) => `${r.firstName} ${r.lastName}`.trim();
+const roleOf = (r: Registration) => r.level;
 const hasAllergy = (r: Registration) => !!r.dietary?.some((d) => d.category === 'allergy');
 const uniqueSorted = (values: string[]) => [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b));
 
@@ -69,17 +69,17 @@ export function Roster() {
   const active = all.filter((r) => r.status === 'active');
   const withdrawn = all.length - active.length;
   const withoutCard = active.filter((r) => !r.shortCode).length;
-  const sections = uniqueSorted(all.map(roleOf));
+  const levels = uniqueSorted(all.map(roleOf));
   const groups = uniqueSorted(all.map((r) => r.groupName));
-  const moreCount = [more.section, more.group, more.allergy, more.noPhotos].filter(Boolean).length;
+  const moreCount = [more.level, more.group, more.allergy, more.noPhotos].filter(Boolean).length;
 
   // Everything except the chip filter, so the chips can show what each would give.
   const base = all.filter((r) => {
-    if (more.section && roleOf(r) !== more.section) return false;
+    if (more.level && roleOf(r) !== more.level) return false;
     if (more.group && r.groupName !== more.group) return false;
     if (more.allergy && !hasAllergy(r)) return false;
     if (more.noPhotos && r.photoConsent !== 'no') return false;
-    return matchesSearch(query, fullName(r), r.firstName, r.memberNumber, r.shortCode, r.groupName);
+    return matchesSearch(query, fullName(r), r.firstName, r.participantId, r.shortCode, r.groupName);
   });
   const inFilter = (r: Registration, f: Filter) => {
     if (f === 'withdrawn' ? r.status !== 'withdrawn' : r.status !== 'active') return false;
@@ -91,7 +91,7 @@ export function Roster() {
   const count = (f: Filter) => base.filter((r) => inFilter(r, f)).length;
   const shown = sortRows(
     base.filter((r) => inFilter(r, filter)),
-    (r) => (sort.key === 'name' ? `${r.lastName} ${r.preferredName || r.firstName}` : sort.key === 'group' ? r.groupName : sort.key === 'card' ? r.shortCode : roleOf(r)),
+    (r) => (sort.key === 'name' ? `${r.lastName} ${r.firstName}` : sort.key === 'group' ? r.groupName : sort.key === 'card' ? r.shortCode : roleOf(r)),
     sort.dir,
   );
   const picked = all.filter((r) => selected.has(r.id));
@@ -240,19 +240,19 @@ export function Roster() {
   const moreFilters = (
     <Popover label="More filters" icon="layers" button={moreCount ? `Filters · ${moreCount}` : 'Filters'} align="end">
       <div className="field">
-        <label className="field-label" htmlFor="people-section">
-          Section
+        <label className="field-label" htmlFor="people-level">
+          Level
         </label>
-        <select id="people-section" className="select" value={more.section} onChange={(e) => setMore({ ...more, section: e.target.value })}>
-          <option value="">All sections</option>
-          {sections.map((s) => (
+        <select id="people-level" className="select" value={more.level} onChange={(e) => setMore({ ...more, level: e.target.value })}>
+          <option value="">All levels</option>
+          {levels.map((s) => (
             <option key={s}>{s}</option>
           ))}
         </select>
       </div>
       <div className="field">
         <label className="field-label" htmlFor="people-group">
-          Scout group
+          Group
         </label>
         <select id="people-group" className="select" value={more.group} onChange={(e) => setMore({ ...more, group: e.target.value })}>
           <option value="">All groups</option>
@@ -303,7 +303,7 @@ export function Roster() {
             <>
               {can('roster.import') && (
                 <ButtonLink to="import" kind="primary">
-                  Import from MyScout
+                  Import a spreadsheet
                 </ButtonLink>
               )}
               {canEdit && <ButtonLink to="add">Add person</ButtonLink>}
@@ -318,7 +318,7 @@ export function Roster() {
             </Banner>
           )}
           <Toolbar sticky label="Search and filter people">
-            <SearchField id="people-q" label="Search name, member number or lanyard code" placeholder="Search people" value={query} onChange={setQuery} slash />
+            <SearchField id="people-q" label="Search name, participant ID or lanyard code" placeholder="Search people" value={query} onChange={setQuery} slash />
             {moreFilters}
             <div className="toolbar-end">
               <p className="toolbar-count" aria-live="polite">
@@ -361,8 +361,8 @@ export function Roster() {
                       </th>
                     )}
                     <SortHeader label="Name" column="name" sort={sort} onSort={toggleSort} />
-                    <SortHeader label="Section" column="section" sort={sort} onSort={toggleSort} />
-                    <SortHeader label="Scout group" column="group" sort={sort} onSort={toggleSort} />
+                    <SortHeader label="Level" column="level" sort={sort} onSort={toggleSort} />
+                    <SortHeader label="Group" column="group" sort={sort} onSort={toggleSort} />
                     <SortHeader label="Lanyard" column="card" sort={sort} onSort={toggleSort} />
                     <th scope="col">Status</th>
                   </tr>

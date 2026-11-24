@@ -3,7 +3,7 @@ import { useSession } from '../session';
 import { Icon, PageHeader } from '../ui';
 import type { IconName } from '../ui';
 
-const SECTIONS: { to: string; label: string; hint: string; icon: IconName }[] = [
+const AREAS: { to: string; label: string; hint: string; icon: IconName }[] = [
   { to: '/admin/accounts', label: 'Accounts', hint: 'Sign-ins, admins, set-up links', icon: 'team' },
   { to: '/admin/log', label: 'Activity log', hint: 'Every scan and change', icon: 'clipboard' },
   { to: '/admin/demo', label: 'Demo camps', hint: 'Practice camps for training', icon: 'star' },
@@ -17,7 +17,7 @@ export function AdminIndex() {
     <>
       <PageHeader title="Admin" />
       <ul className="pf-cards">
-        {SECTIONS.map((s) => (
+        {AREAS.map((s) => (
           <li key={s.to} className="pf-card row-link">
             <span className="pf-card-icon" aria-hidden="true">
               <Icon name={s.icon} size={24} />

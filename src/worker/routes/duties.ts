@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { compareText, sortByName } from '../lib/sort';
 import { z } from 'zod';
 import { isEditable } from '../../shared/lifecycle';
 import { displayName } from '../../shared/names';
@@ -54,22 +55,23 @@ dutyRoutes.get('/duties', async (c) => {
   const [duties, people, leaders] = await c.env.DB.batch([
     c.env.DB.prepare(`SELECT id, title, location, notes, starts_at, ends_at FROM duties WHERE event_id = ? ORDER BY starts_at, title COLLATE NOCASE`).bind(eventId),
     c.env.DB.prepare(
-      `SELECT a.duty_id, r.id, p.first_name, p.preferred_name, p.last_name
+      `SELECT a.duty_id, r.id, p.first_name, p.last_name
          FROM duty_assignments a JOIN duties d ON d.id = a.duty_id
          JOIN registrations r ON r.id = a.registration_id JOIN people p ON p.id = r.person_id
-        WHERE d.event_id = ? AND r.status = 'active'
-        ORDER BY p.last_name COLLATE NOCASE, p.first_name COLLATE NOCASE`,
+        WHERE d.event_id = ? AND r.status = 'active'`,
     ).bind(eventId),
-    // Who can be rostered: leaders first (adults and Rovers), then everyone else.
+    // Who can be rostered: leaders (adults) first, then everyone else.
     c.env.DB.prepare(
-      `SELECT r.id, r.kind, r.section, r.group_name, p.first_name, p.preferred_name, p.last_name
+      `SELECT r.id, r.kind, r.level, r.group_name, p.first_name, p.last_name
          FROM registrations r JOIN people p ON p.id = r.person_id
-        WHERE r.event_id = ? AND r.status = 'active'
-        ORDER BY p.last_name COLLATE NOCASE, p.first_name COLLATE NOCASE`,
+        WHERE r.event_id = ? AND r.status = 'active'`,
     ).bind(eventId),
   ]);
-  type Name = { first_name: string; preferred_name: string; last_name: string };
-  const full = (p: Name) => `${p.preferred_name || p.first_name} ${p.last_name}`.trim();
+  type Name = { first_name: string; last_name: string };
+  // Names are encrypted in the database, so they're sorted here.
+  sortByName(people!.results as Name[]);
+  sortByName(leaders!.results as Name[]);
+  const full = (p: Name) => `${p.first_name} ${p.last_name}`.trim();
   const byDuty = new Map<string, { registrationId: string; name: string }[]>();
   for (const p of people!.results as (Name & { duty_id: string; id: string })[]) {
     const list = byDuty.get(p.duty_id) ?? [];
@@ -86,12 +88,12 @@ dutyRoutes.get('/duties', async (c) => {
       endsAt: d.ends_at,
       people: byDuty.get(d.id) ?? [],
     })),
-    people: (leaders!.results as (Name & { id: string; kind: string; section: string; group_name: string })[]).map((p) => ({
+    people: (leaders!.results as (Name & { id: string; kind: string; level: string; group_name: string })[]).map((p) => ({
       id: p.id,
       name: full(p),
-      shortName: displayName(p.first_name, p.preferred_name, p.last_name),
+      shortName: displayName(p.first_name, p.last_name),
       groupName: p.group_name,
-      leader: p.kind === 'adult' || /^rover/i.test(p.section),
+      leader: p.kind === 'adult',
     })),
   });
 });
@@ -204,15 +206,14 @@ export async function dutiesFor(db: D1Database, eventId: string, registrationId:
     .prepare(
       `SELECT d.title, d.location, d.notes, d.starts_at, d.ends_at,
               (SELECT group_concat(name, ', ') FROM (
-                 SELECT COALESCE(NULLIF(p.preferred_name, ''), p.first_name) || ' ' || p.last_name AS name
+                 SELECT p.first_name || ' ' || p.last_name AS name
                    FROM duty_assignments o JOIN registrations r ON r.id = o.registration_id JOIN people p ON p.id = r.person_id
-                  WHERE o.duty_id = d.id AND o.registration_id <> ? AND r.status = 'active'
-                  ORDER BY p.last_name COLLATE NOCASE)) AS others
+                  WHERE o.duty_id = d.id AND o.registration_id <> ? AND r.status = 'active')) AS others
          FROM duty_assignments a JOIN duties d ON d.id = a.duty_id
         WHERE a.registration_id = ? AND d.event_id = ?
         ORDER BY d.starts_at`,
     )
     .bind(registrationId, registrationId, eventId)
     .all<{ title: string; location: string; notes: string; starts_at: string; ends_at: string | null; others: string | null }>();
-  return results.map((d) => ({ title: d.title, location: d.location, notes: d.notes, startsAt: d.starts_at, endsAt: d.ends_at, with: d.others ?? '' }));
+  return results.map((d) => ({ title: d.title, location: d.location, notes: d.notes, startsAt: d.starts_at, endsAt: d.ends_at, with: (d.others ?? '').split(', ').filter(Boolean).sort(compareText).join(', ') }));
 }

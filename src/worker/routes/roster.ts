@@ -11,15 +11,15 @@ import { nowIso } from '../lib/time';
 import { auditStatement } from '../services/audit';
 import { decryptToken, issueStatements } from '../services/credentials';
 import type { ExistingRegistration } from '../services/import';
-import { duplicateMemberNumbers, parseExtra, planImport, storeExtra } from '../services/import';
+import { duplicateParticipantIds, fillParticipantIds, planImport } from '../services/import';
 import { can } from '../services/principal';
 import { getEventRow } from './events';
 import { loadEventModel, whereabouts } from '../services/reports';
-import type { ImportRow } from '../../shared/schemas';
-import { isHealthExtra } from '../../shared/consent2go';
-import { loadSections } from '../services/sections';
-import { normalizeSection, sectionStyle } from '../../shared/sections';
-import { addToRoster, guestNumber, rowStatements, syncKindsStatement, toImportRow } from '../services/rosterWrites';
+import { loadLevels } from '../services/levels';
+import { kindForLevel, normalizeLevel, levelStyle, withLevels } from '../../shared/levels';
+import { addToRoster, dietaryInsert, fileUnderLevels, guestNumber, levelSettingsStatement, rowStatements, toImportRow } from '../services/rosterWrites';
+import { participantKey, seal, shortCodeKey } from '../lib/vault';
+import { compareText, sortByName } from '../lib/sort';
 
 export const rosterRoutes = new Hono<AppEnv>();
 
@@ -49,15 +49,15 @@ rosterRoutes.get('/registrations', async (c) => {
   const withPhoto = can(principal, 'photo.view_status', { eventId });
 
   const { results } = await c.env.DB.prepare(
-    `SELECT r.id, p.member_number, p.first_name, p.preferred_name, p.last_name, r.kind, r.section, r.group_name,
-            r.position, r.role_label, r.photo_consent, r.status, r.dietary_source_hash, r.dietary_checked,
+    `SELECT r.id, p.participant_id, p.first_name, p.last_name, r.kind, r.level, r.group_name,
+            r.photo_consent, r.status, r.car_rego, r.dietary_source_hash, r.dietary_checked,
             (SELECT short_code FROM credentials cr WHERE cr.registration_id = r.id AND cr.status = 'active') AS short_code
        FROM registrations r JOIN people p ON p.id = r.person_id
-      WHERE r.event_id = ?
-      ORDER BY p.last_name COLLATE NOCASE, p.first_name COLLATE NOCASE`,
+      WHERE r.event_id = ?`,
   )
     .bind(eventId)
     .all<Record<string, string | null>>();
+  sortByName(results);
 
   const dietary = new Map<string, unknown[]>();
   if (withDietary) {
@@ -76,16 +76,13 @@ rosterRoutes.get('/registrations', async (c) => {
   return c.json({
     registrations: results.map((r) => ({
       id: r.id,
-      memberNumber: r.member_number,
+      participantId: r.participant_id,
       firstName: r.first_name,
-      preferredName: r.preferred_name,
       lastName: r.last_name,
-      displayName: displayName(r.first_name!, r.preferred_name!, r.last_name!),
+      displayName: displayName(r.first_name!, r.last_name!),
       kind: r.kind,
-      section: r.section,
+      level: r.level,
       groupName: r.group_name,
-      position: r.position,
-      roleLabel: r.role_label,
       status: r.status,
       carRego: r.car_rego,
       shortCode: r.short_code ? formatShortCode(r.short_code) : null,
@@ -113,8 +110,8 @@ rosterRoutes.get('/registrations/:registrationId', async (c) => {
   const event = await getEventRow(c.env.DB, eventId);
   if (!event) throw notFound();
   const r = await c.env.DB.prepare(
-    `SELECT r.id, p.member_number, p.first_name, p.preferred_name, p.last_name, r.kind, r.section, r.group_name, r.position,
-            r.role_label, r.team, r.photo_consent, r.status, r.created_at, r.updated_at, r.extra_fields, r.car_rego,
+    `SELECT r.id, p.participant_id, p.first_name, p.last_name, r.kind, r.level, r.group_name,
+            r.photo_consent, r.status, r.created_at, r.updated_at, r.car_rego,
             (SELECT short_code FROM credentials cr WHERE cr.registration_id = r.id AND cr.status = 'active') AS short_code
        FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.id = ? AND r.event_id = ?`,
   )
@@ -153,19 +150,13 @@ rosterRoutes.get('/registrations/:registrationId', async (c) => {
   return c.json({
     registration: {
       id: r.id,
-      memberNumber: r.member_number,
+      participantId: r.participant_id,
       firstName: r.first_name,
-      preferredName: r.preferred_name,
       lastName: r.last_name,
-      displayName: displayName(r.first_name!, r.preferred_name!, r.last_name!),
+      displayName: displayName(r.first_name!, r.last_name!),
       kind: r.kind,
-      section: r.section,
+      level: r.level,
       groupName: r.group_name,
-      position: r.position,
-      roleLabel: r.role_label,
-      team: r.team,
-      // Medication permissions and the like are health information: only for people who see dietary detail.
-      extra: Object.fromEntries(Object.entries(parseExtra(r.extra_fields)).filter(([k]) => withDietary || !isHealthExtra(k))),
       status: r.status,
       carRego: r.car_rego,
       shortCode: r.short_code ? formatShortCode(r.short_code) : null,
@@ -203,56 +194,70 @@ rosterRoutes.patch('/registrations/:registrationId', async (c) => {
   const id = regParam(c.req.param('registrationId'));
   const input = await parseBody(c, registrationPatchSchema);
   await editableEvent(c, eventId);
-  if (input.section !== undefined) input.section = normalizeSection(input.section, await loadSections(c.env.DB, eventId));
+  // Levels: matched to the camp's own, a new name is added, and youth or adult follows the level.
+  const levelsBefore = await loadLevels(c.env.DB, eventId);
+  const levelAdded = input.level !== undefined ? withLevels(levelsBefore, [normalizeLevel(input.level, levelsBefore)]) : null;
+  if (input.level !== undefined) {
+    input.level = normalizeLevel(input.level, levelsBefore);
+    input.kind = kindForLevel(input.level, levelAdded!.levels);
+  } else delete input.kind;
   const reg = await c.env.DB.prepare(`SELECT person_id FROM registrations WHERE id = ? AND event_id = ?`).bind(id, eventId).first<{ person_id: string }>();
   if (!reg) throw notFound();
 
-  const personCols: Record<string, string> = { memberNumber: 'member_number', firstName: 'first_name', preferredName: 'preferred_name', lastName: 'last_name' };
-  const regCols: Record<string, string> = { kind: 'kind', section: 'section', groupName: 'group_name', position: 'position', photoConsent: 'photo_consent', status: 'status', carRego: 'car_rego' };
+  const personCols: Record<string, string> = { participantId: 'participant_id', firstName: 'first_name', lastName: 'last_name' };
+  const regCols: Record<string, string> = { kind: 'kind', level: 'level', groupName: 'group_name', photoConsent: 'photo_consent', status: 'status', carRego: 'car_rego' };
+  /** Stored encrypted. */
+  const sealed = new Set(['participantId', 'firstName', 'lastName', 'level', 'groupName', 'carRego']);
   const set = (cols: Record<string, string>) => Object.keys(input).filter((k) => k in cols && input[k as keyof typeof input] !== undefined);
   const pKeys = set(personCols);
   const rKeys = set(regCols);
-  if (pKeys.length + rKeys.length === 0 && input.extra === undefined) return c.json({ ok: true });
+  if (pKeys.length + rKeys.length === 0) return c.json({ ok: true });
   if (pKeys.length) {
     const sharedWith = await c.env.DB.prepare(`SELECT DISTINCT event_id FROM registrations WHERE person_id = ? AND event_id <> ?`)
       .bind(reg.person_id, eventId)
       .all<{ event_id: string }>();
     if (sharedWith.results.some((r) => !can(c.get('principal')!, 'roster.edit', { eventId: r.event_id }))) {
       throw conflict(
-        'This person is also on another camp, so their name and membership number can only be changed by someone who runs both camps. Correct it in MyScout and import again.',
+        'This person is also on another camp, so their name and participant ID can only be changed by someone who runs both camps. Correct it in the spreadsheet and import again.',
       );
     }
   }
+  const value = async (k: string) => {
+    const v = input[k as keyof typeof input] as string;
+    return sealed.has(k) ? seal(c.env, v) : v;
+  };
   const now = nowIso();
   const statements: D1PreparedStatement[] = [];
+  if (levelAdded?.added.length) statements.push(levelSettingsStatement(c.env.DB, eventId, levelAdded.levels));
   if (pKeys.length) {
+    const cols = pKeys.map((k) => `${personCols[k]} = ?`);
+    const binds: unknown[] = await Promise.all(pKeys.map(value));
+    if (input.participantId !== undefined) {
+      cols.push('participant_key = ?');
+      binds.push(await participantKey(c.env, input.participantId));
+    }
+    statements.push(c.env.DB.prepare(`UPDATE people SET ${cols.join(', ')}, updated_at = ? WHERE id = ?`).bind(...binds, now, reg.person_id));
+  }
+  // The lanyard's typed code is the participant ID: keep it in step (the QR doesn't change).
+  const newCode = input.participantId !== undefined ? memberCardCode(input.participantId) : null;
+  if (newCode) {
     statements.push(
-      c.env.DB.prepare(`UPDATE people SET ${pKeys.map((k) => `${personCols[k]} = ?`).join(', ')}, updated_at = ? WHERE id = ?`).bind(
-        ...pKeys.map((k) => input[k as keyof typeof input] as string),
-        now,
-        reg.person_id,
+      c.env.DB.prepare(`UPDATE credentials SET short_code = ?, short_code_key = ? WHERE registration_id = ? AND status = 'active'`).bind(
+        await seal(c.env, newCode),
+        await shortCodeKey(c.env, newCode),
+        id,
       ),
     );
-  }
-  // The lanyard's typed code is the membership number: keep it in step (the QR doesn't change).
-  const newCode = input.memberNumber !== undefined ? memberCardCode(input.memberNumber) : null;
-  if (newCode) {
-    statements.push(c.env.DB.prepare(`UPDATE credentials SET short_code = ? WHERE registration_id = ? AND status = 'active'`).bind(newCode, id));
   }
   if (rKeys.length) {
     statements.push(
       c.env.DB.prepare(`UPDATE registrations SET ${rKeys.map((k) => `${regCols[k]} = ?`).join(', ')}, updated_at = ? WHERE id = ?`).bind(
-        ...rKeys.map((k) => input[k as keyof typeof input] as string),
+        ...(await Promise.all(rKeys.map(value))),
         now,
         id,
       ),
     );
   }
-  if (input.extra !== undefined) {
-    statements.push(c.env.DB.prepare(`UPDATE registrations SET extra_fields = ?, updated_at = ? WHERE id = ?`).bind(storeExtra(input.extra), now, id));
-  }
-  // Youth or adult follows the section and the camp's setting.
-  if (rKeys.includes('section') || rKeys.includes('kind')) statements.push(syncKindsStatement(c.env.DB, eventId));
   statements.push(
     auditStatement(c.env.DB, {
       actor: { type: 'user', id: user.userId },
@@ -260,13 +265,13 @@ rosterRoutes.patch('/registrations/:registrationId', async (c) => {
       eventId,
       targetType: 'registration',
       targetId: id,
-      detail: { fields: [...pKeys, ...rKeys, ...(input.extra !== undefined ? ['extra'] : [])].join(',') },
+      detail: { fields: [...pKeys, ...rKeys].join(',') },
     }),
   );
   try {
     await c.env.DB.batch(statements);
   } catch (err) {
-    if (String(err).includes('UNIQUE')) throw conflict('Someone else already has that membership number.');
+    if (String(err).includes('UNIQUE')) throw conflict('Someone else already has that participant ID.');
     throw err;
   }
   return c.json({ ok: true });
@@ -285,11 +290,7 @@ rosterRoutes.put('/registrations/:registrationId/dietary', async (c) => {
   const now = nowIso();
   await c.env.DB.batch([
     c.env.DB.prepare(`DELETE FROM dietary_entries WHERE registration_id = ?`).bind(id),
-    ...entries.map((e) =>
-      c.env.DB.prepare(
-        `INSERT INTO dietary_entries (id, event_id, registration_id, category, item, severity, note, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(crypto.randomUUID(), eventId, id, e.category, e.item, e.severity, e.note, user.userId, now),
-    ),
+    ...(await Promise.all(entries.map((e) => dietaryInsert(c.env, eventId, '?', [id], e, user.userId, now)))).flat(),
     // Checked: which notes were read (from Import & check), or just that someone has (edited elsewhere).
     c.env.DB.prepare(`UPDATE registrations SET dietary_review_pending = 0, dietary_checked = COALESCE(?, dietary_checked, '["*"]'), updated_at = ? WHERE id = ?`).bind(
       checkedNotes ? JSON.stringify(checkedNotes) : null,
@@ -344,19 +345,19 @@ rosterRoutes.post('/registrations', async (c) => {
   const user = requireUser(c);
   const e = await editableEvent(c, eventId);
   const input = await parseBody(c, personEntrySchema);
-  const memberNumber = input.memberNumber?.toUpperCase() ?? guestNumber();
+  const participantId = input.participantId?.toUpperCase() ?? guestNumber();
   const already = await c.env.DB.prepare(
-    `SELECT 1 FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.event_id = ? AND p.member_number = ? AND r.status = 'active'`,
+    `SELECT 1 FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.event_id = ? AND p.participant_key = ? AND r.status = 'active'`,
   )
-    .bind(e.id, memberNumber)
+    .bind(e.id, await participantKey(c.env, participantId))
     .first();
-  if (already) throw conflict('Someone with that membership number is already on this event.');
+  if (already) throw conflict('Someone with that participant ID is already on this event.');
   const registrationId = await addToRoster(
     c.env,
     e.id,
-    toImportRow({ ...input, memberNumber, dietary: e.feature_dietary ? input.dietary : [] }),
+    toImportRow({ ...input, participantId, dietary: e.feature_dietary ? input.dietary : [] }),
     user.userId,
-    (await namesLockedElsewhere(c, e.id, [memberNumber])).has(memberNumber),
+    (await namesLockedElsewhere(c, e.id, [participantId])).has(participantId),
   );
   await auditStatement(c.env.DB, {
     actor: { type: 'user', id: user.userId },
@@ -376,24 +377,23 @@ rosterRoutes.get('/import/context', async (c) => {
   const event = await editableEvent(c, eventId);
   const row = await c.env.DB.prepare(`SELECT fingerprint_key FROM events WHERE id = ?`).bind(eventId).first<{ fingerprint_key: string }>();
   const { results } = await c.env.DB.prepare(
-    `SELECT p.member_number, r.dietary_source_hash FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.event_id = ?`,
+    `SELECT p.participant_id, r.dietary_source_hash FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.event_id = ?`,
   )
     .bind(eventId)
-    .all<{ member_number: string; dietary_source_hash: string | null }>();
+    .all<{ participant_id: string; dietary_source_hash: string | null }>();
   return c.json({
     fingerprintKey: row!.fingerprint_key,
     dietaryEnabled: event.feature_dietary === 1,
     canEditDietary: can(principal, 'dietary.edit', { eventId }),
-    reviewedFingerprints: Object.fromEntries(results.map((r) => [r.member_number, r.dietary_source_hash])),
+    reviewedFingerprints: Object.fromEntries(results.map((r) => [r.participant_id, r.dietary_source_hash])),
   });
 });
 
 async function loadExisting(db: D1Database, eventId: string): Promise<ExistingRegistration[]> {
   const { results } = await db
     .prepare(
-      `SELECT r.id AS registration_id, p.member_number, p.first_name, p.preferred_name, p.last_name, r.kind, r.section,
-              r.group_name, r.position, r.role_label, r.team, r.source_status, r.photo_consent, r.status, r.dietary_source_hash,
-              r.extra_fields
+      `SELECT r.id AS registration_id, p.participant_id, p.first_name, p.last_name, r.kind, r.level,
+              r.group_name, r.photo_consent, r.status, r.dietary_source_hash
          FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.event_id = ?`,
     )
     .bind(eventId)
@@ -404,75 +404,44 @@ async function loadExisting(db: D1Database, eventId: string): Promise<ExistingRe
 async function validatedImport(c: AppContext, eventId: string) {
   const input = await parseBody(c, importRequestSchema);
   const event = await editableEvent(c, eventId);
-  const dupes = duplicateMemberNumbers(input.rows);
+  const dupes = duplicateParticipantIds(input.rows);
   if (dupes.length > 0) {
-    throw badRequest(`These membership numbers appear more than once: ${dupes.slice(0, 10).join(', ')}.`);
+    throw badRequest(`These participant IDs appear more than once: ${dupes.slice(0, 10).join(', ')}.`);
   }
   if (input.rows.some((r) => r.dietary !== undefined)) {
     if (event.feature_dietary !== 1) throw badRequest('Dietary requirements are switched off for this event.');
     if (!can(c.get('principal')!, 'dietary.edit', { eventId })) throw forbidden();
   }
-  // Sections are filed under the camp's own names (Settings › Sections).
-  const sections = await loadSections(c.env.DB, eventId);
-  input.rows = input.rows.map((r) => ({ ...r, section: normalizeSection(r.section, sections) }));
   const existing = await loadExisting(c.env.DB, eventId);
-  if (input.source === 'consent2go') {
-    input.withdrawMissing = false;
-    input.rows = input.rows.map((row) => mergeConsent2Go(row, existing));
-  }
-  return { input, plan: planImport(input.rows, existing, input.withdrawMissing) };
+  // People without an ID: matched by name to someone already here, or given one.
+  const withIds = fillParticipantIds(input.rows, existing, guestNumber);
+  // Levels are filed under the camp's own names; new ones are added when the import is saved.
+  const filed = await fileUnderLevels(c.env, eventId, withIds);
+  return { input: { ...input, rows: filed.rows }, saveLevels: filed.save, plan: planImport(filed.rows, existing, input.withdrawMissing) };
 }
 
 /**
- * A Consent2Go row for someone already on the camp (from MyScout): keep who
- * they are as MyScout has it, and take only what Consent2Go adds (photo
- * consent, dietary needs, extra details). Blanks in Consent2Go never wipe
- * what's already there.
- */
-function mergeConsent2Go(row: ImportRow, existing: ExistingRegistration[]): ImportRow {
-  const current = existing.find((e) => e.member_number.toUpperCase() === row.memberNumber.toUpperCase());
-  if (!current) return row;
-  const extra = row.extra ? Object.fromEntries(Object.entries(row.extra).filter(([, v]) => v !== '')) : undefined;
-  return {
-    ...row,
-    memberNumber: current.member_number,
-    firstName: current.first_name,
-    preferredName: current.preferred_name,
-    lastName: current.last_name,
-    kind: current.kind as ImportRow['kind'],
-    section: current.section as ImportRow['section'],
-    groupName: current.group_name,
-    position: current.position,
-    roleLabel: current.role_label,
-    team: current.team,
-    sourceStatus: current.source_status,
-    photoConsent: row.photoConsent === 'unknown' ? (current.photo_consent as ImportRow['photoConsent']) : row.photoConsent,
-    // No dietary text in Consent2Go: leave what's recorded alone (don't ask for a review).
-    dietaryFingerprint: row.dietaryFingerprint ?? current.dietary_source_hash,
-    ...(extra && Object.keys(extra).length ? { extra } : { extra: undefined }),
-  };
-}
-
-/**
- * People records are shared between camps (one per membership number). A
- * camp's team may only change a shared person's names if they can also edit
- * every other camp that person is on; otherwise one camp could rename a child
- * on another camp's roster and lanyards. Returns the membership numbers whose
+ * People records are shared between camps (one per participant ID). A camp's
+ * team may only change a shared person's names if they can also edit every
+ * other camp that person is on; otherwise one camp could rename a child on
+ * another camp's roster and lanyards. Returns the participant IDs whose
  * names this caller must leave alone.
  */
-async function namesLockedElsewhere(c: AppContext, eventId: string, memberNumbers: string[]): Promise<Set<string>> {
+async function namesLockedElsewhere(c: AppContext, eventId: string, participantIds: string[]): Promise<Set<string>> {
   const principal = c.get('principal')!;
-  const distinct = [...new Set(memberNumbers)];
+  const byKey = new Map<string, string>();
+  for (const id of new Set(participantIds)) byKey.set(await participantKey(c.env, id), id);
+  const keys = [...byKey.keys()];
   const locked = new Set<string>();
-  for (let i = 0; i < distinct.length; i += 90) {
-    const chunk = distinct.slice(i, i + 90);
+  for (let i = 0; i < keys.length; i += 90) {
+    const chunk = keys.slice(i, i + 90);
     const { results } = await c.env.DB.prepare(
-      `SELECT DISTINCT p.member_number, r.event_id FROM people p JOIN registrations r ON r.person_id = p.id
-        WHERE r.event_id <> ? AND p.member_number IN (${chunk.map(() => '?').join(', ')})`,
+      `SELECT DISTINCT p.participant_key, r.event_id FROM people p JOIN registrations r ON r.person_id = p.id
+        WHERE r.event_id <> ? AND p.participant_key IN (${chunk.map(() => '?').join(', ')})`,
     )
       .bind(eventId, ...chunk)
-      .all<{ member_number: string; event_id: string }>();
-    for (const r of results) if (!can(principal, 'roster.edit', { eventId: r.event_id })) locked.add(r.member_number);
+      .all<{ participant_key: string; event_id: string }>();
+    for (const r of results) if (!can(principal, 'roster.edit', { eventId: r.event_id })) locked.add(byKey.get(r.participant_key)!);
   }
   return locked;
 }
@@ -487,26 +456,26 @@ rosterRoutes.post('/import/preview', async (c) => {
 
 /**
  * Apply an import. Every statement is an idempotent upsert keyed on
- * membership number, so if a large import is interrupted part-way, running
+ * participant ID, so if a large import is interrupted part-way, running
  * the same import again completes it without duplicating anything.
  */
 rosterRoutes.post('/import/commit', async (c) => {
   const eventId = c.req.param('eventId')!;
   requirePermission(c, 'roster.import', { eventId });
   const user = requireUser(c);
-  const { input, plan } = await validatedImport(c, eventId);
+  const { input, plan, saveLevels } = await validatedImport(c, eventId);
   const now = nowIso();
 
-  const statements: D1PreparedStatement[] = [];
-  const locked = await namesLockedElsewhere(c, eventId, input.rows.map((r) => r.memberNumber));
-  input.rows.forEach((row, i) => {
-    if (plan.rows[i]!.action === 'unchanged') return;
+  const statements: D1PreparedStatement[] = [...saveLevels];
+  const locked = await namesLockedElsewhere(c, eventId, input.rows.map((r) => r.participantId));
+  for (const [i, row] of input.rows.entries()) {
+    if (plan.rows[i]!.action === 'unchanged') continue;
     statements.push(
-      ...rowStatements(c.env.DB, eventId, row, plan.rows[i]!.dietaryPending, now, user.userId, {
-        keepExistingNames: locked.has(row.memberNumber),
-      }),
+      ...(await rowStatements(c.env, eventId, row, plan.rows[i]!.dietaryPending, now, user.userId, {
+        keepExistingNames: locked.has(row.participantId),
+      })),
     );
-  });
+  }
   for (const w of plan.withdraw) {
     statements.push(
       c.env.DB.prepare(`UPDATE registrations SET status = 'withdrawn', updated_at = ? WHERE id = ? AND event_id = ?`).bind(
@@ -516,7 +485,6 @@ rosterRoutes.post('/import/commit', async (c) => {
       ),
     );
   }
-  statements.push(syncKindsStatement(c.env.DB, eventId));
   await runInBatches(c.env.DB, statements);
 
   const jobId = crypto.randomUUID();
@@ -529,7 +497,7 @@ rosterRoutes.post('/import/commit', async (c) => {
       eventId,
       user.userId,
       now,
-      input.sourceLabel,
+      '',
       input.rows.length,
       plan.counts.create,
       plan.counts.update,
@@ -545,7 +513,8 @@ rosterRoutes.post('/import/commit', async (c) => {
       detail: { ...plan.counts, rows: input.rows.length },
     }),
   ]);
-  return c.json({ jobId, counts: plan.counts });
+  // Each row's participant ID (some made just now), so the device can file what it kept locally.
+  return c.json({ jobId, counts: plan.counts, participantIds: input.rows.map((r) => r.participantId) });
 });
 
 // ---------------------------------------------------------------- credentials
@@ -608,34 +577,35 @@ async function auditStatementRun(c: AppContext, a: { action: string; eventId: st
 /** Everyone's active card, with its live link. Returns live tokens, so callers are restricted and audited like an export. */
 async function activeCards(c: AppContext, eventId: string, registrationIds?: string[]) {
   const { results } = await c.env.DB.prepare(
-    `SELECT r.id, p.first_name, p.preferred_name, p.last_name, r.kind, r.section, r.group_name, r.photo_consent,
+    `SELECT r.id, p.first_name, p.last_name, r.kind, r.level, r.group_name, r.photo_consent,
             cr.short_code, cr.token_ciphertext, cr.issued_at, cr.printed_at
        FROM registrations r
        JOIN people p ON p.id = r.person_id
        JOIN credentials cr ON cr.registration_id = r.id AND cr.status = 'active'
-      WHERE r.event_id = ? AND r.status = 'active'
-      ORDER BY r.kind DESC, r.group_name COLLATE NOCASE, p.last_name COLLATE NOCASE, p.first_name COLLATE NOCASE`,
+      WHERE r.event_id = ? AND r.status = 'active'`,
   )
     .bind(eventId)
     .all<Record<string, string>>();
+  // Youth first, then by group and name (sorted here: these are encrypted in the database).
+  sortByName(results).sort((a, b) => compareText(b.kind, a.kind) || compareText(a.group_name, b.group_name));
   const wanted = registrationIds ? new Set(registrationIds) : null;
   const rows = results.filter((r) => !wanted || wanted.has(r.id!));
 
   const origin = new URL(c.req.url).origin;
   const event = await c.env.DB.prepare(`SELECT feature_photo FROM events WHERE id = ?`).bind(eventId).first<{ feature_photo: number }>();
   const photos = event?.feature_photo === 1 && can(c.get('principal')!, 'photo.view_status', { eventId });
-  const sections = await loadSections(c.env.DB, eventId);
+  const levels = await loadLevels(c.env.DB, eventId);
   return Promise.all(
     rows.map(async (r) => ({
       registrationId: r.id!,
-      // Preferred name and full surname, as printed on the lanyard.
-      name: `${r.preferred_name || r.first_name} ${r.last_name}`.trim(),
-      firstName: r.preferred_name || r.first_name!,
+      // First name and last name (or initial), as printed on the lanyard.
+      name: `${r.first_name} ${r.last_name}`.trim(),
+      firstName: r.first_name!,
       lastName: r.last_name!,
       kind: r.kind!,
-      section: r.section!,
+      level: r.level!,
       groupName: r.group_name!,
-      style: sectionStyle(sections, r.section!),
+      style: levelStyle(levels, r.level!),
       shortCode: formatShortCode(r.short_code!),
       // Anyone without a "yes" is treated as no consent, the same as at the scanner.
       noPhotos: photos && r.photo_consent !== 'yes',
@@ -689,6 +659,6 @@ rosterRoutes.post('/credentials/links', async (c) => {
   const cards = await activeCards(c, eventId);
   await auditStatementRun(c, { action: 'credentials.links', eventId, userId: user.userId, count: cards.length });
   return c.json({
-    links: cards.map((x) => ({ registrationId: x.registrationId, name: x.name, kind: x.kind, section: x.section, groupName: x.groupName, shortCode: x.shortCode, link: x.qr })),
+    links: cards.map((x) => ({ registrationId: x.registrationId, name: x.name, kind: x.kind, level: x.level, groupName: x.groupName, shortCode: x.shortCode, link: x.qr })),
   });
 });

@@ -11,15 +11,19 @@ For every item stored and when it's deleted, see [All data CampCount stores](dat
   Australia.)
 - Only the CampCount app can reach it. There's no public address or password
   for the database.
-- It's encrypted when stored and when sent over the internet.
+- **Every piece of participant data is encrypted by CampCount before it's
+  stored** (names, participant IDs, groups, levels, dietary details). The key
+  is a Cloudflare secret kept apart from the database, so the database on its
+  own holds only scrambled values.
+- It's also encrypted by Cloudflare when stored, and when sent over the internet.
 - It can be restored to any point in the last 30 days.
 
 ## What it stores
 
 | Group | What's kept |
 |---|---|
-| **People** | Name, membership number, section, group, position, photo consent |
-| **Health** | Dietary needs and allergies, and medication consent answers. Only staff who need them can see them. |
+| **People** | First name, last name (either can be just an initial), participant ID, group, level, photo consent (Yes or No). All encrypted except photo consent. |
+| **Dietary** | Dietary needs and allergies, encrypted. Only staff who need them can see them. |
 | **Camp activity** | Lanyard scans (who, where, when), activity and team bookings, duties |
 | **Camp setup** | Activities, meals and menus, scanning devices, lanyard designs |
 | **Staff** | Name, email and role for each camp |
@@ -27,11 +31,12 @@ For every item stored and when it's deleted, see [All data CampCount stores](dat
 
 ## What it never stores
 
-- Home addresses or phone numbers
-- Medicare numbers or guardian details
+- Home addresses, phone numbers or emails of participants
+- Dates of birth, Medicare numbers or guardian details
+- Medical conditions, medication or swimming ability
 - Free-text medical notes
-- The imported spreadsheet
-- Passwords or lanyard codes in readable form (these are scrambled)
+- The imported spreadsheet (it's read on the camp manager's device)
+- Names, IDs, passwords or lanyard codes in readable form
 
 ## Keeping it safe
 
@@ -43,10 +48,9 @@ For every item stored and when it's deleted, see [All data CampCount stores](dat
 
 | After the camp closes | Deleted |
 |---|---|
-| **90 days** | Dietary and health details, medication answers, photo consent |
+| **90 days** | Dietary details, photo consent, car registrations |
 | **2 years** | Names and attendance. Only anonymous totals are kept. |
 
 ## Still to fix
 
-- Leaders' car registrations are kept for 2 years, not 90 days.
 - A database restore hasn't been practised yet.

@@ -1,5 +1,5 @@
--- Each lanyard's typed code becomes the person's membership number
--- (the QR code doesn't change). Guests, who have no membership number, keep
+-- Each lanyard's typed code becomes the person's participant ID
+-- (the QR code doesn't change). Guests, who have no participant ID, keep
 -- their random code. A code is only changed if no other card at the camp
 -- already uses that number.
 UPDATE credentials

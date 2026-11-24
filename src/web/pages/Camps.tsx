@@ -567,7 +567,7 @@ export function CampPage() {
 
   const steps = [
     { label: 'Add staff', hint: 'Managers, scanners, leaders, meal team', path: 'settings/staff', icon: 'team' as const },
-    { label: 'Add people', hint: 'Import from MyScout or add one by one', path: 'people', icon: 'user' as const },
+    { label: 'Add people', hint: 'Import a spreadsheet or add one by one', path: 'people', icon: 'user' as const },
     { label: 'Details and features', hint: 'Dates, location, notes, features', path: 'settings/event', icon: 'clipboard' as const },
   ];
 

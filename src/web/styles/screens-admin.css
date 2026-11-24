@@ -302,7 +302,7 @@ label.btn:has(input:focus-visible) {
   outline-offset: 2px;
 }
 
-/* Settings › Sections: the lanyard swatch (layout in ui-event.css) */
+/* Settings › Levels: the lanyard swatch (layout in ui-event.css) */
 .section-swatch {
   display: grid;
   place-items: center;
@@ -357,7 +357,7 @@ label.btn:has(input:focus-visible) {
   flex: none;
 }
 
-/* ---------- Link for everyone: type a membership number ---------- */
+/* ---------- Link for everyone: type a participant ID ---------- */
 .join-link {
   display: grid;
   gap: var(--space-3);

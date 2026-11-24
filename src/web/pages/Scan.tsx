@@ -169,7 +169,7 @@ function ScanResult({ feedback, contextType }: { feedback: Feedback | null; cont
         {feedback.title}
       </p>
       {p && <p className="scan-result-name">{p.fullName ?? p.name}</p>}
-      {p && <p className="scan-result-meta">{[p.group, p.section].filter(Boolean).join(' · ')}</p>}
+      {p && <p className="scan-result-meta">{[p.group, p.level].filter(Boolean).join(' · ')}</p>}
       {feedback.message && <p>{feedback.message}</p>}
       {feedback.warning && <p>{feedback.warning}</p>}
       {alert && <DietaryAlert alert={alert} />}
@@ -529,7 +529,7 @@ export function Scan() {
         />
       )}
 
-      <Sheet open={sheet === 'code'} title="Type a membership number" onClose={() => setSheet('none')}>
+      <Sheet open={sheet === 'code'} title="Type a participant ID" onClose={() => setSheet('none')}>
         <CodeEntry
           onCode={(code) => {
             setSheet('none');
@@ -674,7 +674,7 @@ function PeopleList({
   const searching = q.trim() !== '';
   // Searching looks through everyone, so a walk-in who didn't book can still be found.
   const list = (searching ? people : show === 'done' ? done : notYet)
-    .filter((p) => matchesSearch(q, name(p), p.memberNumber))
+    .filter((p) => matchesSearch(q, name(p), p.participantId))
     .sort((a, b) =>
       searching
         ? searchRank(q, name(a)) - searchRank(q, name(b)) || name(a).localeCompare(name(b))
@@ -742,7 +742,7 @@ function PeopleList({
       )}
       <Button kind="ghost" onClick={onTypeCode}>
         <Icon name="keyboard" />
-        Type a membership number
+        Type a participant ID
       </Button>
       {onAddToCome && (
         <Button kind="ghost" onClick={onAddToCome}>
@@ -765,7 +765,7 @@ function CodeEntry({ onCode }: { onCode: (code: string) => void }) {
     <form className="form" onSubmit={submit}>
       <div className="field">
         <label htmlFor="typed-code" className="field-label">
-          Membership number (printed on the card)
+          Participant ID (printed on the card)
         </label>
         <input
           id="typed-code"

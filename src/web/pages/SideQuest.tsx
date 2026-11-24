@@ -27,7 +27,7 @@ import { useEvent } from './EventLayout';
 interface Person {
   id: string;
   name: string;
-  section: string;
+  level: string;
   groupName: string;
   kind: string;
   active: boolean;
@@ -236,7 +236,7 @@ export function SideQuest() {
                     Place
                   </th>
                   <th scope="col">Name</th>
-                  <th scope="col">Section · group</th>
+                  <th scope="col">Level · group</th>
                   <th scope="col" className="cell-num">
                     Collected
                   </th>
@@ -259,7 +259,7 @@ export function SideQuest() {
                         {r.person?.name ?? 'Someone removed'}
                       </button>
                     </td>
-                    <td className="meta">{[r.person?.section, r.person?.groupName].filter(Boolean).join(' · ')}</td>
+                    <td className="meta">{[r.person?.level, r.person?.groupName].filter(Boolean).join(' · ')}</td>
                     <td className="cell-num">
                       <strong>{r.collected}</strong>
                     </td>
@@ -355,7 +355,7 @@ export function SideQuest() {
       <Sheet open={!!open} title={person?.name ?? 'Side Quest'} onClose={() => setOpen(null)}>
         {open && (
           <div className="sq-person">
-            <p className="meta">{[person?.section, person?.groupName].filter(Boolean).join(' · ')}</p>
+            <p className="meta">{[person?.level, person?.groupName].filter(Boolean).join(' · ')}</p>
             <StatStrip
               items={[
                 { label: 'Collected', value: theirs.length },

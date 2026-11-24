@@ -1,11 +1,12 @@
-import { loadSections } from './sections';
+import { sortByName } from '../lib/sort';
+import { loadLevels } from './levels';
 import { getCookie, setCookie } from 'hono/cookie';
 import type { AppContext } from '../context';
 import { hmacHex, timingSafeEqualHex } from '../lib/crypto';
 import { nowIso } from '../lib/time';
 
 /**
- * Super Splash Side Quest: a secret game. A phone that has opened its own
+ * Side Quest: a secret game. A phone that has opened its own
  * lanyard link remembers who it belongs to (a signed, HttpOnly cookie).
  * When that phone opens someone else's lanyard link (scanning their QR with
  * the camera), it collects them instead of showing their page.
@@ -92,18 +93,18 @@ export interface Standing {
   quests: Quest[];
 }
 
-const shortName = (first: string, preferred: string, last: string) => `${(preferred || first).trim()} ${last.trim().charAt(0)}${last.trim() ? '.' : ''}`.trim();
+const shortName = (first: string, last: string) => `${first.trim()} ${last.trim().charAt(0)}${last.trim() ? '.' : ''}`.trim();
 
 /** Where someone stands in the side quest. */
 export async function standing(db: D1Database, eventId: string, registrationId: string): Promise<Standing> {
   const [people, mine, counts] = await Promise.all([
     db
       .prepare(
-        `SELECT r.id, r.kind, r.section, p.first_name, p.preferred_name, p.last_name FROM registrations r JOIN people p ON p.id = r.person_id
+        `SELECT r.id, r.kind, r.level, p.first_name, p.last_name FROM registrations r JOIN people p ON p.id = r.person_id
           WHERE r.event_id = ? AND r.status = 'active' AND r.kind = 'youth'`,
       )
       .bind(eventId)
-      .all<{ id: string; kind: string; section: string; first_name: string; preferred_name: string; last_name: string }>(),
+      .all<{ id: string; kind: string; level: string; first_name: string; last_name: string }>(),
     db.prepare(`SELECT collected_id FROM side_quest_collections WHERE collector_id = ?`).bind(registrationId).all<{ collected_id: string }>(),
     db
       .prepare(
@@ -118,11 +119,11 @@ export async function standing(db: D1Database, eventId: string, registrationId: 
   const got = new Set(mine.results.map((r) => r.collected_id).filter((id) => byId.has(id)));
   const others = people.results.filter((p) => p.id !== registrationId);
 
-  // Quests: everyone in each youth section. Only young people play.
-  const sections = await loadSections(db, eventId);
-  const groupOf = (p: { kind: string; section: string }) => p.section.toLowerCase();
+  // Quests: everyone in each youth level. Only young people play.
+  const levels = await loadLevels(db, eventId);
+  const groupOf = (p: { kind: string; level: string }) => p.level.toLowerCase();
   const quests: Quest[] = [];
-  const keys = sections.filter((s) => s.youth && s.base !== 'Other').map((s) => ({ key: s.name.toLowerCase(), label: s.name }));
+  const keys = levels.filter((s) => s.youth).map((s) => ({ key: s.name.toLowerCase(), label: s.name }));
   for (const { key, label } of keys) {
     const inGroup = others.filter((p) => groupOf(p) === key);
     if (inGroup.length === 0) continue;
@@ -144,7 +145,7 @@ export async function standing(db: D1Database, eventId: string, registrationId: 
     .sort((a, b) => a - b)
     .map((i) => {
       const p = byId.get(table[i]!.id)!;
-      return { place: placeOf(table[i]!.n), name: shortName(p.first_name, p.preferred_name, p.last_name), collected: table[i]!.n, isYou: table[i]!.id === registrationId };
+      return { place: placeOf(table[i]!.n), name: shortName(p.first_name, p.last_name), collected: table[i]!.n, isYou: table[i]!.id === registrationId };
     });
 
   return {
@@ -174,21 +175,23 @@ export async function activitiesDone(db: D1Database, eventId: string, registrati
 export async function leaderboard(db: D1Database, eventId: string) {
   const { results } = await db
     .prepare(
-      `SELECT c.collector_id AS id, count(*) AS n, p.first_name, p.preferred_name, p.last_name, r.group_name, r.section
+      `SELECT c.collector_id AS id, count(*) AS n, p.first_name, p.last_name, r.group_name, r.level
          FROM side_quest_collections c JOIN registrations r ON r.id = c.collector_id JOIN people p ON p.id = r.person_id
-        WHERE c.event_id = ? GROUP BY c.collector_id ORDER BY n DESC, p.last_name COLLATE NOCASE LIMIT 100`,
+        WHERE c.event_id = ? GROUP BY c.collector_id ORDER BY n DESC LIMIT 100`,
     )
     .bind(eventId)
-    .all<{ id: string; n: number; first_name: string; preferred_name: string; last_name: string; group_name: string; section: string }>();
+    .all<{ id: string; n: number; first_name: string; last_name: string; group_name: string; level: string }>();
+  // Ties by name, sorted here: names are encrypted in the database.
+  sortByName(results).sort((a, b) => b.n - a.n);
   const total = await db.prepare(`SELECT count(*) AS n FROM side_quest_collections WHERE event_id = ?`).bind(eventId).first<{ n: number }>();
   return {
     collections: total?.n ?? 0,
     rows: results.map((r, i, all) => ({
       registrationId: r.id,
       place: 1 + all.filter((x) => x.n > r.n).length,
-      name: `${r.preferred_name || r.first_name} ${r.last_name}`,
+      name: `${r.first_name} ${r.last_name}`,
       groupName: r.group_name,
-      section: r.section,
+      level: r.level,
       collected: r.n,
       rank: i,
     })),

@@ -71,9 +71,9 @@ export function ComponentSheet() {
             <Field id="c-pref" label="Goes by" optional hint="Shown on their lanyard.">
               <input className="input" />
             </Field>
-            <Field id="c-sel" label="Section">
+            <Field id="c-sel" label="Level">
               <select className="select">
-                <option>Cubs</option>
+                <option>Juniors</option>
               </select>
             </Field>
             <Field id="c-notes" label="Notes" optional>
@@ -125,7 +125,7 @@ export function ComponentSheet() {
                 <span className="row-title">
                   <a href="#c-lists">Sam Lee</a>
                 </span>
-                <span className="row-meta">Cubs · Red Gum Cub Pack</span>
+                <span className="row-meta">Juniors · Red Gum Club</span>
               </span>
               <Badge tone="success">On site</Badge>
               <span className="row-side">

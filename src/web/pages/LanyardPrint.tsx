@@ -81,7 +81,7 @@ export function LanyardPrint() {
   const [cutLines, setCutLines] = useRemembered(`${key}:cut`, true);
   const [query, setQuery] = useState('');
   const [group, setGroup] = useRemembered(`${key}:group`, '');
-  const [section, setSection] = useRemembered(`${key}:section`, '');
+  const [level, setLevel] = useRemembered(`${key}:level`, '');
   const [onlyNoPhotos, setOnlyNoPhotos] = useRemembered(`${key}:nophoto`, false);
   const [status, setStatus] = useRemembered<Status>(`${key}:status`, 'all');
   const [sort, setSort] = useRemembered<Sort>(`${key}:sort`, 'group');
@@ -114,21 +114,21 @@ export function LanyardPrint() {
   }, [load]);
 
   const all = useMemo(() => cards ?? [], [cards]);
-  const sectionWord = (c: Card) => c.style?.word || c.section;
+  const levelWord = (c: Card) => c.style?.word || c.level;
   const groups = useMemo(() => [...new Set(all.map((c) => c.groupName))].filter(Boolean).sort(), [all]);
-  const sections = useMemo(() => [...new Set(all.map(sectionWord))].filter(Boolean).sort(), [all]);
+  const levels = useMemo(() => [...new Set(all.map(levelWord))].filter(Boolean).sort(), [all]);
   const countBy = (pick: (c: Card) => string) => all.reduce<Record<string, number>>((m, c) => ((m[pick(c)] = (m[pick(c)] ?? 0) + 1), m), {});
   const groupCounts = useMemo(() => countBy((c) => c.groupName), [all]); // eslint-disable-line react-hooks/exhaustive-deps
-  const sectionCounts = useMemo(() => countBy(sectionWord), [all]); // eslint-disable-line react-hooks/exhaustive-deps
+  const levelCounts = useMemo(() => countBy(levelWord), [all]); // eslint-disable-line react-hooks/exhaustive-deps
   // Filters that no longer match anything (a group renamed, say) don't hide everyone.
   const activeGroup = groups.includes(group) ? group : '';
-  const activeSection = sections.includes(section) ? section : '';
+  const activeLevel = levels.includes(level) ? level : '';
 
   const shown = all
     .filter(
       (c) =>
         (!activeGroup || c.groupName === activeGroup) &&
-        (!activeSection || sectionWord(c) === activeSection) &&
+        (!activeLevel || levelWord(c) === activeLevel) &&
         (!onlyNoPhotos || c.noPhotos) &&
         (status === 'all' || (status === 'unprinted' ? !c.printedAt : !!c.printedAt)) &&
         (!query || `${c.name} ${c.shortCode}`.toLowerCase().includes(query.toLowerCase())),
@@ -137,7 +137,7 @@ export function LanyardPrint() {
   const unprintedCount = all.filter((c) => !c.printedAt).length;
   const selected = shown.filter((c) => !excluded.has(c.registrationId));
   const noPhotoCount = all.filter((c) => c.noPhotos).length;
-  const filtered = !!(activeGroup || activeSection || onlyNoPhotos || status !== 'all' || query);
+  const filtered = !!(activeGroup || activeLevel || onlyNoPhotos || status !== 'all' || query);
 
   async function issueMissing() {
     try {
@@ -245,7 +245,7 @@ export function LanyardPrint() {
   const clearFilters = () => {
     setQuery('');
     setGroup('');
-    setSection('');
+    setLevel('');
     setOnlyNoPhotos(false);
     setStatus('all');
   };
@@ -308,7 +308,7 @@ export function LanyardPrint() {
             <Toolbar label="Find people">
               <SearchField id="ly-q" label="Search name or code" placeholder="Name or code" value={query} onChange={setQuery} slash />
               {groups.length > 1 && (
-                <select className="select" aria-label="Scout group" value={activeGroup} onChange={(e) => setGroup(e.target.value)}>
+                <select className="select" aria-label="Group" value={activeGroup} onChange={(e) => setGroup(e.target.value)}>
                   <option value="">All groups</option>
                   {groups.map((g) => (
                     <option key={g} value={g}>
@@ -317,12 +317,12 @@ export function LanyardPrint() {
                   ))}
                 </select>
               )}
-              {sections.length > 1 && (
-                <select className="select" aria-label="Section" value={activeSection} onChange={(e) => setSection(e.target.value)}>
-                  <option value="">All sections</option>
-                  {sections.map((s) => (
+              {levels.length > 1 && (
+                <select className="select" aria-label="Level" value={activeLevel} onChange={(e) => setLevel(e.target.value)}>
+                  <option value="">All levels</option>
+                  {levels.map((s) => (
                     <option key={s} value={s}>
-                      {s} ({sectionCounts[s] ?? 0})
+                      {s} ({levelCounts[s] ?? 0})
                     </option>
                   ))}
                 </select>
@@ -404,7 +404,7 @@ export function LanyardPrint() {
                             {c.noPhotos && <Icon name="noPhoto" size={16} label="No photo consent" />}
                           </span>
                           <span className="ly-person-meta">
-                            {[c.groupName, sectionWord(c)].filter(Boolean).join(' · ')} · Issued {stamp(c.issuedAt)}
+                            {[c.groupName, levelWord(c)].filter(Boolean).join(' · ')} · Issued {stamp(c.issuedAt)}
                           </span>
                         </span>
                         {c.printedAt ? (

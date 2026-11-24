@@ -1,10 +1,10 @@
 import { useId } from 'react';
-import { SECTION_COLOUR, SECTION_COLOURS, SECTION_TEXT_COLOUR } from '../../shared/lanyardDesign';
+import { LEVEL_COLOUR, LEVEL_COLOURS, LEVEL_TEXT_COLOUR } from '../../shared/lanyardDesign';
 
 const BASICS = ['#FFFFFF', '#000000', '#16201B', '#45514C', '#1F5C46', '#00843D', '#7A1F3D', '#C8102E', '#1F5FA8', '#F2B705', '#E8601C'];
 
 /**
- * Pick a colour: common swatches, "follows the section", or any colour.
+ * Pick a colour: common swatches, "follows the level", or any colour.
  * Every swatch has a name for screen readers.
  */
 export function ColourField({
@@ -12,22 +12,22 @@ export function ColourField({
   value,
   onChange,
   allowNone,
-  section,
+  level,
   extra,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   allowNone?: boolean;
-  /** Offer the section colour ('fill') or the text colour that reads on it ('text'). */
-  section?: 'fill' | 'text';
+  /** Offer the level colour ('fill') or the text colour that reads on it ('text'). */
+  level?: 'fill' | 'text';
   /** The camp's own colour, if it has one. */
   extra?: string | null;
 }) {
   const id = useId();
   const swatches = [...new Set([...(extra ? [extra.toUpperCase()] : []), ...BASICS])];
   const hex = /^#[0-9A-Fa-f]{6}$/.test(value) ? value.toUpperCase() : null;
-  const sectionValue = section === 'text' ? SECTION_TEXT_COLOUR : SECTION_COLOUR;
+  const levelValue = level === 'text' ? LEVEL_TEXT_COLOUR : LEVEL_COLOUR;
   return (
     <fieldset className="colour-field">
       <legend className="studio-label">{label}</legend>
@@ -37,16 +37,16 @@ export function ColourField({
             <span className="visually-hidden">None</span>
           </button>
         )}
-        {section && (
+        {level && (
           <button
             type="button"
             className="swatch swatch-section"
-            aria-pressed={value === sectionValue}
-            onClick={() => onChange(sectionValue)}
-            title={section === 'text' ? 'Reads on the section colour' : 'Section colour (Scout green, Venturer maroon, Rover red, Leader eucalypt)'}
-            style={{ background: `conic-gradient(${Object.values(SECTION_COLOURS).map((c, i, a) => `${c.bg} ${(i / a.length) * 360}deg ${((i + 1) / a.length) * 360}deg`).join(', ')})` }}
+            aria-pressed={value === levelValue}
+            onClick={() => onChange(levelValue)}
+            title={level === 'text' ? 'Reads on the level colour' : 'Level colour (each level’s colour from Settings › Levels)'}
+            style={{ background: `conic-gradient(${Object.values(LEVEL_COLOURS).map((c, i, a) => `${c.bg} ${(i / a.length) * 360}deg ${((i + 1) / a.length) * 360}deg`).join(', ')})` }}
           >
-            <span className="visually-hidden">{section === 'text' ? 'Text colour for the section' : 'Section colour'}</span>
+            <span className="visually-hidden">{level === 'text' ? 'Text colour for the level' : 'Section colour'}</span>
           </button>
         )}
         {swatches.map((c) => (
@@ -68,7 +68,7 @@ export function ColourField({
           key={value}
           className="input input-small"
           defaultValue={hex ?? ''}
-          placeholder={value === SECTION_COLOUR ? 'Section colour' : value === SECTION_TEXT_COLOUR ? 'Section text colour' : value === 'none' ? 'None' : '#000000'}
+          placeholder={value === LEVEL_COLOUR ? 'Level colour' : value === LEVEL_TEXT_COLOUR ? 'Level text colour' : value === 'none' ? 'None' : '#000000'}
           spellCheck={false}
           onChange={(e) => {
             const v = e.target.value.trim();

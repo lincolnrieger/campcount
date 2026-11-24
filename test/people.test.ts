@@ -1,19 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { hashToken } from '../src/worker/services/credentials';
-import { api, createEvent, createUser, grant, json, testEnv } from './helpers';
+import { api, createEvent, createUser, grant, json, testEnv, keyFor, vaultDb } from './helpers';
 
-const person = (memberNumber: string, o: Record<string, unknown> = {}) => ({
-  memberNumber,
-  firstName: `First${memberNumber}`,
-  preferredName: '',
+const person = (participantId: string, o: Record<string, unknown> = {}) => ({
+  participantId,
+  firstName: `First${participantId}`,
   lastName: 'Person',
   kind: 'youth',
-  section: 'Scouts',
-  groupName: 'Example Troop',
-  position: '',
-  roleLabel: '',
-  team: '',
-  sourceStatus: '',
+  level: 'Seniors',
+  groupName: 'Example Club',
   photoConsent: 'yes',
   dietaryFingerprint: null,
   ...o,
@@ -26,7 +21,7 @@ async function camp() {
   await testEnv.DB.prepare(`UPDATE events SET feature_dietary = 1, feature_meals = 1, feature_site = 1 WHERE id = ?`).bind(eventId).run();
   const manager = await createUser({ name: 'Mandy Manager' });
   await grant(manager.id, 'event_manager', eventId);
-  await api(`/events/${eventId}/import/commit`, { cookie: manager.cookie, body: { rows: [person('100'), person('200'), person('300', { kind: 'adult', section: 'Leaders' })] } });
+  await api(`/events/${eventId}/import/commit`, { cookie: manager.cookie, body: { rows: [person('100'), person('200'), person('300', { kind: 'adult', level: 'Leaders' })] } });
   await api(`/events/${eventId}/credentials/issue`, { cookie: manager.cookie, body: { mode: 'missing' } });
   const { cards } = await json(await api(`/events/${eventId}/credentials/print`, { cookie: manager.cookie, body: {} }));
   const kayak = await json(await api(`/events/${eventId}/activities`, { cookie: manager.cookie, body: { name: 'Kayaking', trackSignOut: true } }));
@@ -88,7 +83,7 @@ describe('a person on the event', () => {
     await c.scan('meal', c.mealId, '100');
     const id = c.card('100').registrationId;
     const res = await json(await api(`/events/${c.eventId}/registrations/${id}`, { cookie: c.manager.cookie }));
-    expect(res.registration).toMatchObject({ firstName: 'First100', memberNumber: '100', photoConsent: 'yes', dietary: [] });
+    expect(res.registration).toMatchObject({ firstName: 'First100', participantId: '100', photoConsent: 'yes', dietary: [] });
     expect(res.can).toEqual({ edit: true, editDietary: true, cards: true });
     expect(res.where.site).toBe('on');
     expect(res.history.map((h: { place: string; outcome: string }) => [h.place, h.outcome])).toEqual([
@@ -99,24 +94,24 @@ describe('a person on the event', () => {
     expect(res.history[0].by).toBe('Mandy Manager');
   });
 
-  it('lets event managers edit details and dietary needs, and refuses a duplicate membership number', async () => {
+  it('lets event managers edit details and dietary needs, and refuses a duplicate participant ID', async () => {
     const c = await camp();
     // Someone only on this camp (people on other camps too can't be renamed from here; see crossCamp.test.ts).
     const own = String(500000 + Math.floor(Math.random() * 499999));
     await api(`/events/${c.eventId}/import/commit`, { cookie: c.manager.cookie, body: { rows: [person(own)], withdrawMissing: false } });
-    const id = (await testEnv.DB.prepare(
-      `SELECT r.id FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.event_id = ? AND p.member_number = ?`,
+    const id = (await vaultDb().prepare(
+      `SELECT r.id FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.event_id = ? AND p.participant_key = ?`,
     )
-      .bind(c.eventId, own)
+      .bind(c.eventId, await keyFor(own))
       .first<{ id: string }>())!.id;
     const path = `/events/${c.eventId}/registrations/${id}`;
-    expect((await api(path, { cookie: c.manager.cookie, method: 'PATCH', body: { preferredName: 'Sam', groupName: 'New Troop', photoConsent: 'no' } })).status).toBe(200);
-    expect((await api(path, { cookie: c.manager.cookie, method: 'PATCH', body: { memberNumber: '200' } })).status).toBe(409);
+    expect((await api(path, { cookie: c.manager.cookie, method: 'PATCH', body: { groupName: 'New Club', photoConsent: 'no' } })).status).toBe(200);
+    expect((await api(path, { cookie: c.manager.cookie, method: 'PATCH', body: { participantId: '200' } })).status).toBe(409);
     expect(
       (await api(`${path}/dietary`, { cookie: c.manager.cookie, method: 'PUT', body: { entries: [{ category: 'allergy', item: 'Peanut', severity: 'anaphylactic' }] } })).status,
     ).toBe(200);
     const res = await json(await api(path, { cookie: c.manager.cookie }));
-    expect(res.registration).toMatchObject({ preferredName: 'Sam', displayName: 'Sam P.', groupName: 'New Troop', photoConsent: 'no' });
+    expect(res.registration).toMatchObject({ displayName: `First${own} P.`, groupName: 'New Club', photoConsent: 'no' });
     expect(res.registration.dietary).toEqual([{ category: 'allergy', item: 'Peanut', severity: 'anaphylactic', note: '' }]);
 
     const scanner = await createUser();
@@ -198,7 +193,7 @@ describe('admin activity log', () => {
   it('lists scans and changes together, newest first, with filters', async () => {
     const c = await camp();
     await c.scan('site', null, '100');
-    await api(`/events/${c.eventId}/registrations/${c.card('200').registrationId}`, { cookie: c.manager.cookie, method: 'PATCH', body: { groupName: 'Renamed Troop' } });
+    await api(`/events/${c.eventId}/registrations/${c.card('200').registrationId}`, { cookie: c.manager.cookie, method: 'PATCH', body: { groupName: 'Renamed Club' } });
 
     const all = await json(await api(`/admin/log?eventId=${c.eventId}`, { cookie: c.admin.cookie }));
     const scan = all.entries.find((e: { kind: string }) => e.kind === 'scan');
@@ -208,8 +203,10 @@ describe('admin activity log', () => {
 
     const scansOnly = await json(await api(`/admin/log?eventId=${c.eventId}&kind=scans`, { cookie: c.admin.cookie }));
     expect(scansOnly.entries.every((e: { kind: string }) => e.kind === 'scan')).toBe(true);
-    const searched = await json(await api(`/admin/log?eventId=${c.eventId}&q=First200`, { cookie: c.admin.cookie }));
+    // Participant names are encrypted, so the search finds places, staff and actions, not participants.
+    const searched = await json(await api(`/admin/log?eventId=${c.eventId}&q=registration.update`, { cookie: c.admin.cookie }));
     expect(searched.entries.map((e: { kind: string }) => e.kind)).toEqual(['change']);
+    expect((await json(await api(`/admin/log?eventId=${c.eventId}&q=First200`, { cookie: c.admin.cookie }))).entries).toEqual([]);
 
     expect((await api('/admin/log', { cookie: c.manager.cookie })).status).toBe(403);
   });
@@ -232,17 +229,18 @@ describe('activity and meal times', () => {
 });
 
 describe('adding someone by hand', () => {
-  it('puts them on the roster with a card, and refuses a duplicate membership number', async () => {
+  it('puts them on the roster with a card, and refuses a duplicate participant ID', async () => {
     const c = await camp();
-    const body = { firstName: 'Hana', lastName: 'Cook', memberNumber: null, kind: 'adult', section: 'Leaders', position: 'Cook', photoConsent: 'yes', dietary: [] };
+    const body = { firstName: 'Hana', lastName: 'Cook', participantId: null, kind: 'adult', level: 'Leaders', photoConsent: 'yes', dietary: [] };
     const res = await api(`/events/${c.eventId}/registrations`, { cookie: c.manager.cookie, body });
     expect(res.status).toBe(201);
     const { registrationId } = await json(res);
     const person = (await json(await api(`/events/${c.eventId}/registrations/${registrationId}`, { cookie: c.manager.cookie }))).registration;
-    expect(person).toMatchObject({ kind: 'adult', position: 'Cook' });
-    expect(person.memberNumber).toMatch(/^GUEST-/);
+    expect(person).toMatchObject({ kind: 'adult', firstName: 'Hana', lastName: 'Cook' });
+    expect(person).not.toHaveProperty('position');
+    expect(person.participantId).toMatch(/^GUEST-/);
     expect(person.shortCode).not.toBeNull();
-    expect((await api(`/events/${c.eventId}/registrations`, { cookie: c.manager.cookie, body: { ...body, memberNumber: '100' } })).status).toBe(409);
+    expect((await api(`/events/${c.eventId}/registrations`, { cookie: c.manager.cookie, body: { ...body, participantId: '100' } })).status).toBe(409);
     const scanner = await createUser();
     await grant(scanner.id, 'scanner', c.eventId);
     expect((await api(`/events/${c.eventId}/registrations`, { cookie: scanner.cookie, body })).status).toBe(403);

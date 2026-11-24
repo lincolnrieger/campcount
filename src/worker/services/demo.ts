@@ -3,16 +3,18 @@ import { randomInt } from '../lib/crypto';
 import { nowIso } from '../lib/time';
 import { auditStatement } from './audit';
 import { issueStatements } from './credentials';
+import { participantKey, seal } from '../lib/vault';
+import { levelSettingsStatement } from './rosterWrites';
 import { eventDays, todayInZone, weekdayName, zonedIso } from '../../shared/time';
 
 /** Demo events use the default event timezone. */
 const DEMO_TZ = 'Australia/Adelaide';
 
 /**
- * Demo data for testing CampCount end to end without real member data.
- * Everything here is invented. Demo membership numbers start with "DEMO",
- * which real Scouts membership numbers never do, and demo accounts use the
- * reserved .invalid domain, so no email can ever be sent to them.
+ * Demo data for testing CampCount end to end without real participant data.
+ * Everything here is invented. Demo participant IDs start with "DEMO", and
+ * demo accounts use the reserved .invalid domain, so no email can ever be
+ * sent to them.
  */
 
 const FIRST = [
@@ -24,13 +26,19 @@ const LAST = [
   'Nguyen', 'Smith', 'Patel', 'Brown', 'Wilson', 'Taylor', 'Lee', 'Martin', 'Clarke', 'Walker', 'Chen', 'Kelly', 'Rossi',
   'Murphy', 'Singh', 'Hall', 'Young', 'King', 'Wright', 'Scott', 'Green', 'Baker', 'Adams', 'Hill', 'Campbell', 'Mitchell',
 ];
-const GROUPS: { name: string; section: 'Joeys' | 'Cubs' | 'Scouts' | 'Venturers' }[] = [
-  { name: 'Wattle Creek Joey Mob', section: 'Joeys' },
-  { name: 'Wattle Creek Cub Pack', section: 'Cubs' },
-  { name: 'Red Gum Cub Pack', section: 'Cubs' },
-  { name: 'Red Gum Scout Troop', section: 'Scouts' },
-  { name: 'Saltbush Scout Troop', section: 'Scouts' },
-  { name: 'Saltbush Venturer Unit', section: 'Venturers' },
+const DEMO_LEVELS = [
+  { name: 'Juniors', word: 'Junior', colour: '#B5651D', youth: true },
+  { name: 'Intermediates', word: 'Intermediate', colour: '#2E7D32', youth: true },
+  { name: 'Seniors', word: 'Senior', colour: '#7A1F3D', youth: true },
+  { name: 'Leaders', word: 'Leader', colour: '#262661', youth: false },
+];
+const GROUPS: { name: string; level: string }[] = [
+  { name: 'Wattle Creek Club', level: 'Juniors' },
+  { name: 'Wattle Creek Club', level: 'Intermediates' },
+  { name: 'Red Gum Youth Group', level: 'Intermediates' },
+  { name: 'Red Gum Youth Group', level: 'Seniors' },
+  { name: 'Saltbush School', level: 'Seniors' },
+  { name: 'Saltbush School', level: 'Juniors' },
 ];
 const DIETARY: [string, string, string][] = [
   ['preference', 'Vegetarian', 'standard'],
@@ -138,6 +146,7 @@ export async function createDemoEvent(env: Env, adminUserId: string, participant
   // People: youth across groups, plus a leader team.
   const registrationIds: string[] = [];
   const adults = Math.max(4, Math.round(participants / 8));
+  statements.push(levelSettingsStatement(db, eventId, DEMO_LEVELS));
   for (let i = 0; i < participants + adults; i++) {
     const adult = i >= participants;
     const group = pick(GROUPS);
@@ -147,23 +156,21 @@ export async function createDemoEvent(env: Env, adminUserId: string, participant
     registrationIds.push(registrationId);
     statements.push(
       db
-        .prepare(`INSERT INTO people (id, member_number, first_name, preferred_name, last_name, created_at, updated_at) VALUES (?, ?, ?, '', ?, ?, ?)`)
-        .bind(personId, member, pick(FIRST), pick(LAST), now, now),
+        .prepare(`INSERT INTO people (id, participant_id, participant_key, first_name, last_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .bind(personId, await seal(env, member), await participantKey(env, member), await seal(env, pick(FIRST)), await seal(env, pick(LAST)), now, now),
       db
         .prepare(
-          `INSERT INTO registrations (id, event_id, person_id, kind, section, group_name, position, role_label, photo_consent, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO registrations (id, event_id, person_id, kind, level, group_name, photo_consent, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           registrationId,
           eventId,
           personId,
           adult ? 'adult' : 'youth',
-          adult ? 'Leaders' : group.section,
-          group.name,
-          adult ? 'Leader' : `${group.section.replace(/s$/, '')} member`,
-          adult ? 'Leader' : 'Participant',
-          randomInt(10) < 8 ? 'yes' : randomInt(2) ? 'no' : 'unknown',
+          await seal(env, adult ? 'Leaders' : group.level),
+          await seal(env, group.name),
+          randomInt(10) < 8 ? 'yes' : 'no',
           now,
           now,
         ),
@@ -175,7 +182,7 @@ export async function createDemoEvent(env: Env, adminUserId: string, participant
           .prepare(
             `INSERT INTO dietary_entries (id, event_id, registration_id, category, item, severity, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           )
-          .bind(crypto.randomUUID(), eventId, registrationId, category, item, severity, adminUserId, now),
+          .bind(crypto.randomUUID(), eventId, registrationId, category, await seal(env, item), severity, adminUserId, now),
       );
     }
   }
@@ -297,7 +304,7 @@ export async function deleteDemoEvent(env: Env, adminUserId: string, eventId: st
     statements.push(
       db
         .prepare(
-          `DELETE FROM people WHERE id IN (${chunk.map(() => '?').join(',')}) AND member_number LIKE 'DEMO%'
+          `DELETE FROM people WHERE id IN (${chunk.map(() => '?').join(',')})
              AND NOT EXISTS (SELECT 1 FROM registrations r WHERE r.person_id = people.id)`,
         )
         .bind(...chunk),

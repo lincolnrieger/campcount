@@ -84,7 +84,7 @@ export function RollSheet() {
           </div>
           <div className="field">
             <label className="field-label" htmlFor="rs-group">
-              Scout group
+              Group
             </label>
             <select id="rs-group" className="select" value={group} onChange={(e) => setGroup(e.target.value)}>
               <option value="">All groups</option>
@@ -120,7 +120,7 @@ export function RollSheet() {
               <thead>
                 <tr>
                   <th scope="col">Name</th>
-                  <th scope="col">Scout group</th>
+                  <th scope="col">Group</th>
                   {cols.map((c) => (
                     <th scope="col" key={c} className="tick">
                       {c}
@@ -132,7 +132,7 @@ export function RollSheet() {
                 {people.map((p) => (
                   <tr key={p.id}>
                     <td>
-                      {p.preferredName || p.firstName} {p.lastName}
+                      {p.firstName} {p.lastName}
                     </td>
                     <td>{p.groupName}</td>
                     {cols.map((c) => (

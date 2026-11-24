@@ -40,19 +40,20 @@ Global (not event-scoped):
 - `sessions` (hashed id, user or station, expiry, revoked)
 - `login_codes`
 - `roles`, `role_permissions`
-- `people` (member_number UNIQUE, names) — minimal and non-sensitive
+- `people` (participant_id and names, all encrypted; participant_key, a keyed
+  hash, UNIQUE for lookups)
 - `audit_log` (append-only, enforced by database triggers)
 
 Event-scoped (every row carries `event_id`; every query filters on it):
 - `events` (dates, `Australia/Adelaide` timezone, lifecycle status, feature
   flags)
 - `assignments` (user × role × event, optionally × activity)
-- `registrations` (event × person UNIQUE): kind, group, section, position,
-  photo_consent, status
-- `dietary_entries` (registration, category, item, severity, note) —
-  **sensitive**
-- `credentials` (registration, token_hash UNIQUE, short_code UNIQUE per
-  event, revoked_at)
+- `registrations` (event × person UNIQUE): kind, group and level (encrypted),
+  photo_consent (yes / no), car_rego (encrypted), status
+- `dietary_entries` (registration, category, item and note encrypted,
+  severity) — **sensitive**
+- `credentials` (registration, token_hash UNIQUE, short_code encrypted with
+  short_code_key UNIQUE per event, revoked_at)
 - `activities`, `activity_bookings`, `meal_services`
 - `stations` (paired device: one context, expiry, revoked)
 - `scans` — append-only, with these fields:
@@ -68,6 +69,23 @@ Event-scoped (every row carries `event_id`; every query filters on it):
 
 Counts and reports are always computed from `scans`. There are no stored
 counters.
+
+## 2a. Encryption of participant data
+
+Personal fields are encrypted in the Worker before they reach D1
+(`src/worker/lib/vault.ts`): AES-256-GCM, a fresh random IV per value, under a
+key derived (HKDF) from the `DATA_KEY` secret. Stored values look like
+`enc1.<base64url>`. Participant IDs and typed lanyard codes also get a keyed
+HMAC-SHA-256 hash, so they can be looked up and kept unique without being
+stored in readable form. The database binding is wrapped so values read back
+are decrypted in memory; sorting and searching by name happen in the Worker.
+`DATA_KEY` is separate from `AUTH_SECRET`, so rotating the sign-in secret can
+never make participant data unreadable.
+
+What this protects against: a leaked database export, backup or console
+access shows no names, IDs, groups, levels or dietary details. It doesn't
+protect against someone who controls the running Worker or holds both the
+database and `DATA_KEY`.
 
 ## 3. Offline scanning design
 

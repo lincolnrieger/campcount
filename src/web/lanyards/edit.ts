@@ -57,7 +57,7 @@ export function makeElement(d: LanyardDesign, kind: 'text' | 'field' | 'qr' | 'r
       return { id: newId('circle'), name: 'Circle', type: 'shape', shape: 'ellipse', ...centre(s, s), fill: '#1F5C46', stroke: 'none', strokeWidth: 0, radius: 0, opacity: 1 };
     }
     case 'band':
-      return { id: newId('band'), name: 'Section band', type: 'shape', shape: 'rect', x: 0, y: 0, w, h: h * 0.15, fill: 'section', stroke: 'none', strokeWidth: 0, radius: 0, opacity: 1 };
+      return { id: newId('band'), name: 'Level band', type: 'shape', shape: 'rect', x: 0, y: 0, w, h: h * 0.15, fill: 'level', stroke: 'none', strokeWidth: 0, radius: 0, opacity: 1 };
     case 'marker': {
       const s = big ? 12 : 7;
       return { id: newId('marker'), name: 'No-photo mark', type: 'marker', x: w - s - 3, y: 3, w: s, h: s };

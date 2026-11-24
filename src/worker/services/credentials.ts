@@ -2,6 +2,7 @@ import { SHORT_CODE_ALPHABET, SHORT_CODE_LENGTH, memberCardCode } from '../../sh
 import type { Env } from '../env';
 import { decryptString, encryptString, randomInt, randomToken, sha256Hex } from '../lib/crypto';
 import { nowIso } from '../lib/time';
+import { seal, shortCodeKey } from '../lib/vault';
 
 const PURPOSE = 'campcount/credential-token/v1';
 
@@ -23,35 +24,38 @@ export async function hashToken(token: string): Promise<string> {
 export async function issueStatements(env: Env, eventId: string, registrationIds: string[]): Promise<D1PreparedStatement[]> {
   const now = nowIso();
   const statements: D1PreparedStatement[] = [];
-  // The typed code is the person's membership number; people without one get a random code.
+  // The typed code is the person's participant ID; people without one get a random code.
   const members = new Map<string, string>();
   for (let i = 0; i < registrationIds.length; i += 90) {
     const chunk = registrationIds.slice(i, i + 90);
     const { results } = await env.DB.prepare(
-      `SELECT r.id, p.member_number FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.id IN (${chunk.map(() => '?').join(', ')})`,
+      `SELECT r.id, p.participant_id FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.id IN (${chunk.map(() => '?').join(', ')})`,
     )
       .bind(...chunk)
-      .all<{ id: string; member_number: string }>();
-    for (const r of results) members.set(r.id, r.member_number);
+      .all<{ id: string; participant_id: string }>();
+    for (const r of results) members.set(r.id, r.participant_id);
   }
   for (const registrationId of registrationIds) {
     const token = randomToken(16);
+    const code = memberCardCode(members.get(registrationId)) ?? randomShortCode();
     statements.push(
-      // The old card stops working, and its typed code is retired so the new card can carry the same membership number.
+      // The old card stops working, and its typed code is retired so the new card can carry the same participant ID.
       env.DB.prepare(
-        `UPDATE credentials SET status = 'revoked', revoked_at = ?, short_code = short_code || '~' || substr(id, 1, 8)
+        `UPDATE credentials SET status = 'revoked', revoked_at = ?,
+            short_code = short_code || '~' || substr(id, 1, 8), short_code_key = short_code_key || '~' || substr(id, 1, 8)
           WHERE registration_id = ? AND status = 'active'`,
       ).bind(now, registrationId),
       env.DB.prepare(
-        `INSERT INTO credentials (id, event_id, registration_id, token_hash, token_ciphertext, short_code, issued_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO credentials (id, event_id, registration_id, token_hash, token_ciphertext, short_code, short_code_key, issued_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       ).bind(
         crypto.randomUUID(),
         eventId,
         registrationId,
         await hashToken(token),
         await encryptString(env.AUTH_SECRET, PURPOSE, token),
-        memberCardCode(members.get(registrationId)) ?? randomShortCode(),
+        await seal(env, code),
+        await shortCodeKey(env, code),
         now,
       ),
     );

@@ -25,7 +25,7 @@ Routes, API calls, permission checks and behaviour stay the same; only layout an
   - Section title follows the filter; "N people · updated HH:MM" live text.
   - Search by name / group (ranked); "Show everyone" clears the filter.
   - Empty state for no matches / no one.
-  - Wide: table Name (link to `people/:id`, state from home), Section (Leader for adults), Scout group, Where badge, mark button.
+  - Wide: table Name (link to `people/:id`, state from home), Level (Leader for adults), group, Where badge, mark button.
   - Narrow: list rows with the same data.
   - Mark by hand (open + site feature + `site.scan`, person has a site state): Arrived / Left → `recordByHand` → toast; error toast; busy state.
   - Pages of 50 with "Show all N".
@@ -51,7 +51,7 @@ Routes, API calls, permission checks and behaviour stay the same; only layout an
 
 ## Settings index (`/settings`, `SettingsIndex` in `Settings.tsx`)
 
-- Rows, by permission: Event details, Sections, Participant page banner, Lanyards (`event.configure`); Staff with count (`staff.manage`); Scanning stations with count (`stations.manage`); Copy event (not on the camp's own site, platform `platform.events.create`).
+- Rows, by permission: Event details, Levels, Participant page banner, Lanyards (`event.configure`); Staff with count (`staff.manage`); Scanning stations with count (`stations.manage`); Copy event (not on the camp's own site, platform `platform.events.create`).
 - Redirect to event home when nothing to show.
 - Event status (`event.close`): current status badge; allowed changes from `EVENT_TRANSITIONS` limited to Cancel event (danger) and Return to draft → confirm → `POST /transition` → toast, reload; error toast.
 
@@ -63,13 +63,13 @@ Routes, API calls, permission checks and behaviour stay the same; only layout an
 - Local checks (`checkEventForm`), server field errors, failure message.
 - Save → `PATCH /events/:id` with form, features and trimmed contact email → reload, toast, back to Settings. Cancel → Settings.
 
-## Sections (`/settings/sections`, `SectionsSettings.tsx`)
+## Levels (`/settings/sections`, `SectionsSettings.tsx`)
 
 - Redirect without `event.configure`; editable when draft/open.
-- Per section: swatch preview (word on colour), name, lanyard word, colour, youth (disabled for Leaders), built-in/added note, people count (`roster.view`).
-- Remove for added sections (disabled "In use" when people are in it); Add a section.
+- Per level: swatch preview (word on colour), name, lanyard word, colour, youth (disabled for Leaders), built-in/added note, people count (`roster.view`).
+- Remove for added levels (disabled "In use" when people are in it); Add a section.
 - Checks: every name filled, no duplicate names.
-- Save → `PATCH /events/:id {sections}` (with `from` for renames) → reload, toast, back. Cancel.
+- Save → `PATCH /events/:id {levels}` (with `from` for renames) → reload, toast, back. Cancel.
 
 ## Participant page banner (`/settings/banner`, `BannerSettings.tsx`)
 
@@ -145,7 +145,7 @@ Used from Account and Demo camps (admin tools in other areas). Left alone: not o
 Checked in Chromium at 1280×900 and 390×844 against a local demo camp, with a scripted run that clicks through
 each item above (no console errors from these pages):
 
-- Home: filters from the summary counts (plus the new At activities count), section filter, Show everyone, `/` to
+- Home: filters from the summary counts (plus the new At activities count), level filter, Show everyone, `/` to
   search, mark Arrived by hand, refresh, Show all, person link. Draft: steps with counts, step links, Open event.
   Activity leader view (via View as): the Activities pointer.
 - Reports: groups, Still signed in / Scans to check filters, name search, Sign everyone out (reason check, save),
@@ -153,7 +153,7 @@ each item above (no console errors from these pages):
   remembered tab.
 - Settings: every card, Cancel event / Return to draft (on a copied camp), status-locked Event details.
 - Event details: validation, feature switch, Ctrl+S save, Save button, contact email, Cancel.
-- Sections: duplicate-name check, add and remove an added section, lanyard word save, Ctrl+S, Leaders youth locked.
+- Levels: duplicate-name check, add and remove an added level, lanyard word save, Ctrl+S, Leaders youth locked.
 - Banner: upload, preview, remove.
 - Staff: role chips, search, change role, resend invite (demo accounts answer 409, as before), add someone new as
   activity leader (with activity), remove from event. Picking an existing account: the demo has no spare
@@ -161,4 +161,4 @@ each item above (no console errors from these pages):
 - Stations: set up (validation, pairing code), edit, stop, Reopen, delete, Delete finished; not-open notice.
 - Copy event: switches, copy runs and opens the new camp.
 - Links hub, Links for everyone (presets, New link, parts, on/off switch and menu, copy, rename, new address,
-  delete), Participant links (search, group and section filters, Clear, copy, Download CSV, Copy all).
+  delete), Participant links (search, group and level filters, Clear, copy, Download CSV, Copy all).

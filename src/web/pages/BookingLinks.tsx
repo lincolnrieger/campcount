@@ -34,7 +34,7 @@ export function BookingLinks() {
       title="Booking links"
       back={{ to: `${base}/links`, label: 'Links' }}
       summary={data && data.sessions.length > 0 ? plural(data.sessions.length, 'link') : undefined}
-      help="One link per activity, to put in an email before camp. People open it, type their membership number and they’re booked. The page never shows who a number belongs to."
+      help="One link per activity, to put in an email before camp. People open it, type their participant ID and they’re booked. The page never shows who a number belongs to."
       menu={data && data.sessions.length > 0 ? [{ label: 'Make new links…', danger: true, onSelect: () => void makeNew().catch(() => toast('No connection. Check your signal and try again.', { tone: 'error' })) }] : undefined}
     />
   );

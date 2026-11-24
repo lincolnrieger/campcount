@@ -1,22 +1,24 @@
 # All data CampCount stores
 
 Deletion times are counted from when the camp closes, and happen
-automatically.
+automatically. **Encrypted** means CampCount encrypts it (AES-256-GCM) before
+it reaches the database; only the app, holding a separate secret key, can
+read it.
 
 ## About participants and leaders
 
-| Data | Why it's kept | Sensitive? | Deleted after |
+| Data | Why it's kept | Stored | Deleted after |
 |---|---|---|---|
-| First, preferred and last name | Rosters, lanyards, scanning | Personal | 2 years |
-| Membership number | Matching people across imports; typed code on the lanyard | Personal | 2 years |
-| Youth or adult, section, group, position | Rosters and counts | Personal | 2 years |
-| Team, role at camp, status (active or withdrawn) | Running the camp | Personal | 2 years |
-| Photo consent (yes, no or unknown) | Marking lanyards so photographers know | Personal | **90 days** |
-| Dietary needs and allergies (item, type, anaphylactic yes/no, short note) | Meals | **Health** | **90 days** |
-| Medication consent answers (e.g. "Paracetamol OK") and swimming ability, from Consent2Go | First aid and water activities | **Health** | **90 days** |
-| Other columns a camp manager chooses to keep (up to 12, e.g. tent or bus) | Running the camp | Varies | **90 days** |
-| Leader's car registration | Contacting the owner about their car | Personal | 2 years |
-| Lanyard QR code (scrambled) and typed code | Scanning | Security | Code disabled at 90 days, deleted at 2 years |
+| First name (or initial) | Rosters, lanyards, scanning | Encrypted | 2 years |
+| Last name, initial, or nothing | Rosters, lanyards | Encrypted | 2 years |
+| Participant ID (made up if the file has none) | Matching people across imports; typed code on the lanyard | Encrypted, plus a keyed hash for lookups | 2 years |
+| Group | Rosters and reports | Encrypted | 2 years |
+| Level, and whether that counts as youth or adult | Lanyard colour, youth totals | Level encrypted | 2 years |
+| Status (active or withdrawn) | Running the camp | Plain | 2 years |
+| Photo consent (Yes or No) | Marking lanyards so photographers know | Plain | **90 days** |
+| Dietary needs and allergies (type, item, anaphylactic yes/no, short note) | Meals | Item and note encrypted | **90 days** |
+| Leader's car registration (if they give one at the gate) | Contacting the owner about their car | Encrypted | **90 days** |
+| Lanyard QR code and typed code | Scanning | Encrypted | Code disabled at 90 days, deleted at 2 years |
 | Scans: who, where, when, in or out, which phone or staff member | Attendance and whereabouts | Personal | 2 years |
 | Activity bookings, team members, duty rosters | Running the camp | Personal | 2 years |
 | Side Quest: who scanned whom (optional game) | The game | Personal | **90 days** |
@@ -46,9 +48,18 @@ contact details. It can't be changed and is kept for 7 years.
 
 ## Never stored
 
-- Home addresses or phone numbers
-- Medicare numbers or guardian details
+- Home addresses, phone numbers or emails of participants
+- Dates of birth, Medicare numbers, guardian or emergency contacts
+- Medical conditions, medication or swimming ability
 - Free-text medical notes
-- The imported spreadsheet
+- Preferred names, positions or any other spreadsheet column
+- The imported spreadsheet (it's read on the importing device and never uploaded)
 - Device locations
 - IP addresses (Cloudflare's own request logs see them, but CampCount doesn't store them)
+
+## On the importing device only (optional)
+
+If the camp manager leaves "Keep the other columns on this device" on during
+an import, the columns that weren't sent stay in that browser (IndexedDB),
+shown on each person's page on that device only. They're never uploaded and
+are wiped when that person signs out, or with "Remove from this device".

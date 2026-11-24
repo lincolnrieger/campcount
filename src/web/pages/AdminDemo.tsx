@@ -37,7 +37,7 @@ export function AdminDemo() {
         title="Demo camps"
         back={{ to: '/admin', label: 'Admin' }}
         summary={data && `${data.events.length} demo ${data.events.length === 1 ? 'camp' : 'camps'}`}
-        help="Practice camps with made-up people, to try every role. No real member data is used."
+        help="Practice camps with made-up people, to try every role. No real participant data is used."
         primary={
           <div className="pf-create">
             <select id="demo-size" className="select" aria-label="Size of the next demo camp" value={size} onChange={(e) => setSize(e.target.value)}>

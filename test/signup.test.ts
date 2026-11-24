@@ -1,18 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { api, createEvent, createUser, grant, json, testEnv } from './helpers';
 
-const person = (memberNumber: string) => ({
-  memberNumber,
-  firstName: `First${memberNumber}`,
-  preferredName: '',
+const person = (participantId: string) => ({
+  participantId,
+  firstName: `First${participantId}`,
   lastName: 'Person',
   kind: 'youth',
-  section: 'Scouts',
-  groupName: 'Example Troop',
-  position: '',
-  roleLabel: '',
-  team: '',
-  sourceStatus: '',
+  level: 'Seniors',
+  groupName: 'Example Club',
   photoConsent: 'yes',
   dietaryFingerprint: null,
 });
@@ -48,14 +43,14 @@ async function camp() {
 }
 
 describe('booking links and typed numbers', () => {
-  it('books from an emailed link by membership number, saying nothing about who it is', async () => {
+  it('books from an emailed link by participant ID, saying nothing about who it is', async () => {
     const c = await camp();
     const links = await json(await api(`/events/${c.eventId}/signup/links`, { cookie: c.manager.cookie }));
     expect(links.code).toMatch(/^[A-Za-z0-9_-]{10,}$/);
     expect(links.code).not.toBe(c.code);
     const page = await json(await api(`/public/signup/link/${links.code}/${c.kayak9}`));
     expect(page.session).toMatchObject({ name: 'Kayaking', booked: 0 });
-    const res = await api(`/public/signup/link/${links.code}/${c.kayak9}`, { body: { memberNumber: '100' } });
+    const res = await api(`/public/signup/link/${links.code}/${c.kayak9}`, { body: { participantId: '100' } });
     expect(res.status).toBe(200);
     const body = await json(res);
     expect(body.linkResult).toEqual({ booked: true, already: false, activity: 'Kayaking', problem: null });
@@ -65,12 +60,12 @@ describe('booking links and typed numbers', () => {
     const cancelled = await json(await api('/public/signup/cancel', { body: { pass: body.pass, activityId: c.kayak9 } }));
     expect(cancelled.bookings).toEqual([]);
     expect(cancelled.person.lastName).toBe('');
-    await api(`/public/signup/link/${links.code}/${c.kayak9}`, { body: { memberNumber: '100' } });
-    expect((await json(await api(`/public/signup/link/${links.code}/${c.kayak9}`, { body: { memberNumber: '100' } }))).linkResult).toMatchObject({ already: true });
+    await api(`/public/signup/link/${links.code}/${c.kayak9}`, { body: { participantId: '100' } });
+    expect((await json(await api(`/public/signup/link/${links.code}/${c.kayak9}`, { body: { participantId: '100' } }))).linkResult).toMatchObject({ already: true });
     // A clash still opens their page, with the reason; an unknown number doesn't.
-    const clash = await json(await api(`/public/signup/link/${links.code}/${c.archery10}`, { body: { memberNumber: '100' } }));
+    const clash = await json(await api(`/public/signup/link/${links.code}/${c.archery10}`, { body: { participantId: '100' } }));
     expect(clash.linkResult).toMatchObject({ booked: false, problem: expect.stringMatching(/clashes with Kayaking/) });
-    expect((await api(`/public/signup/link/${links.code}/${c.kayak9}`, { body: { memberNumber: '999999' } })).status).toBe(409);
+    expect((await api(`/public/signup/link/${links.code}/${c.kayak9}`, { body: { participantId: '999999' } })).status).toBe(409);
     expect((await api(`/public/signup/link/${c.code}/${c.kayak9}`)).status).toBe(404);
     // New links: the old ones stop working.
     await api(`/events/${c.eventId}/signup/links/new`, { cookie: c.manager.cookie, body: {} });
@@ -85,7 +80,7 @@ describe('booking links and typed numbers', () => {
     expect(after.person).toMatchObject({ lastName: '', groupName: '' });
     // Their own lanyard link shows everything.
     const own = await json(await api('/public/signup/identify', { body: { token: c.card('100').token } }));
-    expect(own.person).toMatchObject({ lastName: 'Person', groupName: 'Example Troop' });
+    expect(own.person).toMatchObject({ lastName: 'Person', groupName: 'Example Club' });
   });
 });
 
@@ -101,7 +96,7 @@ describe('activity sign-up', () => {
   it('books by scanned lanyard or typed card code, enforcing places and clashes', async () => {
     const c = await camp();
     const me = await json(await api('/public/signup/identify', { body: { token: c.card('100').token, code: c.code } }));
-    expect(me.person).toMatchObject({ name: 'First100 P.', firstName: 'First100', groupName: 'Example Troop', sectionWord: 'Scout' });
+    expect(me.person).toMatchObject({ name: 'First100 P.', firstName: 'First100', groupName: 'Example Club', levelWord: 'Senior' });
 
     let res = await json(await api('/public/signup/book', { body: { pass: me.pass, activityId: c.kayak9 } }));
     expect(res.bookings.map((b: { activityId: string }) => b.activityId)).toEqual([c.kayak9]);
@@ -301,7 +296,7 @@ describe('links for everyone', () => {
     expect(JSON.stringify(info)).not.toContain('First100');
 
     // A booking-only page: sessions to book, no programme or teams; a reduced page (no surname or group).
-    const view = await json(await api(`/public/signup/p/${code(bookOnly)}`, { body: { memberNumber: '100' } }));
+    const view = await json(await api(`/public/signup/p/${code(bookOnly)}`, { body: { participantId: '100' } }));
     expect(view.features).toEqual(['book']);
     expect(view.sessions.length).toBe(3);
     expect(view.programme).toEqual([]);
@@ -312,7 +307,7 @@ describe('links for everyone', () => {
     expect((await api('/public/signup/meals', { body: { pass: view.pass } })).status).toBe(403);
 
     // A look-only page can't book or cancel, even with a hand-made request.
-    const look = await json(await api(`/public/signup/p/${code(lookOnly)}`, { body: { memberNumber: '100' } }));
+    const look = await json(await api(`/public/signup/p/${code(lookOnly)}`, { body: { participantId: '100' } }));
     expect(look.sessions).toEqual([]);
     expect(look.bookings[0]).toMatchObject({ name: 'Kayaking', canCancel: false });
     expect((await api('/public/signup/book', { body: { pass: look.pass, activityId: c.archery10 } })).status).toBe(403);
@@ -329,7 +324,7 @@ describe('links for everyone', () => {
     expect((await api('/public/signup/view', { body: { pass: own.pass } })).status).toBe(401);
 
     // Unknown numbers, switched-off and deleted links.
-    expect((await api(`/public/signup/p/${code(bookOnly)}`, { body: { memberNumber: '999' } })).status).toBe(409);
+    expect((await api(`/public/signup/p/${code(bookOnly)}`, { body: { participantId: '999' } })).status).toBe(409);
     await api(`/events/${c.eventId}/participant-links/${bookOnly.id}`, { method: 'PATCH', cookie: c.manager.cookie, body: { active: false } });
     expect((await api(`/public/signup/p/${code(bookOnly)}`)).status).toBe(404);
     const fresh = await json(await api(`/events/${c.eventId}/participant-links/${lookOnly.id}/new-code`, { cookie: c.manager.cookie, body: {} }));

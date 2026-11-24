@@ -24,6 +24,13 @@ import { lanyardAssetRoutes, lanyardDesignRoutes } from './routes/lanyardDesign'
 import { resolveSite } from './services/site';
 import { notFound } from './lib/errors';
 import { runMaintenance } from './services/maintenance';
+import { withVault } from './lib/vault';
+import { ensureSealed } from './services/sealExisting';
+
+/** The bindings with participant data decrypted on the way out of the database (see lib/vault.ts). */
+export function vaultEnv(env: Env): Env {
+  return { ...env, DB: withVault(env.DB, env) };
+}
 
 export const app = new Hono<AppEnv>().basePath('/api');
 
@@ -36,12 +43,19 @@ app.use('*', async (c, next) => {
   c.res.headers.set('X-Request-Id', c.get('requestId'));
 });
 app.use('*', securityHeaders);
-// Refuse to run without the secret that signs sign-in codes and encrypts card tokens.
+// Refuse to run without the secrets that sign sign-in codes and encrypt participant data.
 app.use('*', async (c, next) => {
-  if (!c.env.AUTH_SECRET || c.env.AUTH_SECRET.length < 32) {
-    console.error('AUTH_SECRET is not set (or shorter than 32 characters). Add it under Settings, Variables and Secrets.');
-    throw new ApiError(503, 'not_configured', 'CampCount is not fully set up yet. Please tell your CampCount administrator.');
+  for (const name of ['AUTH_SECRET', 'DATA_KEY'] as const) {
+    if (!c.env[name] || c.env[name]!.length < 32) {
+      console.error(`${name} is not set (or shorter than 32 characters). Add it under Settings, Variables and Secrets.`);
+      throw new ApiError(503, 'not_configured', 'CampCount is not fully set up yet. Please tell your CampCount administrator.');
+    }
   }
+  await next();
+});
+// Participant data written before encryption is encrypted before anything else reads or writes it.
+app.use('*', async (c, next) => {
+  await ensureSealed(c.env);
   await next();
 });
 app.use('*', sameOriginWrites);
@@ -110,10 +124,10 @@ app.onError((err, c) => {
 });
 
 export default {
-  fetch: app.fetch,
+  fetch: (request, env, ctx) => app.fetch(request, vaultEnv(env), ctx),
   async scheduled(_controller, env, ctx) {
     ctx.waitUntil(
-      runMaintenance(env).then(
+      runMaintenance(vaultEnv(env)).then(
         (r) => console.log(JSON.stringify({ level: 'info', event: 'maintenance_done', ...r })),
         (err: unknown) => {
           // Shows in Workers logs and as a failed cron run, so an alert can watch for it.

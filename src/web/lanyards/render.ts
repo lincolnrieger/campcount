@@ -58,8 +58,8 @@ export interface Painter {
 export const SAMPLE_PERSON: CardPerson = {
   name: FIELDS.name.sample,
   kind: 'youth',
-  section: 'Scouts',
-  groupName: '1st Example Scout Group',
+  level: 'Participants',
+  groupName: 'Example Group',
   shortCode: '1234567',
   qr: 'https://campcount.com/c#sample-card-preview-only',
 };

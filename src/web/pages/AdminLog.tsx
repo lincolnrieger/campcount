@@ -101,7 +101,7 @@ const ACTIONS: Record<string, string> = {
 };
 
 const FIELD_WORDS: Record<string, string> = {
-  memberNumber: 'membership number',
+  participantId: 'participant ID',
   firstName: 'first name',
   preferredName: 'goes-by name',
   lastName: 'last name',

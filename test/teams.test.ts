@@ -1,18 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { api, createEvent, createUser, grant, json, testEnv } from './helpers';
 
-const person = (memberNumber: string, photoConsent = 'yes') => ({
-  memberNumber,
-  firstName: `First${memberNumber}`,
-  preferredName: '',
+const person = (participantId: string, photoConsent = 'yes') => ({
+  participantId,
+  firstName: `First${participantId}`,
   lastName: 'Person',
   kind: 'youth',
-  section: 'Venturers',
+  level: 'Explorers',
   groupName: 'Example Unit',
-  position: '',
-  roleLabel: '',
-  team: '',
-  sourceStatus: '',
   photoConsent,
   dietaryFingerprint: null,
 });
@@ -24,7 +19,7 @@ async function camp(status = 'open') {
   await grant(manager.id, 'event_manager', eventId);
   await api(`/events/${eventId}/import/commit`, {
     cookie: manager.cookie,
-    body: { rows: [person('100'), person('200'), person('300', 'no'), person('400', 'unknown')] },
+    body: { rows: [person('100'), person('200'), person('300', 'no'), person('400', 'no')] },
   });
   await api(`/events/${eventId}/credentials/issue`, { cookie: manager.cookie, body: { mode: 'missing' } });
   const { cards } = await json(await api(`/events/${eventId}/credentials/print`, { cookie: manager.cookie, body: {} }));
@@ -114,7 +109,7 @@ describe('team events', () => {
       await api(`/events/${c.eventId}/team-events`, { cookie: c.manager.cookie, body: { name: 'Soccer', minSize: 1, maxSize: 4, registrationOpen: true } }),
     );
     // A leader on the camp.
-    await api(`/events/${c.eventId}/import/commit`, { cookie: c.manager.cookie, body: { rows: [{ ...person('900'), kind: 'adult', section: 'Leaders' }] } });
+    await api(`/events/${c.eventId}/import/commit`, { cookie: c.manager.cookie, body: { rows: [{ ...person('900'), kind: 'adult', level: 'Leaders' }] } });
     await api(`/events/${c.eventId}/credentials/issue`, { cookie: c.manager.cookie, body: { mode: 'missing' } });
     const { cards } = await json(await api(`/events/${c.eventId}/credentials/print`, { cookie: c.manager.cookie, body: {} }));
     const leader = cards.find((x: { name: string }) => x.name.startsWith('First900'));

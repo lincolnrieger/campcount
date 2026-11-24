@@ -45,7 +45,7 @@ describe('lanyard artwork', () => {
     expect((await api(path, { cookie: c.scanner.cookie })).status).toBe(403);
   });
 
-  it('remembers whether to print the section band over the artwork', async () => {
+  it('remembers whether to print the level band over the artwork', async () => {
     const c = await camp();
     const before = await json(await api(`/events/${c.eventId}`, { cookie: c.manager.cookie }));
     expect(before.event.lanyard.printBand).toBe(true);

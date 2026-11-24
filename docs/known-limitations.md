@@ -16,7 +16,7 @@ mitigation or a planned fix.
   and forgotten passwords.
 - **Microsoft 365 (Entra ID) sign-in.** This needs the organisation's IT approval.
 - **Editing dietary entries outside an import.** For now, change the note
-  in MyScout and re-import.
+  in the spreadsheet and re-import.
 
 ## Offline
 
@@ -30,7 +30,7 @@ mitigation or a planned fix.
 - If a phone is lost or broken before uploading, its waiting scans are lost.
   The paper roll sheet covers this.
 - The offline list on a phone is not encrypted beyond the phone's own
-  device encryption. It holds display names, membership numbers, groups,
+  device encryption. It holds display names, participant IDs, groups,
   photo markers and, on meal phones only, dietary alerts. It is wiped on
   sign-out. Someone holding an unlocked, signed-in phone can see it.
 
@@ -54,8 +54,8 @@ mitigation or a planned fix.
 ## Platform
 
 - **Shared people records:** someone who goes to several camps has one
-  record (by membership number). Their name can only be changed by someone
-  who can edit every camp they're on. Otherwise, correct it in MyScout and
+  record (by participant ID). Their name can only be changed by someone
+  who can edit every camp they're on. Otherwise, correct it in the spreadsheet and
   import again.
 - **Printed codes on scanner phones:** a scanner's offline list holds a fast
   hash of each lanyard's printed code. With a scanner phone and technical
@@ -66,7 +66,18 @@ mitigation or a planned fix.
   DEPLOY.md.
 - **Data location:** the D1 database is placed in the Oceania region by a
   location hint. This is not a legal guarantee that data stays in
-  Australia.
+  Australia. Participant data in it is encrypted by CampCount, so the
+  database alone doesn't reveal it.
+- **Encryption key:** participant data can only be read with `DATA_KEY`. If
+  that secret is lost, the data is lost with it; keep a safe copy. There is
+  no key-rotation tool yet.
+- **Kept on the importing device:** if a camp manager keeps the unsent
+  columns on their device (an import option, on by default), those columns,
+  which can include contact or medical details, sit unencrypted in that
+  browser's storage until they sign out. Turn the option off on shared
+  computers.
+- **Activity log search:** platform admins can no longer search the activity
+  log by participant name or ID (they're encrypted).
 - **Retention:** the purge runs once a day. Times are UTC, so "90 days" may
   be off by up to a day.
 - **Sign-in email:** it relies on Cloudflare Email Service. If the email is

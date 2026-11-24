@@ -1,3 +1,4 @@
+import { participantKey, withVault } from '../src/worker/lib/vault';
 import { env, exports } from 'cloudflare:workers';
 import { createSession } from '../src/worker/services/sessions';
 import type { Env } from '../src/worker/env';
@@ -100,3 +101,8 @@ export async function createRole(key: string, permissions: string[], scope: 'eve
     await testEnv.DB.prepare(`INSERT OR IGNORE INTO role_permissions (role_id, permission) VALUES (?, ?)`).bind(`role_${key}`, p).run();
   }
 }
+
+/** The database as the app sees it: encrypted participant data comes back decrypted. */
+export const vaultDb = () => withVault(testEnv.DB, testEnv);
+/** The keyed hash the app uses to find someone by participant ID. */
+export const keyFor = (participantId: string) => participantKey(testEnv, participantId);
