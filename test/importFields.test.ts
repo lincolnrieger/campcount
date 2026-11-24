@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseDelimited } from '../src/shared/csv';
-import { autoMap, combineSheets, defaultFileColumns, dietaryColumns, marryTables, findHeaderRow, flagDuplicates, initial, missingRequired, parsePhotoConsent, prepareRows, splitFullName } from '../src/shared/importFields';
+import { autoMap, combineSheets, defaultFileColumns, dietaryColumns, dietaryFingerprintText, marryTables, findHeaderRow, flagDuplicates, initial, missingRequired, parsePhotoConsent, prepareRows, splitFullName } from '../src/shared/importFields';
 
 const HEADER = 'Participant ID\tFirst Name\tLast Name\tHome Group Name\tYear Level\tAddress\tDate of Birth\tMobile\tEmail\tMedicare Number\tMedical Conditions\tSwimming Ability\tDietary Requirements\tPhoto Consent';
 const ROW_1 = '1001\tSam\tTaylor\tRed Gum Club\tJuniors\t1 Example St\t2014-01-01\t0400000000\tsam@example.test\t123\tAsthma\tStrong\tPeanut allergy\tYes';
@@ -237,7 +237,7 @@ describe('choosing what a later spreadsheet adds', () => {
     expect(onlyDiet.files[1]).toMatchObject({ matched: 1, added: 0 });
     expect(onlyDiet.headers).not.toContain('Tent');
     expect(onlyDiet.rows[0]![onlyDiet.headers.indexOf('Club')]).toBe('');
-    expect(onlyDiet.rows[0]![onlyDiet.headers.indexOf('Dietary 1')]).toBe('Vegetarian');
+    expect(onlyDiet.rows[0]![onlyDiet.headers.indexOf('Extra › Dietary 1')]).toBe('Vegetarian');
   });
 
   it('keeps each dietary column separate for the review', () => {
@@ -249,5 +249,47 @@ describe('choosing what a later spreadsheet adds', () => {
       { label: 'Dietary 2', text: 'No nuts' },
     ]);
     expect(row!.dietaryText).toBe('Vegetarian; No nuts');
+  });
+});
+
+describe('dietaries in several files', () => {
+  const sheet = (rows: string[][]) => combineSheets([{ name: 'Sheet1', rows }]);
+  const registrations = sheet([
+    ['ID', 'First name', 'Dietary requirements'],
+    ['1', 'Ava', 'Vegetarian'],
+    ['2', 'Ben', ''],
+  ]);
+  const consent = sheet([
+    ['ID', 'First name', 'Dietary requirements', 'Food allergies'],
+    ['1', 'Ava', 'Vegetarian', 'Peanuts'],
+    ['2', 'Ben', 'Halal', ''],
+  ]);
+  const pooled = (files: { name: string; table: ReturnType<typeof sheet> }[]) => {
+    const t = marryTables(files);
+    const m = autoMap(t.headers, t.rows);
+    return { t, rows: prepareRows(t.rows, m, undefined, { dietaryColumns: dietaryColumns(t.headers, m), headers: t.headers }) };
+  };
+
+  it('keeps every file’s dietary columns, even with the same name, so they can be read together', () => {
+    const { t, rows } = pooled([
+      { name: 'Registrations', table: registrations },
+      { name: 'Consent', table: consent },
+    ]);
+    expect(t.headers.filter((h) => /diet|allerg/i.test(h))).toEqual(['Registrations › Dietary requirements', 'Consent › Dietary requirements', 'Consent › Food allergies']);
+    expect(rows[0]!.dietaryParts.map((p) => p.text)).toEqual(['Vegetarian', 'Vegetarian', 'Peanuts']);
+    expect(rows[1]!.dietaryParts).toEqual([{ label: 'Consent › Dietary requirements', text: 'Halal' }]);
+  });
+
+  it('gives the same fingerprint text whatever order the files are in, so unchanged dietaries are not reviewed again', () => {
+    const a = pooled([
+      { name: 'Registrations', table: registrations },
+      { name: 'Consent', table: consent },
+    ]).rows[0]!;
+    const b = pooled([
+      { name: 'Consent', table: consent },
+      { name: 'Registrations', table: registrations },
+    ]).rows[0]!;
+    expect(dietaryFingerprintText(a.dietaryParts)).toBe(dietaryFingerprintText(b.dietaryParts));
+    expect(dietaryFingerprintText(a.dietaryParts)).toBe('peanuts\nvegetarian');
   });
 });

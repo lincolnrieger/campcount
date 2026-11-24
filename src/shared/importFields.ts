@@ -256,8 +256,23 @@ export function saysNothing(text: string): boolean {
  */
 export function dietaryColumns(headers: string[], mapping: ColumnMapping): number[] {
   if (mapping.dietary === undefined) return [];
-  const others = headers.map((h, i) => ({ h, i })).filter(({ h, i }) => i !== mapping.dietary && /diet/i.test(h) && !/medication/i.test(h));
+  const others = headers.map((h, i) => ({ h, i })).filter(({ h, i }) => i !== mapping.dietary && isDietaryHeader(h));
   return [mapping.dietary, ...others.map((o) => o.i)];
+}
+
+/** Does this column look like it holds dietary needs (and not medication)? */
+export function isDietaryHeader(h: string): boolean {
+  return /diet|allerg|food|meal/i.test(h) && !/medication/i.test(h);
+}
+
+/**
+ * The text a person's dietary fingerprint is made from: each different note,
+ * tidied, in a fixed order. The same notes give the same fingerprint whatever
+ * order the files or columns are in, so unchanged dietaries aren't reviewed
+ * again.
+ */
+export function dietaryFingerprintText(parts: { text: string }[]): string {
+  return [...new Set(parts.map((p) => normaliseDietaryText(p.text)).filter(Boolean))].sort().join('\n');
 }
 
 // ---------------------------------------------------------------- workbooks with several tabs
@@ -406,11 +421,13 @@ export function marryTables(files: { name: string; table: CombinedTable; columns
   const keyOf = (h: string) => h.trim().toLowerCase().replace(/\s+/g, ' ');
   const colOf = new Map<string, number>();
   // Columns that match the same CampCount field in different files ("Member ID", "Student ID") are one column.
-  const col = (h: string, field?: ImportField) => {
-    const k = field ? `field:${field}` : keyOf(h);
+  // Dietary columns never merge: every file's are kept (named after their file), so they can all be read together.
+  const col = (h: string, field: ImportField | undefined, f: number) => {
+    const dietary = field === 'dietary' || isDietaryHeader(h);
+    const k = dietary ? `diet:${f}:${keyOf(h)}` : field ? `field:${field}` : keyOf(h);
     if (!colOf.has(k)) {
       colOf.set(k, headers.length);
-      headers.push(h);
+      headers.push(dietary && files.length > 1 ? `${files[f]!.name} › ${h}` : h);
     }
     return colOf.get(k)!;
   };
@@ -430,7 +447,7 @@ export function marryTables(files: { name: string; table: CombinedTable; columns
     const fieldAt = new Map(Object.entries(m).map(([f, i]) => [i, f as ImportField]));
     // A later file adds only the columns chosen for it (its ID and name columns are still used to match people).
     const chosen = f > 0 && file.columns ? new Set(file.columns) : null;
-    const cols = t.headers.map((h, i) => (chosen && !chosen.has(i) ? -1 : col(h, fieldAt.get(i))));
+    const cols = t.headers.map((h, i) => (chosen && !chosen.has(i) ? -1 : col(h, fieldAt.get(i), f)));
     const by: FileMatch['by'] = f === 0 ? 'first' : m.participantId !== undefined ? 'id' : 'name';
     const r: FileMatch = { name: file.name, people: t.rows.length, matched: 0, added: 0, by, ambiguous: 0 };
     t.rows.forEach((row, i) => {
@@ -475,7 +492,7 @@ export function marryTables(files: { name: string; table: CombinedTable; columns
 }
 
 /** Columns that look like they hold dietary needs: worth reading together. */
-export const DIETARY_COLUMN = /diet|allerg|food|meal/i;
+export const DIETARY_COLUMN = /diet|allerg|food|meal/i; // see isDietaryHeader
 
 /**
  * The columns a later spreadsheet adds by default: ones that match a CampCount
@@ -486,5 +503,5 @@ export function defaultFileColumns(table: CombinedTable): number[] {
   const fields = new Set(Object.values(m));
   return table.headers
     .map((h, i) => i)
-    .filter((i) => fields.has(i) || (DIETARY_COLUMN.test(table.headers[i] ?? '') && !/medication/i.test(table.headers[i] ?? '')));
+    .filter((i) => fields.has(i) || isDietaryHeader(table.headers[i] ?? ''));
 }

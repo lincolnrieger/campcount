@@ -11,7 +11,8 @@ import {
   combineSheets,
   defaultFileColumns,
   dietaryColumns,
-  DIETARY_COLUMN,
+  dietaryFingerprintText,
+  isDietaryHeader,
   marryTables,
   flagDuplicates,
   missingRequired,
@@ -261,18 +262,19 @@ export function Import() {
   async function buildRows(): Promise<ImportRow[]> {
     const ctx = context.data!;
     const sending = ctx.dietaryEnabled && mapping.dietary !== undefined;
-    // No dietaries in this file: leave what's recorded (and its review state) as it is.
-    // (Only fingerprints in today's format: older ones are left for the next review.)
+    // What was reviewed before, by participant ID (only fingerprints in today's format).
     const kept = new Map(Object.entries(ctx.reviewedFingerprints).map(([id, f]) => [id.toUpperCase(), f && /^[0-9a-f]{64}$/.test(f) ? f : null]));
     return Promise.all(
-      valid.map(async (p) => ({
-        ...p.row,
-        dietaryFingerprint: sending
-          ? p.dietaryText
-            ? await hmacHex(ctx.fingerprintKey, normaliseDietaryText(p.dietaryText))
-            : null
-          : (kept.get(p.row.participantId.toUpperCase()) ?? null),
-      })),
+      valid.map(async (p) => {
+        const before = kept.get(p.row.participantId.toUpperCase()) ?? null;
+        // No dietaries in these files for this person (or none sent): keep what's recorded, and don't ask again.
+        if (!sending || !p.dietaryText) return { ...p.row, dietaryFingerprint: before };
+        // The same notes, from any files in any order, give the same fingerprint: unchanged ones aren't reviewed again.
+        let fingerprint = await hmacHex(ctx.fingerprintKey, dietaryFingerprintText(p.dietaryParts));
+        // Notes reviewed before this way of fingerprinting count as unchanged too.
+        if (before && before !== fingerprint && before === (await hmacHex(ctx.fingerprintKey, normaliseDietaryText(p.dietaryText)))) fingerprint = before;
+        return { ...p.row, dietaryFingerprint: fingerprint };
+      }),
     );
   }
 
@@ -642,7 +644,7 @@ export function Import() {
                           ))}
                         </dl>
                       ) : (
-                        <blockquote className="source-note">The note was removed in the new file.</blockquote>
+                        <blockquote className="source-note">No dietary notes for them in these files.</blockquote>
                       )}
                       <DietaryEditor
                         value={decided}
@@ -992,7 +994,7 @@ function FileColumns({ file, onChange }: { file: ImportFile; onChange: (columns:
 function DietaryColumnsField({ table, chosen, onChange }: { table: { headers: string[]; rows: string[][] }; chosen: number[]; onChange: (columns: number[]) => void }) {
   const [all, setAll] = useState(false);
   const set = new Set(chosen);
-  const likely = table.headers.map((h, i) => i).filter((i) => set.has(i) || (DIETARY_COLUMN.test(table.headers[i] ?? '') && !/medication/i.test(table.headers[i] ?? '')));
+  const likely = table.headers.map((h, i) => i).filter((i) => set.has(i) || isDietaryHeader(table.headers[i] ?? ''));
   const shown = all ? table.headers.map((_, i) => i) : likely;
   return (
     <fieldset className="panel panel-pad choices dietary-columns">
