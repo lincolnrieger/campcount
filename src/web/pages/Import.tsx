@@ -20,6 +20,7 @@ import {
   saysNothing,
 } from '../../shared/importFields';
 import type { DietaryEntryInput, ImportRow } from '../../shared/schemas';
+import { importRequestSchema } from '../../shared/schemas';
 import { ApiFailure, api } from '../api';
 import { DietaryEditor } from '../components/DietaryEditor';
 import {
@@ -106,6 +107,50 @@ const STEP_LABEL: Record<Step, string> = {
 /** One spreadsheet: its people, and (for files after the first) the columns it adds. */
 type ImportFile = { name: string; table: CombinedTable; columns?: number[] };
 
+/** A level name as CampCount keeps it: trimmed, single spaces, 40 characters at most. */
+const levelName = (raw: string) => raw.trim().replace(/\s+/g, ' ').slice(0, 40).trim();
+
+const FIELD_NAMES: Record<string, string> = {
+  participantId: 'Participant ID',
+  firstName: 'First name',
+  lastName: 'Last name',
+  level: 'Level',
+  groupName: 'Group',
+  photoConsent: 'Photo consent',
+  dietaryFingerprint: 'Dietaries',
+  dietary: 'Dietary needs',
+};
+
+/**
+ * What's wrong with an import, in plain words: which row (by its place in the
+ * file and name) and which field. Null when nothing is.
+ */
+function explainProblems(issues: { path: PropertyKey[]; message: string; code?: string; maximum?: unknown }[], rows: PreparedRow[]): string | null {
+  if (issues.length === 0) return null;
+  const what = (i: (typeof issues)[number]) =>
+    i.code === 'too_big' && typeof i.maximum === 'number' ? `is too long (${i.maximum} characters at most)` : i.code === 'invalid_format' ? 'has characters that aren’t allowed' : `: ${i.message}`;
+  const lines = issues.slice(0, 5).map((i) => {
+    const [top, index, field] = i.path;
+    if (top === 'rows' && typeof index === 'number') {
+      const r = rows[index];
+      const who = r ? `${r.where ?? `Line ${r.line}`} (${[r.row.firstName, r.row.lastName].filter(Boolean).join(' ')})` : `Row ${index + 1}`;
+      return `${who}: ${FIELD_NAMES[String(field)] ?? String(field ?? 'a value')} ${what(i)}`;
+    }
+    if (top === 'levelLinks') return `The level link for "${String(index ?? '')}" ${what(i)}`;
+    if (top === 'rows') return 'There are too many people in one import (2,000 at most). Split the file.';
+    return `${String(top)} ${what(i)}`;
+  });
+  const more = issues.length > 5 ? ` …and ${issues.length - 5} more.` : '';
+  return `Some details can’t be imported. ${lines.join('. ')}.${more}`;
+}
+
+/** An import failure, with the server's details put in plain words when it sends them. */
+function failureText(err: unknown, rows: PreparedRow[]): string {
+  if (!(err instanceof ApiFailure)) return 'No connection. Check your signal and try again.';
+  const details = (err.details ?? []).map((d) => ({ path: d.path.split('.').map((p) => (/^\d+$/.test(p) ? Number(p) : p)), message: d.message }));
+  return (details.length && explainProblems(details, rows)) || err.message;
+}
+
 const rowKey = (p: PreparedRow) => p.row.participantId || `line-${p.line}`;
 
 /**
@@ -150,11 +195,15 @@ export function Import() {
   const reviewing = Boolean(context.data?.dietaryEnabled && context.data.canEditDietary && mapping.dietary !== undefined);
   const dietCols = dietChoice ?? (table ? dietaryColumns(table.headers, mapping) : []);
   /** The camp level an imported level name goes under: chosen here, else the camp's own match (linked names included), else itself. */
-  const levelTarget = (raw: string) => levelChoice[raw] ?? normalizeLevel(raw, event.levels);
+  const levelTarget = (raw: string) => levelName(levelChoice[levelName(raw)] ?? normalizeLevel(raw, event.levels));
   /** Imported names linked to a different level, to remember for next time. */
   const levelLinks = () => {
     const links: Record<string, string> = {};
-    for (const [raw, to] of Object.entries(levelChoice)) if (to.trim() && to.trim().toLowerCase() !== raw.trim().toLowerCase()) links[raw.trim()] = to.trim();
+    for (const [raw, to] of Object.entries(levelChoice)) {
+      const from = levelName(raw);
+      const target = levelName(to);
+      if (from && target && target.toLowerCase() !== from.toLowerCase()) links[from] = target;
+    }
     return Object.keys(links).length ? links : undefined;
   };
   const pending = useMemo(() => (plan ? plan.rows.filter((r) => r.dietaryPending).map((r) => ({ plan: r, source: valid[r.index]! })) : []), [plan, valid]);
@@ -213,7 +262,8 @@ export function Import() {
     const ctx = context.data!;
     const sending = ctx.dietaryEnabled && mapping.dietary !== undefined;
     // No dietaries in this file: leave what's recorded (and its review state) as it is.
-    const kept = new Map(Object.entries(ctx.reviewedFingerprints).map(([id, f]) => [id.toUpperCase(), f]));
+    // (Only fingerprints in today's format: older ones are left for the next review.)
+    const kept = new Map(Object.entries(ctx.reviewedFingerprints).map(([id, f]) => [id.toUpperCase(), f && /^[0-9a-f]{64}$/.test(f) ? f : null]));
     return Promise.all(
       valid.map(async (p) => ({
         ...p.row,
@@ -244,10 +294,13 @@ export function Import() {
     try {
       const built = rows.length ? rows : await buildRows();
       setRows(built);
-      const res = await api<{ plan: Plan }>(`/events/${event.id}/import/preview`, { body: { rows: built, withdrawMissing: withdraw, levelLinks: levelLinks() } });
+      const body = { rows: built, withdrawMissing: withdraw, levelLinks: levelLinks() };
+      const problems = explainProblems(importRequestSchema.safeParse(body).error?.issues ?? [], valid);
+      if (problems) return setError(problems);
+      const res = await api<{ plan: Plan }>(`/events/${event.id}/import/preview`, { body });
       setPlan(res.plan);
     } catch (err) {
-      setError(err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.');
+      setError(failureText(err, valid));
     } finally {
       setBusy(false);
     }
@@ -261,17 +314,20 @@ export function Import() {
         const decided = dietary[rowKey(valid[i]!)];
         return reviewing && decided ? { ...r, dietary: decided } : r;
       });
+      const sending = { rows: body, withdrawMissing, levelLinks: levelLinks() };
+      const problems = explainProblems(importRequestSchema.safeParse(sending).error?.issues ?? [], valid);
+      if (problems) return setError(problems);
       const res = await api<{
         counts: Plan['counts'];
         participantIds: string[];
       }>(`/events/${event.id}/import/commit`, {
-        body: { rows: body, withdrawMissing, levelLinks: levelLinks() },
+        body: sending,
       });
       setResult(res.counts);
       setStep('done');
       toast(`Imported ${plural(res.counts.create + res.counts.update, 'person', 'people')}`);
     } catch (err) {
-      setError(err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.');
+      setError(failureText(err, valid));
     } finally {
       setBusy(false);
     }
@@ -349,7 +405,7 @@ export function Import() {
             <p className="meta">
               {plural(table.rows.length, 'person', 'people')} · {plural(table.headers.length, 'column')}
               <InfoTip label="How columns are matched">
-                Columns are matched by their names on this device (no AI, nothing sent). Check each one, or choose "Don't send" for anything you don't need.
+                Columns are matched by their names on this device; nothing is sent. Check each one, or choose "Don't send" for anything you don't need.
               </InfoTip>
             </p>
             {missing.length > 0 && <Banner tone="warning">Choose the column with each person's first name.</Banner>}
@@ -408,7 +464,7 @@ export function Import() {
             />
             {mapping.level !== undefined && (
               <LevelLinks
-                values={table.rows.map((r) => (r[mapping.level!] ?? '').trim()).filter(Boolean)}
+                values={table.rows.map((r) => levelName(r[mapping.level!] ?? '')).filter(Boolean)}
                 levels={event.levels}
                 target={levelTarget}
                 onChange={(raw, to) => setLevelChoice({ ...levelChoice, [raw]: to })}
