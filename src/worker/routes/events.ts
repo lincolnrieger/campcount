@@ -244,7 +244,7 @@ eventRoutes.patch('/:eventId', async (c) => {
       const inUse = removed.map((l) => ({ level: l, n: people.filter((p) => p.level === l).length })).filter((x) => x.n > 0);
       if (inUse.length) throw conflict(`Move everyone out of ${inUse.map((r) => `${r.level} (${r.n})`).join(', ')} before removing it.`);
     }
-    const stored = list.map(({ name, word, colour, youth }) => ({ name, word, colour: colour.toUpperCase(), youth }));
+    const stored = list.map(({ name, word, colour, youth, aliases }) => ({ name, word, colour: colour.toUpperCase(), youth, ...(aliases?.length ? { aliases } : {}) }));
     set('level_settings', JSON.stringify(stored));
     set('youth_levels', JSON.stringify(stored.filter((x) => x.youth).map((x) => x.name)));
   }

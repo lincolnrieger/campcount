@@ -113,6 +113,16 @@ export async function pruneSynced(): Promise<void> {
   await Promise.all(synced.filter((e) => e.createdAt < cutoff).map((e) => request(s.delete(e.id))));
 }
 
+/**
+ * Remove spreadsheet columns an earlier version could keep on the importing
+ * device. Nothing from an import is stored on devices any more.
+ */
+export async function removeKeptImportColumns(): Promise<void> {
+  const s = await store('snapshots', 'readwrite');
+  const keys = (await request(s.getAllKeys())) as IDBValidKey[];
+  await Promise.all(keys.filter((k) => typeof k === 'string' && k.startsWith('local-columns:')).map((k) => request(s.delete(k))));
+}
+
 /** Wipe cached rosters. Refuses while scans are waiting to sync unless forced. */
 export async function clearDevice(force = false): Promise<boolean> {
   if (!force && (await countUnsynced()) > 0) return false;

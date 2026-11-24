@@ -15,6 +15,12 @@ export interface LevelSetting {
   colour: string;
   /** Counted as a young person (youth) rather than an adult. */
   youth: boolean;
+  /**
+   * Other names that mean this level, linked on the import screen (for
+   * example "Early Bird Youth" and "Full Participant Youth" both mean Youth).
+   * Imports file anyone with one of these under this level.
+   */
+  aliases?: string[];
 }
 
 /** What a new camp starts with. Rename, add or remove freely. */
@@ -67,6 +73,7 @@ export function parseLevelSettings(json: string | null | undefined, youthJson?: 
           word: typeof s.word === 'string' ? s.word : '',
           colour: typeof s.colour === 'string' && /^#[0-9a-f]{6}$/i.test(s.colour) ? s.colour : PALETTE[PALETTE.length - 1]!,
           youth: Boolean(s.youth),
+          ...(Array.isArray(s.aliases) && s.aliases.length ? { aliases: s.aliases.filter((a): a is string => typeof a === 'string' && a.trim() !== '') } : {}),
         }));
     }
   } catch {
@@ -83,10 +90,47 @@ export function kindForLevel(level: string, levels: readonly LevelSetting[] | re
   return (levels as readonly LevelSetting[]).find((s) => s.name === level)?.youth ? 'youth' : 'adult';
 }
 
-/** The camp's existing name for a level, matched without case; the input itself (trimmed) when it's new. */
+/** The camp's name for a level: its own name or a linked name, matched without case; the input itself (trimmed) when it's new. */
 export function normalizeLevel(input: string, levels: readonly LevelSetting[]): string {
   const t = input.trim().replace(/\s+/g, ' ').slice(0, 40);
-  return levels.find((s) => s.name === t)?.name ?? levels.find((s) => s.name.toLowerCase() === t.toLowerCase())?.name ?? t;
+  const l = t.toLowerCase();
+  return (
+    levels.find((s) => s.name === t)?.name ??
+    levels.find((s) => s.name.toLowerCase() === l)?.name ??
+    levels.find((s) => s.aliases?.some((a) => a.toLowerCase() === l))?.name ??
+    t
+  );
+}
+
+/**
+ * Link imported names to levels ({ "Early Bird Youth": "Youth" }): the target
+ * level is added if it's new, and each name becomes one of its linked names
+ * (moved from any other level). Returns the levels and whether anything changed.
+ */
+export function linkLevels(levels: readonly LevelSetting[], links: Record<string, string>): { levels: LevelSetting[]; changed: boolean } {
+  const targets = Object.values(links).map((t) => normalizeLevel(t, levels));
+  const added = withLevels(levels, targets);
+  const next = added.levels.map((s) => ({ ...s, aliases: [...(s.aliases ?? [])] }));
+  let changed = added.added.length > 0;
+  for (const [from, to] of Object.entries(links)) {
+    const name = from.trim().replace(/\s+/g, ' ').slice(0, 40);
+    const target = next.find((s) => s.name === normalizeLevel(to, next));
+    if (!name || !target || name.toLowerCase() === target.name.toLowerCase()) continue;
+    // A level's own name can't be linked to another level.
+    if (next.some((s) => s.name.toLowerCase() === name.toLowerCase())) continue;
+    // A name means one level: take it off any other.
+    for (const s of next) {
+      if (s === target) continue;
+      const before = s.aliases.length;
+      s.aliases = s.aliases.filter((a) => a.toLowerCase() !== name.toLowerCase());
+      if (s.aliases.length !== before) changed = true;
+    }
+    if (!target.aliases.some((a) => a.toLowerCase() === name.toLowerCase())) {
+      target.aliases.push(name);
+      changed = true;
+    }
+  }
+  return { levels: next.map(({ aliases, ...s }) => (aliases.length ? { ...s, aliases } : s)), changed };
 }
 
 /** Where someone goes when a file doesn't give a level: the first youth level, or the first adult one for adults. */

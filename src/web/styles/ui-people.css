@@ -518,25 +518,6 @@
   background: var(--surface);
 }
 
-/* Person › "On this device only": columns kept from an import on this device, never sent. */
-.on-this-device {
-  margin-top: var(--space-3, 12px);
-}
-.on-this-device > summary {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  font-weight: 600;
-  min-height: 44px;
-}
-.on-this-device .person-dl {
-  margin: 8px 0;
-}
-.local-columns {
-  margin-top: 16px;
-}
-
 /* Import › the spreadsheets being joined */
 .import-files {
   display: grid;
@@ -546,4 +527,68 @@
 .import-files .add-file {
   justify-self: start;
   cursor: pointer;
+}
+
+/* Import › dietary columns, level links and a later file's columns */
+.dietary-columns,
+.level-links {
+  margin-top: 12px;
+  display: grid;
+  gap: 6px;
+}
+.dietary-columns > .btn {
+  justify-self: start;
+}
+.level-links-list {
+  display: grid;
+  gap: 8px;
+}
+.level-link {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1fr) auto minmax(10rem, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+@media (max-width: 600px) {
+  .level-link {
+    grid-template-columns: 1fr;
+  }
+}
+.file-columns {
+  flex-basis: 100%;
+  margin: 4px 0 8px;
+}
+.file-columns > summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.file-columns-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 4px 12px;
+}
+.source-notes {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+}
+.source-note-part {
+  border-left: 3px solid var(--border, #cfd8d3);
+  padding-left: 10px;
+}
+.source-note-part dt {
+  font-size: 0.8rem;
+  color: var(--text-muted, #5a6770);
+}
+.source-note-part dd {
+  margin: 0;
+}
+.import-file + .import-file {
+  border-top: 1px solid var(--border, #e3e8e5);
+}
+.import-file .file-columns {
+  padding: 0 12px;
 }

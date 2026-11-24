@@ -105,6 +105,8 @@ export const updateEventSchema = z
           word: trimmed(20),
           colour: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Choose a colour'),
           youth: z.boolean(),
+          /** Imported names linked to this level ("Early Bird Youth"). */
+          aliases: z.array(trimmed(40).min(1)).max(50).optional(),
         }),
       )
       .min(1, 'Keep at least one level')
@@ -214,6 +216,11 @@ export type PersonEntry = z.infer<typeof personEntrySchema>;
 export const importRequestSchema = z.strictObject({
   rows: z.array(importRowSchema).min(1).max(2000),
   withdrawMissing: z.boolean().default(false),
+  /** Imported level names linked to the camp's levels on the import screen, remembered for next time. */
+  levelLinks: z
+    .record(trimmed(40).min(1), trimmed(40).min(1))
+    .refine((o) => Object.keys(o).length <= 200, 'Too many level links')
+    .optional(),
 });
 
 // ---------------------------------------------------------------- activities, meals, stations, scans

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { STARTING_LEVELS, kindForLevel, normalizeLevel, parseLevelSettings, levelStyle, textOn, withLevels } from '../src/shared/levels';
+import { STARTING_LEVELS, kindForLevel, linkLevels, normalizeLevel, parseLevelSettings, levelStyle, textOn, withLevels } from '../src/shared/levels';
 import { api, createEvent, createUser, grant, json } from './helpers';
 
 const row = (participantId: string, level: string) => ({
@@ -32,7 +32,47 @@ describe('level helpers', () => {
   });
 });
 
+describe('linking imported names to levels', () => {
+  it('files several names under one level, adding it if new, and remembers them', () => {
+    const start = parseLevelSettings(null);
+    const { levels, changed } = linkLevels(start, { 'Early Bird Youth': 'Youth', 'Full Participant Youth': 'Youth', 'Helper Ticket': 'Leaders' });
+    expect(changed).toBe(true);
+    expect(levels.find((l) => l.name === 'Youth')).toMatchObject({ youth: true, aliases: ['Early Bird Youth', 'Full Participant Youth'] });
+    expect(levels.find((l) => l.name === 'Leaders')!.aliases).toEqual(['Helper Ticket']);
+    expect(normalizeLevel('early bird youth', levels)).toBe('Youth');
+    expect(kindForLevel(normalizeLevel('Helper Ticket', levels), levels)).toBe('adult');
+    // Linking again changes nothing; moving a name moves it.
+    expect(linkLevels(levels, { 'Early Bird Youth': 'Youth' }).changed).toBe(false);
+    const moved = linkLevels(levels, { 'Early Bird Youth': 'Participants' }).levels;
+    expect(normalizeLevel('Early Bird Youth', moved)).toBe('Participants');
+    expect(moved.find((l) => l.name === 'Youth')!.aliases).toEqual(['Full Participant Youth']);
+  });
+});
+
 describe('a camp’s own levels', () => {
+  it('remembers names linked on the import screen for the next import', async () => {
+    const admin = await createUser({ platformAdmin: true });
+    const eventId = await createEvent(admin.id);
+    const manager = await createUser();
+    await grant(manager.id, 'event_manager', eventId);
+    const levelsOf = async () => {
+      const { registrations } = await json(await api(`/events/${eventId}/registrations`, { cookie: manager.cookie }));
+      return Object.fromEntries((registrations as { participantId: string; level: string }[]).map((r) => [r.participantId, r.level]));
+    };
+    const links = { 'Early Bird Youth': 'Youth', 'Full Participant Youth': 'Youth' };
+    await api(`/events/${eventId}/import/commit`, {
+      cookie: manager.cookie,
+      body: { rows: [row('1', 'Early Bird Youth'), row('2', 'Full Participant Youth')], levelLinks: links },
+    });
+    expect(await levelsOf()).toEqual({ '1': 'Youth', '2': 'Youth' });
+    // Next time, no links are sent: the camp remembers them.
+    await api(`/events/${eventId}/import/commit`, { cookie: manager.cookie, body: { rows: [row('3', 'early bird youth')] } });
+    expect((await levelsOf())['3']).toBe('Youth');
+    const { event } = await json(await api(`/events/${eventId}`, { cookie: manager.cookie }));
+    expect((event.levels as { name: string; aliases?: string[] }[]).find((l) => l.name === 'Youth')!.aliases).toEqual(['Early Bird Youth', 'Full Participant Youth']);
+    expect((event.levels as { name: string }[]).map((l) => l.name)).not.toContain('Early Bird Youth');
+  });
+
   it('adds levels from imports, renames them (moving everyone), and removes empty ones', async () => {
     const admin = await createUser({ platformAdmin: true });
     const eventId = await createEvent(admin.id);

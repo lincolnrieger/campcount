@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseDelimited } from '../src/shared/csv';
-import { autoMap, combineSheets, dietaryColumns, marryTables, findHeaderRow, flagDuplicates, initial, missingRequired, parsePhotoConsent, prepareRows, splitFullName } from '../src/shared/importFields';
+import { autoMap, combineSheets, defaultFileColumns, dietaryColumns, marryTables, findHeaderRow, flagDuplicates, initial, missingRequired, parsePhotoConsent, prepareRows, splitFullName } from '../src/shared/importFields';
 
 const HEADER = 'Participant ID\tFirst Name\tLast Name\tHome Group Name\tYear Level\tAddress\tDate of Birth\tMobile\tEmail\tMedicare Number\tMedical Conditions\tSwimming Ability\tDietary Requirements\tPhoto Consent';
 const ROW_1 = '1001\tSam\tTaylor\tRed Gum Club\tJuniors\t1 Example St\t2014-01-01\t0400000000\tsam@example.test\t123\tAsthma\tStrong\tPeanut allergy\tYes';
@@ -212,5 +212,42 @@ describe('joining several spreadsheets', () => {
     const a = sheet([['ID', 'First name', 'Last name'], ['1', 'Sam', 'Lee']]);
     const b = sheet([['ID', 'First name', 'Last name'], ['2', 'Sam', 'Lee']]);
     expect(marryTables([{ name: 'A', table: a }, { name: 'B', table: b }]).rows).toHaveLength(2);
+  });
+});
+
+describe('choosing what a later spreadsheet adds', () => {
+  const sheet = (rows: string[][]) => combineSheets([{ name: 'Sheet1', rows }]);
+  const main = sheet([
+    ['ID', 'First name', 'Last name', 'Club'],
+    ['1', 'Ava', 'Nguyen', ''],
+  ]);
+  const extra = sheet([
+    ['ID', 'First name', 'Club', 'Tent', 'Dietary 1', 'Dietary 2', 'Medication'],
+    ['1', 'Ava', 'Red Gum', 'T1', 'Vegetarian', 'No nuts', 'Ventolin'],
+  ]);
+
+  it('starts with the field-like and dietary columns, and adds only what is ticked', () => {
+    const defaults = defaultFileColumns(extra).map((i) => extra.headers[i]);
+    expect(defaults).toEqual(['ID', 'First name', 'Club', 'Dietary 1', 'Dietary 2']);
+    const onlyDiet = marryTables([
+      { name: 'Main', table: main },
+      { name: 'Extra', table: extra, columns: [4, 5] },
+    ]);
+    // Still matched by ID, but Club and Tent weren't ticked.
+    expect(onlyDiet.files[1]).toMatchObject({ matched: 1, added: 0 });
+    expect(onlyDiet.headers).not.toContain('Tent');
+    expect(onlyDiet.rows[0]![onlyDiet.headers.indexOf('Club')]).toBe('');
+    expect(onlyDiet.rows[0]![onlyDiet.headers.indexOf('Dietary 1')]).toBe('Vegetarian');
+  });
+
+  it('keeps each dietary column separate for the review', () => {
+    const t = marryTables([{ name: 'Extra', table: extra }]);
+    const m = autoMap(t.headers, t.rows);
+    const [row] = prepareRows(t.rows, m, undefined, { dietaryColumns: [4, 5], headers: t.headers });
+    expect(row!.dietaryParts).toEqual([
+      { label: 'Dietary 1', text: 'Vegetarian' },
+      { label: 'Dietary 2', text: 'No nuts' },
+    ]);
+    expect(row!.dietaryText).toBe('Vegetarian; No nuts');
   });
 });

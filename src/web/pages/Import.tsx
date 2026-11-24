@@ -1,34 +1,27 @@
-import { useMemo, useState } from "react";
-import type { ReactNode } from "react";
-import { useNavigate } from "react-router";
-import { csvCell, parseDelimited } from "../../shared/csv";
-import type {
-  ColumnMapping,
-  CombinedTable,
-  FileMatch,
-  FirstNameMode,
-  ImportField,
-  LastNameMode,
-  PreparedRow,
-  SheetSummary,
-} from "../../shared/importFields";
+import { useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useNavigate } from 'react-router';
+import { csvCell, parseDelimited } from '../../shared/csv';
+import type { ColumnMapping, CombinedTable, FileMatch, FirstNameMode, ImportField, LastNameMode, PreparedRow, SheetSummary } from '../../shared/importFields';
 import {
   IMPORT_FIELDS,
   IMPORT_FIELD_ORDER,
   TAB_COLUMN,
   autoMap,
   combineSheets,
+  defaultFileColumns,
   dietaryColumns,
+  DIETARY_COLUMN,
   marryTables,
   flagDuplicates,
   missingRequired,
   normaliseDietaryText,
   prepareRows,
   saysNothing,
-} from "../../shared/importFields";
-import type { DietaryEntryInput, ImportRow } from "../../shared/schemas";
-import { ApiFailure, api } from "../api";
-import { DietaryEditor } from "../components/DietaryEditor";
+} from '../../shared/importFields';
+import type { DietaryEntryInput, ImportRow } from '../../shared/schemas';
+import { ApiFailure, api } from '../api';
+import { DietaryEditor } from '../components/DietaryEditor';
 import {
   Badge,
   Banner,
@@ -48,11 +41,12 @@ import {
   Toggle,
   plural,
   useToast,
-} from "../ui";
-import { readSheets } from "../import/xlsx";
-import { saveLocalColumns } from "../import/localColumns";
-import { useApi } from "../useApi";
-import { useEvent } from "./EventLayout";
+} from '../ui';
+import { readSheets } from '../import/xlsx';
+import { useApi } from '../useApi';
+import { useEvent } from './EventLayout';
+import type { LevelSetting } from '../../shared/levels';
+import { normalizeLevel } from '../../shared/levels';
 
 interface ImportContext {
   fingerprintKey: string;
@@ -64,7 +58,7 @@ interface ImportContext {
 interface RowPlan {
   index: number;
   participantId: string;
-  action: "create" | "update" | "unchanged";
+  action: 'create' | 'update' | 'unchanged';
   changes: string[];
   dietaryPending: boolean;
 }
@@ -80,132 +74,114 @@ interface Plan {
   };
 }
 
-type Step = "file" | "map" | "check" | "dietary" | "done";
+type Step = 'file' | 'map' | 'check' | 'dietary' | 'done';
 
 async function hmacHex(key: string, text: string): Promise<string> {
   const enc = new TextEncoder();
-  const k = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(key),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const sig = await crypto.subtle.sign("HMAC", k, enc.encode(text));
-  return [...new Uint8Array(sig)]
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  const k = await crypto.subtle.importKey('raw', enc.encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', k, enc.encode(text));
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 function downloadCsv(filename: string, rows: string[][]) {
-  const text = rows.map((r) => r.map(csvCell).join(",")).join("\r\n");
-  const url = URL.createObjectURL(new Blob(["﻿" + text], { type: "text/csv" }));
-  const a = document.createElement("a");
+  const text = rows.map((r) => r.map(csvCell).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob(['﻿' + text], { type: 'text/csv' }));
+  const a = document.createElement('a');
   a.href = url;
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
 }
 
-const STEPS: Step[] = ["file", "map", "check", "dietary", "done"];
+const STEPS: Step[] = ['file', 'map', 'check', 'dietary', 'done'];
 const STEP_LABEL: Record<Step, string> = {
-  file: "Choose file",
-  map: "Choose fields",
-  check: "Check",
-  dietary: "Dietary review",
-  done: "Done",
+  file: 'Choose file',
+  map: 'Choose fields',
+  check: 'Check',
+  dietary: 'Dietary review',
+  done: 'Done',
 };
 
 /** A key for a row before it has a participant ID: its line in the file. */
+/** One spreadsheet: its people, and (for files after the first) the columns it adds. */
+type ImportFile = { name: string; table: CombinedTable; columns?: number[] };
+
 const rowKey = (p: PreparedRow) => p.row.participantId || `line-${p.line}`;
 
 /**
  * People › Import: read a spreadsheet (.xlsx or .csv) on this device, choose
  * which fields to send, check what will change, then send only those fields
- * when Import is pressed. Every other column stays on this device.
+ * when Import is pressed. Nothing else from the file is kept anywhere.
  */
 export function Import() {
   const { event, base } = useEvent();
   const navigate = useNavigate();
   const toast = useToast();
   const context = useApi<ImportContext>(`/events/${event.id}/import/context`);
-  const [step, setStep] = useState<Step>("file");
+  const [step, setStep] = useState<Step>('file');
   const [table, setTable] = useState<{
     headers: string[];
     rows: string[][];
     origins: string[];
   } | null>(null);
   /** The spreadsheets read so far (joined into `table`), and how each matched. */
-  const [files, setFiles] = useState<{ name: string; table: CombinedTable }[]>(
-    [],
-  );
+  const [files, setFiles] = useState<ImportFile[]>([]);
   const [matches, setMatches] = useState<FileMatch[]>([]);
   /** The workbook's tabs: how many people each had, or why it was skipped. */
   const [sheets, setSheets] = useState<SheetSummary[]>([]);
   const [mapping, setMapping] = useState<ColumnMapping>({});
-  const [firstMode, setFirstMode] = useState<FirstNameMode>("full");
-  const [lastMode, setLastMode] = useState<LastNameMode>("full");
-  /** Keep the columns that aren't sent on this device (never uploaded). */
-  const [keepLocal, setKeepLocal] = useState(true);
+  const [firstMode, setFirstMode] = useState<FirstNameMode>('full');
+  const [lastMode, setLastMode] = useState<LastNameMode>('full');
+  /** Dietary columns ticked by hand (null: the ones that look dietary). */
+  const [dietChoice, setDietChoice] = useState<number[] | null>(null);
+  /** Each imported level name and the camp level it goes under, where changed from the suggestion. */
+  const [levelChoice, setLevelChoice] = useState<Record<string, string>>({});
   const [prepared, setPrepared] = useState<PreparedRow[]>([]);
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [withdrawMissing, setWithdrawMissing] = useState(false);
-  const [dietary, setDietary] = useState<Record<string, DietaryEntryInput[]>>(
-    {},
-  );
-  const [result, setResult] = useState<Plan["counts"] | null>(null);
+  const [dietary, setDietary] = useState<Record<string, DietaryEntryInput[]>>({});
+  const [result, setResult] = useState<Plan['counts'] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const invalid = prepared.filter((p) => p.errors.length > 0);
   const valid = prepared.filter((p) => p.errors.length === 0);
-  const reviewing = Boolean(
-    context.data?.dietaryEnabled &&
-    context.data.canEditDietary &&
-    mapping.dietary !== undefined,
-  );
-  const pending = useMemo(
-    () =>
-      plan
-        ? plan.rows
-            .filter((r) => r.dietaryPending)
-            .map((r) => ({ plan: r, source: valid[r.index]! }))
-        : [],
-    [plan, valid],
-  );
-  const used = new Set(Object.values(mapping));
-  const otherColumns = table
-    ? table.headers
-        .map((h, i) => ({ h: h || `Column ${i + 1}`, i }))
-        .filter(({ i }) => !used.has(i))
-    : [];
+  const reviewing = Boolean(context.data?.dietaryEnabled && context.data.canEditDietary && mapping.dietary !== undefined);
+  const dietCols = dietChoice ?? (table ? dietaryColumns(table.headers, mapping) : []);
+  /** The camp level an imported level name goes under: chosen here, else the camp's own match (linked names included), else itself. */
+  const levelTarget = (raw: string) => levelChoice[raw] ?? normalizeLevel(raw, event.levels);
+  /** Imported names linked to a different level, to remember for next time. */
+  const levelLinks = () => {
+    const links: Record<string, string> = {};
+    for (const [raw, to] of Object.entries(levelChoice)) if (to.trim() && to.trim().toLowerCase() !== raw.trim().toLowerCase()) links[raw.trim()] = to.trim();
+    return Object.keys(links).length ? links : undefined;
+  };
+  const pending = useMemo(() => (plan ? plan.rows.filter((r) => r.dietaryPending).map((r) => ({ plan: r, source: valid[r.index]! })) : []), [plan, valid]);
 
   /** Read one file on this device: every tab of a workbook, or a CSV as one tab. */
-  async function readFile(
-    file: File,
-  ): Promise<{ name: string; table: CombinedTable }> {
+  async function readFile(file: File): Promise<ImportFile> {
     let tabs: { name: string; rows: string[][] }[];
     if (/\.xlsx$/i.test(file.name)) {
       tabs = await readSheets(await file.arrayBuffer());
     } else {
       const csv = parseDelimited(await file.text());
-      tabs = [{ name: "File", rows: [csv.headers, ...csv.rows] }];
+      tabs = [{ name: 'File', rows: [csv.headers, ...csv.rows] }];
     }
     const table = combineSheets(tabs);
     if (table.rows.length === 0) {
       throw new Error(
-        table.sheets.length
-          ? `No people found in ${file.name}. Each tab needs a header row with a first name (or name) column.`
-          : `${file.name} has no rows to import.`,
+        table.sheets.length ? `No people found in ${file.name}. Each tab needs a header row with a first name (or name) column.` : `${file.name} has no rows to import.`,
       );
     }
-    return { name: file.name.replace(/\.(xlsx|csv|tsv|txt)$/i, ""), table };
+    return { name: file.name.replace(/\.(xlsx|csv|tsv|txt)$/i, ''), table };
   }
 
   /** Use these files: join them into one list of people, and match the columns again. */
-  function applyFiles(next: { name: string; table: CombinedTable }[]) {
+  function applyFiles(next: ImportFile[]) {
     const married = marryTables(next);
+    setDietChoice(null);
+    setLevelChoice({});
     setFiles(next);
     setMatches(next.length > 1 ? married.files : []);
     setTable(married);
@@ -213,14 +189,9 @@ export function Import() {
     const auto = autoMap(married.headers, married.rows);
     // Several tabs and no group column: the tab is usually the group.
     const tabAt = married.headers.indexOf(TAB_COLUMN);
-    if (
-      auto.groupName === undefined &&
-      tabAt >= 0 &&
-      !Object.values(auto).includes(tabAt)
-    )
-      auto.groupName = tabAt;
+    if (auto.groupName === undefined && tabAt >= 0 && !Object.values(auto).includes(tabAt)) auto.groupName = tabAt;
     setMapping(auto);
-    setStep("map");
+    setStep('map');
   }
 
   async function loadFiles(list: File[], add = false) {
@@ -229,11 +200,10 @@ export function Import() {
     setBusy(true);
     try {
       const read = await Promise.all(list.map(readFile));
-      applyFiles([...(add ? files : []), ...read]);
+      // Every file after the first adds only the columns chosen for it (the field-like ones to start with).
+      applyFiles([...(add ? files : []), ...read].map((f, i) => (i > 0 && !f.columns ? { ...f, columns: defaultFileColumns(f.table) } : f)));
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "That file could not be read.",
-      );
+      setError(err instanceof Error ? err.message : 'That file could not be read.');
     } finally {
       setBusy(false);
     }
@@ -243,21 +213,13 @@ export function Import() {
     const ctx = context.data!;
     const sending = ctx.dietaryEnabled && mapping.dietary !== undefined;
     // No dietaries in this file: leave what's recorded (and its review state) as it is.
-    const kept = new Map(
-      Object.entries(ctx.reviewedFingerprints).map(([id, f]) => [
-        id.toUpperCase(),
-        f,
-      ]),
-    );
+    const kept = new Map(Object.entries(ctx.reviewedFingerprints).map(([id, f]) => [id.toUpperCase(), f]));
     return Promise.all(
       valid.map(async (p) => ({
         ...p.row,
         dietaryFingerprint: sending
           ? p.dietaryText
-            ? await hmacHex(
-                ctx.fingerprintKey,
-                normaliseDietaryText(p.dietaryText),
-              )
+            ? await hmacHex(ctx.fingerprintKey, normaliseDietaryText(p.dietaryText))
             : null
           : (kept.get(p.row.participantId.toUpperCase()) ?? null),
       })),
@@ -266,20 +228,14 @@ export function Import() {
 
   function check() {
     if (!table) return;
-    const next = prepareRows(
-      table.rows,
-      mapping,
-      { firstName: firstMode, lastName: lastMode },
-      {
-        dietaryColumns: dietaryColumns(table.headers, mapping),
-        origins: table.origins,
-      },
-    );
+    const next = prepareRows(table.rows, mapping, { firstName: firstMode, lastName: lastMode }, { dietaryColumns: dietCols, origins: table.origins, headers: table.headers });
+    // Each imported level name goes under the camp level chosen for it.
+    for (const p of next) if (p.row.level) p.row.level = levelTarget(p.row.level);
     flagDuplicates(next);
     setPrepared(next);
     setPlan(null);
     setRows([]);
-    setStep("check");
+    setStep('check');
   }
 
   async function preview(withdraw = withdrawMissing) {
@@ -288,17 +244,10 @@ export function Import() {
     try {
       const built = rows.length ? rows : await buildRows();
       setRows(built);
-      const res = await api<{ plan: Plan }>(
-        `/events/${event.id}/import/preview`,
-        { body: { rows: built, withdrawMissing: withdraw } },
-      );
+      const res = await api<{ plan: Plan }>(`/events/${event.id}/import/preview`, { body: { rows: built, withdrawMissing: withdraw, levelLinks: levelLinks() } });
       setPlan(res.plan);
     } catch (err) {
-      setError(
-        err instanceof ApiFailure
-          ? err.message
-          : "No connection. Check your signal and try again.",
-      );
+      setError(err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.');
     } finally {
       setBusy(false);
     }
@@ -313,48 +262,27 @@ export function Import() {
         return reviewing && decided ? { ...r, dietary: decided } : r;
       });
       const res = await api<{
-        counts: Plan["counts"];
+        counts: Plan['counts'];
         participantIds: string[];
       }>(`/events/${event.id}/import/commit`, {
-        body: { rows: body, withdrawMissing },
+        body: { rows: body, withdrawMissing, levelLinks: levelLinks() },
       });
-      // The columns that weren't sent stay on this device, filed by each person's participant ID.
-      if (keepLocal && table && otherColumns.length > 0) {
-        await saveLocalColumns(
-          event.id,
-          otherColumns.map((c) => c.h),
-          valid.map((p, i) => ({
-            participantId: res.participantIds[i] ?? "",
-            values: otherColumns.map((c) =>
-              (table.rows[p.line - 2]?.[c.i] ?? "").trim(),
-            ),
-          })),
-        ).catch(() =>
-          toast("The other columns could not be kept on this device."),
-        );
-      }
       setResult(res.counts);
-      setStep("done");
-      toast(
-        `Imported ${plural(res.counts.create + res.counts.update, "person", "people")}`,
-      );
+      setStep('done');
+      toast(`Imported ${plural(res.counts.create + res.counts.update, 'person', 'people')}`);
     } catch (err) {
-      setError(
-        err instanceof ApiFailure
-          ? err.message
-          : "No connection. Check your signal and try again.",
-      );
+      setError(err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.');
     } finally {
       setBusy(false);
     }
   }
 
-  const back = { to: `${base}/people`, label: "People" };
+  const back = { to: `${base}/people`, label: 'People' };
   const header = (
     <PageHeader
       title="Import people"
       back={back}
-      help="Reads a spreadsheet on this device. You choose which fields to send; nothing is sent until you press Import, and everything else stays on this device."
+      help="Reads spreadsheets on this device. You choose which fields to send; nothing is sent until you press Import, and nothing else from the files is kept."
     />
   );
   if (context.loading && !context.data)
@@ -370,196 +298,149 @@ export function Import() {
     return (
       <>
         {header}
-        <LoadError
-          error={context.error}
-          onRetry={context.reload}
-          what="the import"
-        />
+        <LoadError error={context.error} onRetry={context.reload} what="the import" />
       </>
     );
   const missing = missingRequired(mapping);
   const reviewedCount = pending.filter((p) => dietary[rowKey(p.source)]).length;
-  const shownFields = IMPORT_FIELD_ORDER.filter(
-    (f) =>
-      f !== "fullName" ||
-      mapping.fullName !== undefined ||
-      mapping.firstName === undefined,
-  );
+  const shownFields = IMPORT_FIELD_ORDER.filter((f) => f !== 'fullName' || mapping.fullName !== undefined || mapping.firstName === undefined);
 
   return (
     <>
       {header}
       <div className="sections import import-page">
-        <Stepper
-          steps={STEPS.map((s) => STEP_LABEL[s])}
-          current={STEPS.indexOf(step)}
-        />
+        <Stepper steps={STEPS.map((s) => STEP_LABEL[s])} current={STEPS.indexOf(step)} />
         {error && <Banner tone="error">{error}</Banner>}
 
-        {step === "file" && (
+        {step === 'file' && (
           <Section title="Choose files" id="file">
             <label className="dropzone">
               <Icon name="download" size={24} />
-              <strong>{busy ? "Reading…" : "Choose one or more files"}</strong>
-              <span className="meta">
-                .xlsx, .csv or tab-separated text. Several files are joined,
-                matching people by participant ID or name.
-              </span>
+              <strong>{busy ? 'Reading…' : 'Choose one or more files'}</strong>
+              <span className="meta">.xlsx, .csv or tab-separated text. Several files are joined, matching people by participant ID or name.</span>
               <input
                 type="file"
                 multiple
                 accept=".xlsx,.csv,.tsv,.txt,text/csv"
                 onChange={(e) => {
                   void loadFiles([...(e.target.files ?? [])]);
-                  e.target.value = "";
+                  e.target.value = '';
                 }}
               />
             </label>
             <p className="meta import-privacy">
               <Icon name="lock" size={16} />
-              Read on this device. Only the fields you choose are sent, when you
-              press Import. The file itself is never uploaded.
+              Read on this device. Only the fields you choose are sent, when you press Import. The file itself is never uploaded.
             </p>
           </Section>
         )}
 
-        {step === "map" && table && (
+        {step === 'map' && table && (
           <Section title="Choose fields" id="map">
             <FilesPanel
               files={files}
               matches={matches}
               busy={busy}
               onAdd={(list) => void loadFiles(list, true)}
-              onRemove={(i) =>
-                files.length > 1
-                  ? applyFiles(files.filter((_, x) => x !== i))
-                  : setStep("file")
-              }
+              onRemove={(i) => (files.length > 1 ? applyFiles(files.filter((_, x) => x !== i)) : setStep('file'))}
+              onColumns={(i, columns) => applyFiles(files.map((f, x) => (x === i ? { ...f, columns } : f)))}
             />
-            {files.some((f) => f.table.sheets.length > 1) && (
-              <TabSummary sheets={sheets} />
-            )}
+            {files.some((f) => f.table.sheets.length > 1) && <TabSummary sheets={sheets} />}
             <p className="meta">
-              {plural(table.rows.length, "person", "people")} ·{" "}
-              {plural(table.headers.length, "column")}
+              {plural(table.rows.length, 'person', 'people')} · {plural(table.headers.length, 'column')}
               <InfoTip label="How columns are matched">
-                Columns are matched by their names on this device (no AI,
-                nothing sent). Check each one, or choose "Don't send" for
-                anything you don't need.
+                Columns are matched by their names on this device (no AI, nothing sent). Check each one, or choose "Don't send" for anything you don't need.
               </InfoTip>
             </p>
-            {missing.length > 0 && (
-              <Banner tone="warning">
-                Choose the column with each person's first name.
-              </Banner>
-            )}
-            {mapping.dietary !== undefined &&
-              dietaryColumns(table.headers, mapping).length > 1 && (
-                <p className="meta">
-                  Dietaries are read from{" "}
-                  {dietaryColumns(table.headers, mapping)
-                    .map((i) => table.headers[i])
-                    .join(", ")}
-                  , together.
-                </p>
-              )}
+            {missing.length > 0 && <Banner tone="warning">Choose the column with each person's first name.</Banner>}
             {mapping.dietary !== undefined && !reviewing && (
               <Banner tone="info">
-                {context.data?.dietaryEnabled
-                  ? "Dietaries will be flagged for an event manager to review."
-                  : "Dietary needs are off for this event, so that column is not sent."}
+                {context.data?.dietaryEnabled ? 'Dietaries will be flagged for an event manager to review.' : 'Dietary needs are off for this event, so that column is not sent.'}
               </Banner>
             )}
             <div className="map-grid">
-              {shownFields.map((field) => (
-                <FieldRow
-                  key={field}
-                  field={field}
-                  table={table}
-                  mapping={mapping}
-                  onChange={setMapping}
-                  extra={
-                    field === "firstName" ? (
-                      <Segmented
-                        label="How much of the first name to send"
-                        value={firstMode}
-                        onChange={setFirstMode}
-                        options={[
-                          { value: "full", label: "Full" },
-                          { value: "initial", label: "Initial only" },
-                        ]}
-                      />
-                    ) : field === "lastName" ? (
-                      <Segmented
-                        label="How much of the last name to send"
-                        value={lastMode}
-                        onChange={setLastMode}
-                        options={[
-                          { value: "full", label: "Full" },
-                          { value: "initial", label: "Initial only" },
-                          { value: "none", label: "Don't send" },
-                        ]}
-                      />
-                    ) : null
-                  }
-                />
-              ))}
+              {shownFields
+                .filter((f) => f !== 'dietary')
+                .map((field) => (
+                  <FieldRow
+                    key={field}
+                    field={field}
+                    table={table}
+                    mapping={mapping}
+                    onChange={setMapping}
+                    extra={
+                      field === 'firstName' ? (
+                        <Segmented
+                          label="How much of the first name to send"
+                          value={firstMode}
+                          onChange={setFirstMode}
+                          options={[
+                            { value: 'full', label: 'Full' },
+                            { value: 'initial', label: 'Initial only' },
+                          ]}
+                        />
+                      ) : field === 'lastName' ? (
+                        <Segmented
+                          label="How much of the last name to send"
+                          value={lastMode}
+                          onChange={setLastMode}
+                          options={[
+                            { value: 'full', label: 'Full' },
+                            { value: 'initial', label: 'Initial only' },
+                            { value: 'none', label: "Don't send" },
+                          ]}
+                        />
+                      ) : null
+                    }
+                  />
+                ))}
             </div>
-            {otherColumns.length > 0 && (
-              <div className="local-columns">
-                <Toggle
-                  checked={keepLocal}
-                  onChange={setKeepLocal}
-                  label={`Keep the other ${plural(otherColumns.length, "column")} on this device`}
-                  hint={
-                    keepLocal
-                      ? "Never sent. Shown on each person’s page on this device only, and removed when you sign out."
-                      : "They’re left in your file and not kept anywhere."
-                  }
-                />
-                <p className="meta">
-                  Not sent: {otherColumns.map((c) => c.h).join(", ")}
-                </p>
-              </div>
+            <DietaryColumnsField
+              table={table}
+              chosen={dietCols}
+              onChange={(cols) => {
+                setDietChoice(cols);
+                const next = { ...mapping };
+                if (cols.length) next.dietary = cols[0]!;
+                else delete next.dietary;
+                setMapping(next);
+              }}
+            />
+            {mapping.level !== undefined && (
+              <LevelLinks
+                values={table.rows.map((r) => (r[mapping.level!] ?? '').trim()).filter(Boolean)}
+                levels={event.levels}
+                target={levelTarget}
+                onChange={(raw, to) => setLevelChoice({ ...levelChoice, [raw]: to })}
+              />
             )}
+            <p className="meta import-privacy">
+              <Icon name="lock" size={16} />
+              Only the fields above are sent, when you press Import. Nothing from the file is kept on this device or anywhere else.
+            </p>
             <div className="btn-row form-actions">
-              <Button
-                kind="primary"
-                disabled={missing.length > 0}
-                onClick={check}
-              >
+              <Button kind="primary" disabled={missing.length > 0} onClick={check}>
                 Next
               </Button>
-              <Button onClick={() => setStep("file")}>Back</Button>
+              <Button onClick={() => setStep('file')}>Back</Button>
             </div>
           </Section>
         )}
 
-        {step === "check" && (
+        {step === 'check' && (
           <Section title="Check" id="check">
             {!plan ? (
               <>
                 <p>
-                  <strong>{plural(valid.length, "person", "people")}</strong>{" "}
-                  ready to compare with this event. Nothing has been sent yet.
+                  <strong>{plural(valid.length, 'person', 'people')}</strong> ready to compare with this event. Nothing has been sent yet.
                 </p>
-                <SendSummary
-                  mapping={mapping}
-                  firstMode={firstMode}
-                  lastMode={lastMode}
-                />
+                <SendSummary mapping={mapping} firstMode={firstMode} lastMode={lastMode} />
                 {invalid.length > 0 && <Problems invalid={invalid} />}
                 <div className="btn-row form-actions">
-                  <Button
-                    kind="primary"
-                    busy={busy}
-                    busyLabel="Checking…"
-                    disabled={valid.length === 0}
-                    onClick={() => void preview()}
-                  >
+                  <Button kind="primary" busy={busy} busyLabel="Checking…" disabled={valid.length === 0} onClick={() => void preview()}>
                     Next
                   </Button>
-                  <Button onClick={() => setStep("map")}>Back</Button>
+                  <Button onClick={() => setStep('map')}>Back</Button>
                 </div>
               </>
             ) : (
@@ -567,31 +448,31 @@ export function Import() {
                 <StatStrip
                   items={[
                     {
-                      label: "New",
+                      label: 'New',
                       value: plan.counts.create,
-                      tone: "success",
+                      tone: 'success',
                     },
                     {
-                      label: "Changed",
+                      label: 'Changed',
                       value: plan.counts.update,
-                      tone: "info",
+                      tone: 'info',
                     },
-                    { label: "No change", value: plan.counts.unchanged },
+                    { label: 'No change', value: plan.counts.unchanged },
                     ...(reviewing
                       ? [
                           {
-                            label: "Dietary to review",
+                            label: 'Dietary to review',
                             value: plan.counts.dietaryPending,
-                            tone: "warning" as const,
+                            tone: 'warning' as const,
                           },
                         ]
                       : []),
                     ...(withdrawMissing
                       ? [
                           {
-                            label: "To withdraw",
+                            label: 'To withdraw',
                             value: plan.counts.withdraw,
-                            tone: "error" as const,
+                            tone: 'error' as const,
                           },
                         ]
                       : []),
@@ -606,15 +487,9 @@ export function Import() {
                       void preview(v);
                     }}
                     label="Withdraw people not in this file"
-                    hint={
-                      withdrawMissing
-                        ? `${plural(plan.counts.withdraw, "person", "people")} will be withdrawn. Their records are kept.`
-                        : undefined
-                    }
+                    hint={withdrawMissing ? `${plural(plan.counts.withdraw, 'person', 'people')} will be withdrawn. Their records are kept.` : undefined}
                   />
-                  <InfoTip label="When to use this">
-                    Use this when the file is the complete, current list.
-                  </InfoTip>
+                  <InfoTip label="When to use this">Use this when the file is the complete, current list.</InfoTip>
                 </div>
                 {plan.counts.update > 0 && (
                   <details className="more-options">
@@ -624,17 +499,14 @@ export function Import() {
                     </summary>
                     <ul className="list import-changes">
                       {plan.rows
-                        .filter((r) => r.action === "update")
+                        .filter((r) => r.action === 'update')
                         .map((r) => (
                           <li key={r.index} className="row">
                             <span className="row-main">
                               <span className="row-title">
-                                {valid[r.index]!.row.firstName}{" "}
-                                {valid[r.index]!.row.lastName}
+                                {valid[r.index]!.row.firstName} {valid[r.index]!.row.lastName}
                               </span>
-                              <span className="row-meta">
-                                {r.changes.join(", ")}
-                              </span>
+                              <span className="row-meta">{r.changes.join(', ')}</span>
                             </span>
                           </li>
                         ))}
@@ -643,29 +515,19 @@ export function Import() {
                 )}
                 <div className="btn-row form-actions">
                   {reviewing && pending.length > 0 ? (
-                    <Button kind="primary" onClick={() => setStep("dietary")}>
+                    <Button kind="primary" onClick={() => setStep('dietary')}>
                       Next
                     </Button>
                   ) : (
-                    <Button
-                      kind="primary"
-                      busy={busy}
-                      busyLabel="Importing…"
-                      onClick={() => void commit()}
-                    >
-                      Import{" "}
-                      {plural(
-                        plan.counts.create + plan.counts.update,
-                        "person",
-                        "people",
-                      )}
+                    <Button kind="primary" busy={busy} busyLabel="Importing…" onClick={() => void commit()}>
+                      Import {plural(plan.counts.create + plan.counts.update, 'person', 'people')}
                     </Button>
                   )}
                   <Button
                     onClick={() => {
                       setPlan(null);
                       setRows([]);
-                      setStep("map");
+                      setStep('map');
                     }}
                   >
                     Back
@@ -676,15 +538,13 @@ export function Import() {
           </Section>
         )}
 
-        {step === "dietary" && plan && (
+        {step === 'dietary' && plan && (
           <Section
             title={
               <>
-                Dietary review{" "}
+                Dietary review{' '}
                 <InfoTip label="About dietary review">
-                  Turn each note into dietary needs for the kitchen. Only what
-                  you enter here is sent; the notes themselves stay on this
-                  device.
+                  Turn each note into dietary needs for the kitchen. Only what you enter here is sent; the notes themselves stay on this device.
                 </InfoTip>
               </>
             }
@@ -699,35 +559,16 @@ export function Import() {
                   ...Object.fromEntries(keys.map((k) => [k, []])),
                 })
               }
-              onUndo={(keys) =>
-                setDietary(
-                  Object.fromEntries(
-                    Object.entries(dietary).filter(([k]) => !keys.includes(k)),
-                  ),
-                )
-              }
+              onUndo={(keys) => setDietary(Object.fromEntries(Object.entries(dietary).filter(([k]) => !keys.includes(k))))}
             />
             <ul className="review-list">
               {pending
-                .filter(
-                  ({ source }) =>
-                    !(
-                      saysNothing(source.dietaryText) &&
-                      dietary[rowKey(source)]?.length === 0
-                    ),
-                )
+                .filter(({ source }) => !(saysNothing(source.dietaryText) && dietary[rowKey(source)]?.length === 0))
                 .map(({ source }) => {
                   const key = rowKey(source);
                   const decided = dietary[key];
                   return (
-                    <li
-                      key={key}
-                      className={
-                        decided
-                          ? "panel review-item is-done"
-                          : "panel review-item"
-                      }
-                    >
+                    <li key={key} className={decided ? 'panel review-item is-done' : 'panel review-item'}>
                       <div className="review-head">
                         <strong>
                           {source.row.firstName} {source.row.lastName}
@@ -735,15 +576,21 @@ export function Import() {
                         <span className="meta">{source.row.groupName}</span>
                         {decided && <Badge tone="success">Reviewed</Badge>}
                       </div>
-                      <blockquote className="source-note">
-                        {source.dietaryText ||
-                          "The note was removed in the new file."}
-                      </blockquote>
+                      {source.dietaryParts.length > 0 ? (
+                        <dl className="source-notes">
+                          {source.dietaryParts.map((part) => (
+                            <div key={part.label} className="source-note-part">
+                              <dt>{part.label}</dt>
+                              <dd>{part.text}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      ) : (
+                        <blockquote className="source-note">The note was removed in the new file.</blockquote>
+                      )}
                       <DietaryEditor
                         value={decided}
-                        onChange={(entries) =>
-                          setDietary({ ...dietary, [key]: entries })
-                        }
+                        onChange={(entries) => setDietary({ ...dietary, [key]: entries })}
                         labelPrefix={`${source.row.firstName} ${source.row.lastName}`}
                       />
                     </li>
@@ -751,41 +598,30 @@ export function Import() {
                 })}
             </ul>
             <div className="btn-row form-actions">
-              <Button
-                kind="primary"
-                busy={busy}
-                busyLabel="Importing…"
-                onClick={() => void commit()}
-              >
+              <Button kind="primary" busy={busy} busyLabel="Importing…" onClick={() => void commit()}>
                 Import
               </Button>
-              <Button onClick={() => setStep("check")}>Back</Button>
+              <Button onClick={() => setStep('check')}>Back</Button>
               <span className="meta import-progress">
                 {reviewedCount} of {pending.length} reviewed
-                <InfoTip label="Not reviewed">
-                  Anyone not reviewed stays flagged for next time.
-                </InfoTip>
+                <InfoTip label="Not reviewed">Anyone not reviewed stays flagged for next time.</InfoTip>
               </span>
             </div>
           </Section>
         )}
 
-        {step === "done" && result && (
+        {step === 'done' && result && (
           <Section title="Done" id="done">
             <Banner tone="success">
-              Import complete: {result.create} added, {result.update} updated,{" "}
-              {result.unchanged} unchanged
+              Import complete: {result.create} added, {result.update} updated, {result.unchanged} unchanged
               {result.withdraw > 0 && `, ${result.withdraw} withdrawn`}
-              {invalid.length > 0 &&
-                `, ${plural(invalid.length, "row", "rows")} skipped`}
+              {invalid.length > 0 && `, ${plural(invalid.length, 'row', 'rows')} skipped`}
             </Banner>
             <div className="btn-row">
               <Button kind="primary" onClick={() => navigate(`${base}/people`)}>
                 View people
               </Button>
-              <ButtonLink to={`${base}/people/lanyards/print`}>
-                Print lanyards
-              </ButtonLink>
+              <ButtonLink to={`${base}/people/lanyards/print`}>Print lanyards</ButtonLink>
             </div>
           </Section>
         )}
@@ -811,21 +647,10 @@ function FieldRow({
   const def = IMPORT_FIELDS[field];
   const index = mapping[field];
   const unset = index === undefined;
-  const required = field === "firstName" && mapping.fullName === undefined;
-  const sample =
-    index === undefined || field === "dietary"
-      ? ""
-      : (table.rows.find((r) => (r[index] ?? "").trim())?.[index] ?? "");
+  const required = field === 'firstName' && mapping.fullName === undefined;
+  const sample = index === undefined || field === 'dietary' ? '' : (table.rows.find((r) => (r[index] ?? '').trim())?.[index] ?? '');
   return (
-    <div
-      className={
-        unset && required
-          ? "map-item is-missing"
-          : unset
-            ? "map-item is-unset"
-            : "map-item"
-      }
-    >
+    <div className={unset && required ? 'map-item is-missing' : unset ? 'map-item is-unset' : 'map-item'}>
       <label htmlFor={`map-${field}`} className="map-label">
         {def.label}
         {!required && <span className="field-optional"> (optional)</span>}
@@ -833,15 +658,14 @@ function FieldRow({
       <select
         id={`map-${field}`}
         className="select"
-        value={index ?? ""}
+        value={index ?? ''}
         onChange={(e) => {
           const next = { ...mapping };
-          if (e.target.value === "") delete next[field];
+          if (e.target.value === '') delete next[field];
           else {
             const i = Number(e.target.value);
             // A column feeds one field.
-            for (const [f, v] of Object.entries(next))
-              if (v === i) delete next[f as ImportField];
+            for (const [f, v] of Object.entries(next)) if (v === i) delete next[f as ImportField];
             next[field] = i;
           }
           onChange(next);
@@ -854,42 +678,25 @@ function FieldRow({
           </option>
         ))}
       </select>
-      <span className="map-sample">
-        {sample ? `First row: ${sample}` : " "}
-      </span>
+      <span className="map-sample">{sample ? `First row: ${sample}` : ' '}</span>
       {!unset && extra}
     </div>
   );
 }
 
 /** What will be sent, in plain words, before anything is. */
-function SendSummary({
-  mapping,
-  firstMode,
-  lastMode,
-}: {
-  mapping: ColumnMapping;
-  firstMode: FirstNameMode;
-  lastMode: LastNameMode;
-}) {
-  const parts: string[] = [
-    firstMode === "initial" ? "first initial" : "first name",
-  ];
-  if (
-    (mapping.lastName !== undefined || mapping.fullName !== undefined) &&
-    lastMode !== "none"
-  )
-    parts.push(lastMode === "initial" ? "last initial" : "last name");
-  if (mapping.groupName !== undefined) parts.push("group");
-  if (mapping.level !== undefined) parts.push("level");
-  if (mapping.participantId !== undefined) parts.push("participant ID");
-  if (mapping.photoConsent !== undefined)
-    parts.push("photo consent (Yes or No)");
-  if (mapping.dietary !== undefined) parts.push("dietary needs you confirm");
+function SendSummary({ mapping, firstMode, lastMode }: { mapping: ColumnMapping; firstMode: FirstNameMode; lastMode: LastNameMode }) {
+  const parts: string[] = [firstMode === 'initial' ? 'first initial' : 'first name'];
+  if ((mapping.lastName !== undefined || mapping.fullName !== undefined) && lastMode !== 'none') parts.push(lastMode === 'initial' ? 'last initial' : 'last name');
+  if (mapping.groupName !== undefined) parts.push('group');
+  if (mapping.level !== undefined) parts.push('level');
+  if (mapping.participantId !== undefined) parts.push('participant ID');
+  if (mapping.photoConsent !== undefined) parts.push('photo consent (Yes or No)');
+  if (mapping.dietary !== undefined) parts.push('dietary needs you confirm');
   return (
     <p className="meta import-privacy">
       <Icon name="lock" size={16} />
-      When you press Import, only these are sent, encrypted: {parts.join(", ")}.
+      When you press Import, only these are sent, encrypted: {parts.join(', ')}.
     </p>
   );
 }
@@ -903,25 +710,12 @@ function Problems({ invalid }: { invalid: PreparedRow[] }) {
         tone="warning"
         action={
           <>
-            <Button
-              small
-              kind="ghost"
-              aria-expanded={open}
-              onClick={() => setOpen(!open)}
-            >
-              {open ? "Hide" : "Show"}
+            <Button small kind="ghost" aria-expanded={open} onClick={() => setOpen(!open)}>
+              {open ? 'Hide' : 'Show'}
             </Button>
             <Button
               small
-              onClick={() =>
-                downloadCsv("campcount-import-problems.csv", [
-                  ["Where", "Problem"],
-                  ...invalid.map((p) => [
-                    p.where ?? `Line ${p.line}`,
-                    p.errors.join("; "),
-                  ]),
-                ])
-              }
+              onClick={() => downloadCsv('campcount-import-problems.csv', [['Where', 'Problem'], ...invalid.map((p) => [p.where ?? `Line ${p.line}`, p.errors.join('; ')])])}
             >
               <Icon name="download" size={16} />
               Download
@@ -929,21 +723,16 @@ function Problems({ invalid }: { invalid: PreparedRow[] }) {
           </>
         }
       >
-        {plural(invalid.length, "row has", "rows have")} problems and will be
-        skipped
+        {plural(invalid.length, 'row has', 'rows have')} problems and will be skipped
       </Banner>
       {open && (
         <ul className="problem-list">
           {invalid.slice(0, 8).map((p) => (
             <li key={p.line}>
-              {p.where ?? `Line ${p.line}`}: {p.errors.join("; ")}
+              {p.where ?? `Line ${p.line}`}: {p.errors.join('; ')}
             </li>
           ))}
-          {invalid.length > 8 && (
-            <li className="meta">
-              and {invalid.length - 8} more in the download
-            </li>
-          )}
+          {invalid.length > 8 && <li className="meta">and {invalid.length - 8} more in the download</li>}
         </ul>
       )}
     </div>
@@ -967,12 +756,8 @@ function NothingToRecord({
   onMark: (keys: string[]) => void;
   onUndo: (keys: string[]) => void;
 }) {
-  const matches = pending
-    .map((p) => p.source)
-    .filter((s) => saysNothing(s.dietaryText));
-  const marked = matches
-    .filter((s) => dietary[rowKey(s)]?.length === 0)
-    .map(rowKey);
+  const matches = pending.map((p) => p.source).filter((s) => saysNothing(s.dietaryText));
+  const marked = matches.filter((s) => dietary[rowKey(s)]?.length === 0).map(rowKey);
   const open = matches.filter((s) => dietary[rowKey(s)] === undefined);
   const [unticked, setUnticked] = useState<Set<string>>(new Set());
   if (matches.length === 0) return null;
@@ -980,20 +765,16 @@ function NothingToRecord({
   return (
     <div className="panel panel-pad nothing-panel">
       <h3 className="nothing-title">
-        {plural(matches.length, "note says", "notes say")} there's nothing to
-        record
+        {plural(matches.length, 'note says', 'notes say')} there's nothing to record
         <InfoTip label="About these notes">
-          These notes are only "Nil", "None", "N/A" or similar, with nothing
-          else written. Untick anyone you want to read in full, then mark the
-          rest. Notes with any other words are never in this list.
+          These notes are only "Nil", "None", "N/A" or similar, with nothing else written. Untick anyone you want to read in full, then mark the rest. Notes with any other words
+          are never in this list.
         </InfoTip>
       </h3>
       {open.length > 0 ? (
         <>
           <fieldset className="nothing-list">
-            <legend className="visually-hidden">
-              Notes that say nothing to record
-            </legend>
+            <legend className="visually-hidden">Notes that say nothing to record</legend>
             {open.map((s) => {
               const key = rowKey(s);
               return (
@@ -1013,22 +794,15 @@ function NothingToRecord({
             })}
           </fieldset>
           <div className="btn-row">
-            <Button
-              kind="primary"
-              disabled={ticked.length === 0}
-              onClick={() => onMark(ticked.map(rowKey))}
-            >
-              Mark {plural(ticked.length, "person", "people")} as no dietary
-              needs
+            <Button kind="primary" disabled={ticked.length === 0} onClick={() => onMark(ticked.map(rowKey))}>
+              Mark {plural(ticked.length, 'person', 'people')} as no dietary needs
             </Button>
           </div>
         </>
       ) : null}
       {marked.length > 0 && (
         <p className="nothing-done">
-          <Badge tone="success">Done</Badge>{" "}
-          {plural(marked.length, "person", "people")} marked as no dietary
-          needs.{" "}
+          <Badge tone="success">Done</Badge> {plural(marked.length, 'person', 'people')} marked as no dietary needs.{' '}
           <Button small kind="ghost" onClick={() => onUndo(marked)}>
             Undo
           </Button>
@@ -1045,21 +819,10 @@ function TabSummary({ sheets }: { sheets: SheetSummary[] }) {
   return (
     <div className="panel panel-pad import-tabs">
       <p>
-        <strong>Read {plural(read.length, "tab")}</strong>:{" "}
-        {read.map((t) => `${t.name} (${t.people})`).join(", ")}
+        <strong>Read {plural(read.length, 'tab')}</strong>: {read.map((t) => `${t.name} (${t.people})`).join(', ')}
       </p>
-      {skipped.length > 0 && (
-        <p className="meta">
-          Skipped:{" "}
-          {skipped
-            .map((t) => `${t.name} (${t.skipped!.toLowerCase()})`)
-            .join(", ")}
-        </p>
-      )}
-      <p className="meta">
-        Each person's tab is in the "{TAB_COLUMN}" column, which you can send as
-        their group or level.
-      </p>
+      {skipped.length > 0 && <p className="meta">Skipped: {skipped.map((t) => `${t.name} (${t.skipped!.toLowerCase()})`).join(', ')}</p>}
+      <p className="meta">Each person's tab is in the "{TAB_COLUMN}" column, which you can send as their group or level.</p>
     </div>
   );
 }
@@ -1071,12 +834,14 @@ function FilesPanel({
   busy,
   onAdd,
   onRemove,
+  onColumns,
 }: {
-  files: { name: string; table: CombinedTable }[];
+  files: ImportFile[];
   matches: FileMatch[];
   busy: boolean;
   onAdd: (files: File[]) => void;
   onRemove: (index: number) => void;
+  onColumns: (index: number, columns: number[]) => void;
 }) {
   return (
     <div className="panel panel-pad import-files">
@@ -1084,41 +849,34 @@ function FilesPanel({
         {files.map((f, i) => {
           const m = matches[i];
           return (
-            <li key={`${f.name}-${i}`} className="row">
-              <span className="row-main">
-                <span className="row-title">{f.name}</span>
-                <span className="row-meta">
-                  {plural(f.table.rows.length, "person", "people")}
-                  {m && i > 0 && (
-                    <>
-                      {" "}
-                      · matched {m.matched} by{" "}
-                      {m.by === "id" ? "participant ID" : "name"}, {m.added} new
-                      {m.ambiguous > 0 &&
-                        `, ${plural(m.ambiguous, "name")} shared by two people (added separately)`}
-                    </>
-                  )}
-                  {i === 0 &&
-                    files.length > 1 &&
-                    " · the starting list; its values win"}
+            <li key={`${f.name}-${i}`} className="import-file">
+              <div className="row">
+                <span className="row-main">
+                  <span className="row-title">{f.name}</span>
+                  <span className="row-meta">
+                    {plural(f.table.rows.length, 'person', 'people')}
+                    {m && i > 0 && (
+                      <>
+                        {' '}
+                        · matched {m.matched} by {m.by === 'id' ? 'participant ID' : 'name'}, {m.added} new
+                        {m.ambiguous > 0 && `, ${plural(m.ambiguous, 'name')} shared by two people (added separately)`}
+                      </>
+                    )}
+                    {i === 0 && files.length > 1 && ' · the starting list; its values win'}
+                  </span>
                 </span>
-              </span>
-              <Button
-                small
-                kind="ghost"
-                aria-label={`Remove ${f.name}`}
-                onClick={() => onRemove(i)}
-              >
-                <Icon name="trash" size={16} />
-              </Button>
+                <Button small kind="ghost" aria-label={`Remove ${f.name}`} onClick={() => onRemove(i)}>
+                  <Icon name="trash" size={16} />
+                </Button>
+              </div>
+              {i > 0 && <FileColumns file={f} onChange={(cols) => onColumns(i, cols)} />}
             </li>
           );
         })}
       </ul>
       <div className="btn-row">
         <label className="btn btn-secondary btn-small add-file">
-          <Icon name="plus" size={16} />{" "}
-          {busy ? "Reading…" : "Add another spreadsheet"}
+          <Icon name="plus" size={16} /> {busy ? 'Reading…' : 'Add another spreadsheet'}
           <input
             type="file"
             multiple
@@ -1126,18 +884,171 @@ function FilesPanel({
             accept=".xlsx,.csv,.tsv,.txt,text/csv"
             onChange={(e) => {
               onAdd([...(e.target.files ?? [])]);
-              e.target.value = "";
+              e.target.value = '';
             }}
           />
         </label>
         <InfoTip label="How files are joined">
-          People are matched across files on this device: by participant ID, or
-          by first and last name when a file has no IDs (only when exactly one
-          person has that name). Where two files have the same column, the first
-          file&apos;s value is kept and later files only fill blanks. People in
-          only one file are still included.
+          People are matched across files on this device: by participant ID, or by first and last name when a file has no IDs (only when exactly one person has that name). Where
+          two files have the same column, the first file&apos;s value is kept and later files only fill blanks. People in only one file are still included.
         </InfoTip>
       </div>
     </div>
+  );
+}
+
+/** The first value in a column, as an example. */
+const sampleOf = (table: { rows: string[][] }, i: number) => table.rows.find((r) => (r[i] ?? '').trim())?.[i]?.trim() ?? '';
+
+/** Which columns a later spreadsheet adds. Its ID and name columns still match people either way. */
+function FileColumns({ file, onChange }: { file: ImportFile; onChange: (columns: number[]) => void }) {
+  const chosen = new Set(file.columns ?? []);
+  const t = file.table;
+  return (
+    <details className="file-columns">
+      <summary>
+        <Icon name="chevron" /> Columns to add from this file ({chosen.size} of {t.headers.length})
+      </summary>
+      <fieldset className="choices file-columns-list">
+        <legend className="visually-hidden">Columns to add from {file.name}</legend>
+        {t.headers.map((h, i) => {
+          const sample = sampleOf(t, i);
+          return (
+            <Choice
+              key={i}
+              label={h || `Column ${i + 1}`}
+              description={sample ? `e.g. ${sample.slice(0, 60)}` : 'Empty'}
+              checked={chosen.has(i)}
+              onChange={(e) => onChange(t.headers.map((_, x) => x).filter((x) => (x === i ? e.target.checked : chosen.has(x))))}
+            />
+          );
+        })}
+      </fieldset>
+      <p className="field-hint">Ticked columns fill in people&apos;s blanks. Its ID and name columns are always used to match people, even if they&apos;re not ticked.</p>
+    </details>
+  );
+}
+
+/**
+ * Dietaries: tick every column that holds dietary needs. They're all shown,
+ * column by column, in the dietary review, where you choose what to record.
+ */
+function DietaryColumnsField({ table, chosen, onChange }: { table: { headers: string[]; rows: string[][] }; chosen: number[]; onChange: (columns: number[]) => void }) {
+  const [all, setAll] = useState(false);
+  const set = new Set(chosen);
+  const likely = table.headers.map((h, i) => i).filter((i) => set.has(i) || (DIETARY_COLUMN.test(table.headers[i] ?? '') && !/medication/i.test(table.headers[i] ?? '')));
+  const shown = all ? table.headers.map((_, i) => i) : likely;
+  return (
+    <fieldset className="panel panel-pad choices dietary-columns">
+      <legend className="field-label">
+        Dietaries <span className="field-optional">(optional)</span>
+        <InfoTip label="About dietary columns">
+          Tick every column with dietary needs. In the dietary review you&apos;ll see each one separately for every person, and choose what to record. The column text itself is
+          never sent.
+        </InfoTip>
+      </legend>
+      {shown.length === 0 && <p className="meta">No columns look like dietary needs.</p>}
+      {shown.map((i) => {
+        const sample = sampleOf(table, i);
+        return (
+          <Choice
+            key={i}
+            label={table.headers[i] || `Column ${i + 1}`}
+            description={sample ? `e.g. ${sample.slice(0, 60)}` : 'Empty'}
+            checked={set.has(i)}
+            onChange={(e) => onChange(table.headers.map((_, x) => x).filter((x) => (x === i ? e.target.checked : set.has(x))))}
+          />
+        );
+      })}
+      <Button small kind="ghost" onClick={() => setAll(!all)}>
+        {all ? 'Show only dietary-looking columns' : 'Show all columns'}
+      </Button>
+    </fieldset>
+  );
+}
+
+/**
+ * The level names in the file, each linked to one of the camp's levels: an
+ * existing one, a new one with the same name, or a new name ("Early Bird Youth"
+ * and "Full Participant Youth" both under Youth). Links are remembered.
+ */
+function LevelLinks({
+  values,
+  levels,
+  target,
+  onChange,
+}: {
+  values: string[];
+  levels: readonly LevelSetting[];
+  target: (raw: string) => string;
+  onChange: (raw: string, to: string) => void;
+}) {
+  const counts = new Map<string, number>();
+  for (const v of values) counts.set(v, (counts.get(v) ?? 0) + 1);
+  const raws = [...counts.keys()].sort((a, b) => a.localeCompare(b));
+  const [naming, setNaming] = useState<Record<string, boolean>>({});
+  const known = new Set(levels.map((l) => l.name.toLowerCase()));
+  // Levels to offer: the camp's, plus any new names chosen on this screen.
+  const options = [...new Set([...levels.map((l) => l.name), ...raws.map(target)])];
+  const NEW = '\u0000new';
+  return (
+    <fieldset className="panel panel-pad level-links">
+      <legend className="field-label">
+        Levels in this file
+        <InfoTip label="About levels">
+          Choose the level each name in the file goes under. Several names can share one level (for example two kinds of youth ticket both under Youth). CampCount remembers these
+          links for the next import. Levels are set up in Settings › Levels.
+        </InfoTip>
+      </legend>
+      <div className="level-links-list">
+        {raws.map((raw) => {
+          const to = target(raw);
+          const isNew = !known.has(to.toLowerCase());
+          return (
+            <div key={raw} className="level-link">
+              <span className="level-link-from">
+                {raw} <span className="meta">({counts.get(raw)})</span>
+              </span>
+              <span className="meta" aria-hidden="true">
+                →
+              </span>
+              {naming[raw] ? (
+                <input
+                  className="input"
+                  ref={(el) => el?.focus()}
+                  maxLength={40}
+                  aria-label={`New level for ${raw}`}
+                  defaultValue=""
+                  placeholder="New level name"
+                  onBlur={(e) => {
+                    if (e.target.value.trim()) onChange(raw, e.target.value.trim());
+                    setNaming({ ...naming, [raw]: false });
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                  }}
+                />
+              ) : (
+                <select
+                  className="select"
+                  aria-label={`Level for ${raw}`}
+                  value={to}
+                  onChange={(e) => (e.target.value === NEW ? setNaming({ ...naming, [raw]: true }) : onChange(raw, e.target.value))}
+                >
+                  {options.map((o) => (
+                    <option key={o} value={o}>
+                      {o}
+                      {known.has(o.toLowerCase()) ? '' : ' (new level)'}
+                    </option>
+                  ))}
+                  <option value={NEW}>Another new level…</option>
+                </select>
+              )}
+              {isNew && !naming[raw] && <Badge tone="info">New</Badge>}
+            </div>
+          );
+        })}
+      </div>
+    </fieldset>
   );
 }

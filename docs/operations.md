@@ -29,9 +29,18 @@ to recover the system. Keep a printed copy at camp HQ.
      the last name can be left out.
    - Nothing is sent until you press **Import**, and then only those fields,
      encrypted. Every other column (addresses, contacts, medical notes…) stays
-     in your file, or, if you leave "Keep the other columns on this device"
-     on, in this browser only, until you sign out.
-   - New level names in the file are added to Settings › Levels. Names that
+     in your file. Nothing from the file is kept on your device.
+   - For each spreadsheet after the first, open "Columns to add from this
+     file" and tick only what it should bring in (for example photo consent
+     and dietaries). Its ID and name columns are still used to match people.
+   - **Dietaries:** tick every column that holds dietary needs. The dietary
+     review shows each column separately for every person, and you choose
+     what to record. The column text itself is never sent.
+   - **Levels in this file:** choose the level each name in the file goes
+     under. Several names can share one level (for example "Early Bird Youth"
+     and "Full Participant Youth" both under Youth), or pick "Another new
+     level…" to make one. CampCount remembers these links for the next import;
+     they're listed (and can be removed) in Settings › Levels. Names that
      sound like adults (Leaders, Staff, Helpers…) count as adults.
 4. **Add activities and meals.** Give each meal a day and time (Meals tab)
    so scanners can pick it by day. Activities can run all camp, or on a

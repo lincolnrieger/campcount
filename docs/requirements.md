@@ -69,10 +69,8 @@ server rejects anything else.
 
 **Never sent to the server**: every other column, including address, phone,
 email, date of birth, Medicare number, medical conditions, medication,
-swimming ability, doctor, guardian and emergency contacts. If the manager
-leaves "Keep the other columns on this device" on, those columns are kept in
-that browser only (IndexedDB), shown on each person's page on that device,
-and wiped on sign-out.
+swimming ability, doctor, guardian and emergency contacts. Nothing from the
+file is kept on the importing device either.
 
 ## 4. Dietary requirements
 
