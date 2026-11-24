@@ -9,7 +9,6 @@ const row = (participantId: string, level: string) => ({
   level,
   groupName: '',
   photoConsent: 'yes',
-  dietaryFingerprint: null,
 });
 
 describe('level helpers', () => {

@@ -11,12 +11,10 @@ import {
   combineSheets,
   defaultFileColumns,
   dietaryColumns,
-  dietaryFingerprintText,
   isDietaryHeader,
   marryTables,
   flagDuplicates,
   missingRequired,
-  normaliseDietaryText,
   prepareRows,
   saysNothing,
 } from '../../shared/importFields';
@@ -51,10 +49,10 @@ import type { LevelSetting } from '../../shared/levels';
 import { normalizeLevel } from '../../shared/levels';
 
 interface ImportContext {
-  fingerprintKey: string;
   dietaryEnabled: boolean;
   canEditDietary: boolean;
-  reviewedFingerprints: Record<string, string | null>;
+  /** Participant IDs whose dietary needs have been reviewed (nothing about their notes is kept). */
+  reviewed: string[];
 }
 
 interface RowPlan {
@@ -77,13 +75,6 @@ interface Plan {
 }
 
 type Step = 'file' | 'map' | 'check' | 'dietary' | 'done';
-
-async function hmacHex(key: string, text: string): Promise<string> {
-  const enc = new TextEncoder();
-  const k = await crypto.subtle.importKey('raw', enc.encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const sig = await crypto.subtle.sign('HMAC', k, enc.encode(text));
-  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
 
 function downloadCsv(filename: string, rows: string[][]) {
   const text = rows.map((r) => r.map(csvCell).join(',')).join('\r\n');
@@ -129,7 +120,11 @@ const FIELD_NAMES: Record<string, string> = {
 function explainProblems(issues: { path: PropertyKey[]; message: string; code?: string; maximum?: unknown }[], rows: PreparedRow[]): string | null {
   if (issues.length === 0) return null;
   const what = (i: (typeof issues)[number]) =>
-    i.code === 'too_big' && typeof i.maximum === 'number' ? `is too long (${i.maximum} characters at most)` : i.code === 'invalid_format' ? 'has characters that aren’t allowed' : `: ${i.message}`;
+    i.code === 'too_big' && typeof i.maximum === 'number'
+      ? `is too long (${i.maximum} characters at most)`
+      : i.code === 'invalid_format'
+        ? 'has characters that aren’t allowed'
+        : `: ${i.message}`;
   const lines = issues.slice(0, 5).map((i) => {
     const [top, index, field] = i.path;
     if (top === 'rows' && typeof index === 'number') {
@@ -186,6 +181,8 @@ export function Import() {
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [withdrawMissing, setWithdrawMissing] = useState(false);
+  /** Show people whose dietary needs were already reviewed, too. */
+  const [reviewAll, setReviewAll] = useState(false);
   const [dietary, setDietary] = useState<Record<string, DietaryEntryInput[]>>({});
   const [result, setResult] = useState<Plan['counts'] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -207,7 +204,15 @@ export function Import() {
     }
     return Object.keys(links).length ? links : undefined;
   };
-  const pending = useMemo(() => (plan ? plan.rows.filter((r) => r.dietaryPending).map((r) => ({ plan: r, source: valid[r.index]! })) : []), [plan, valid]);
+  // Dietary review: people with notes who haven't been reviewed (and, with "Review everyone again", those who have).
+  const withNotes = useMemo(() => (plan ? plan.rows.filter((r) => valid[r.index]?.dietaryText) : []), [plan, valid]);
+  const alreadyReviewed = withNotes.filter((r) => !r.dietaryPending).length;
+  const pending = useMemo(() => withNotes.filter((r) => r.dietaryPending || reviewAll).map((r) => ({ plan: r, source: valid[r.index]! })), [withNotes, reviewAll, valid]);
+  // What's recorded now, to show beside notes when reviewing everyone again.
+  const recordedNow = useApi<{ registrations: { participantId: string; dietary?: DietaryEntryInput[] }[] }>(
+    reviewAll && step === 'dietary' ? `/events/${event.id}/registrations` : null,
+  );
+  const recorded = new Map((recordedNow.data?.registrations ?? []).map((r) => [r.participantId.toUpperCase(), r.dietary ?? []]));
 
   /** Read one file on this device: every tab of a workbook, or a CSV as one tab. */
   async function readFile(file: File): Promise<ImportFile> {
@@ -262,20 +267,8 @@ export function Import() {
   async function buildRows(): Promise<ImportRow[]> {
     const ctx = context.data!;
     const sending = ctx.dietaryEnabled && mapping.dietary !== undefined;
-    // What was reviewed before, by participant ID (only fingerprints in today's format).
-    const kept = new Map(Object.entries(ctx.reviewedFingerprints).map(([id, f]) => [id.toUpperCase(), f && /^[0-9a-f]{64}$/.test(f) ? f : null]));
-    return Promise.all(
-      valid.map(async (p) => {
-        const before = kept.get(p.row.participantId.toUpperCase()) ?? null;
-        // No dietaries in these files for this person (or none sent): keep what's recorded, and don't ask again.
-        if (!sending || !p.dietaryText) return { ...p.row, dietaryFingerprint: before };
-        // The same notes, from any files in any order, give the same fingerprint: unchanged ones aren't reviewed again.
-        let fingerprint = await hmacHex(ctx.fingerprintKey, dietaryFingerprintText(p.dietaryParts));
-        // Notes reviewed before this way of fingerprinting count as unchanged too.
-        if (before && before !== fingerprint && before === (await hmacHex(ctx.fingerprintKey, normaliseDietaryText(p.dietaryText)))) fingerprint = before;
-        return { ...p.row, dietaryFingerprint: fingerprint };
-      }),
-    );
+    // Only whether there are dietary notes is sent: never the notes, nor anything made from them.
+    return valid.map((p) => ({ ...p.row, hasDietaryNotes: sending && p.dietaryText !== '' }));
   }
 
   function check() {
@@ -520,7 +513,7 @@ export function Import() {
                       ? [
                           {
                             label: 'Dietary to review',
-                            value: plan.counts.dietaryPending,
+                            value: pending.length,
                             tone: 'warning' as const,
                           },
                         ]
@@ -537,6 +530,24 @@ export function Import() {
                   ]}
                 />
                 {invalid.length > 0 && <Problems invalid={invalid} />}
+                {reviewing && alreadyReviewed > 0 && (
+                  <div className="import-withdraw">
+                    <Toggle
+                      checked={reviewAll}
+                      onChange={setReviewAll}
+                      label="Review everyone again"
+                      hint={
+                        reviewAll
+                          ? `${plural(alreadyReviewed, 'person', 'people')} already reviewed will be shown too, with what's recorded for them.`
+                          : `${plural(alreadyReviewed, 'person', 'people')} with dietary notes ${alreadyReviewed === 1 ? 'was' : 'were'} reviewed before and will be skipped.`
+                      }
+                    />
+                    <InfoTip label="Why reviewed people are skipped">
+                      CampCount keeps nothing about the dietary notes in your files, so it can't tell if a note has changed since you reviewed it. If someone's dietary needs may
+                      have changed, switch this on.
+                    </InfoTip>
+                  </div>
+                )}
                 <div className="import-withdraw">
                   <Toggle
                     checked={withdrawMissing}
@@ -622,7 +633,7 @@ export function Import() {
             <ul className="review-list">
               {pending
                 .filter(({ source }) => !(saysNothing(source.dietaryText) && dietary[rowKey(source)]?.length === 0))
-                .map(({ source }) => {
+                .map(({ source, plan: rowPlan }) => {
                   const key = rowKey(source);
                   const decided = dietary[key];
                   return (
@@ -634,6 +645,13 @@ export function Import() {
                         <span className="meta">{source.row.groupName}</span>
                         {decided && <Badge tone="success">Reviewed</Badge>}
                       </div>
+                      {!rowPlan.dietaryPending && (
+                        <p className="meta recorded-now">
+                          Reviewed before. Recorded now:{' '}
+                          {(recorded.get(rowPlan.participantId.toUpperCase()) ?? []).map((d) => `${d.item}${d.severity === 'anaphylactic' ? ' (anaphylactic)' : ''}`).join(', ') ||
+                            (recordedNow.loading ? '…' : 'no dietary needs')}
+                        </p>
+                      )}
                       {source.dietaryParts.length > 0 ? (
                         <dl className="source-notes">
                           {source.dietaryParts.map((part) => (

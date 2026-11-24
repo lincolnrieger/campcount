@@ -178,7 +178,6 @@ describe('meal items API', () => {
             level: 'Seniors',
             groupName: '',
             photoConsent: 'yes',
-            dietaryFingerprint: null,
             dietary: [{ category: 'medical_diet', item: 'Gluten free (coeliac)', severity: 'standard', note: '' }],
           },
         ],

@@ -10,7 +10,6 @@ const person = (participantId: string, o: Record<string, unknown> = {}) => ({
   level: 'Seniors',
   groupName: 'Example Club',
   photoConsent: 'yes',
-  dietaryFingerprint: null,
   ...o,
 });
 
@@ -137,20 +136,17 @@ describe('a person on the event', () => {
     expect((await api(`/events/${c.eventId}/credentials/printed`, { cookie: scanner.cookie, body: { registrationIds: [id], printed: true } })).status).toBe(403);
   });
 
-  it('keeps which dietary notes were read (fingerprints only) on the roster', async () => {
+  it('marks dietary needs as reviewed (a yes or no only) when saved', async () => {
     const c = await camp();
     const id = c.card('100').registrationId;
-    const checkedOf = async () =>
-      (await json(await api(`/events/${c.eventId}/registrations`, { cookie: c.manager.cookie }))).registrations.find((r: { id: string }) => r.id === id).dietaryChecked;
-    expect(await checkedOf()).toBeNull();
+    const reviewedOf = async () =>
+      (await json(await api(`/events/${c.eventId}/registrations`, { cookie: c.manager.cookie }))).registrations.find((r: { id: string }) => r.id === id).dietaryReviewed;
+    expect(await reviewedOf()).toBe(false);
     const put = (body: object) => api(`/events/${c.eventId}/registrations/${id}/dietary`, { cookie: c.manager.cookie, method: 'PUT', body });
-    expect((await put({ entries: [], checkedNotes: ['abc123', 'zz9'] })).status).toBe(200);
-    expect(await checkedOf()).toEqual(['abc123', 'zz9']);
-    // Saved from their page (no fingerprints): still counts as checked, and keeps what was read.
-    await put({ entries: [] });
-    expect(await checkedOf()).toEqual(['abc123', 'zz9']);
-    // Only fingerprints, never text.
-    expect((await put({ entries: [], checkedNotes: ['Peanut allergy'] })).status).toBe(400);
+    expect((await put({ entries: [] })).status).toBe(200);
+    expect(await reviewedOf()).toBe(true);
+    // Nothing about notes is accepted.
+    expect((await put({ entries: [], checkedNotes: ['abc123'] })).status).toBe(400);
   });
 
   it('deletes someone with their card and scans, and records it', async () => {

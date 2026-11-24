@@ -12,7 +12,6 @@ const person = (participantId: string, o: Record<string, unknown> = {}) => ({
   level: 'Juniors',
   groupName: 'Example Club',
   photoConsent: 'yes',
-  dietaryFingerprint: null,
   ...o,
 });
 
@@ -26,7 +25,7 @@ async function camp() {
     cookie: director.cookie,
     body: {
       rows: [
-        person('1', { dietaryFingerprint: 'b'.repeat(64), dietary: [{ category: 'allergy', item: 'Peanut', severity: 'anaphylactic', note: '' }] }),
+        person('1', { hasDietaryNotes: true, dietary: [{ category: 'allergy', item: 'Peanut', severity: 'anaphylactic', note: '' }] }),
         person('2', { firstName: '=HYPERLINK("http://evil")' }),
         person('3'),
       ],

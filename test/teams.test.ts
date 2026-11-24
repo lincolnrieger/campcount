@@ -9,7 +9,6 @@ const person = (participantId: string, photoConsent = 'yes') => ({
   level: 'Explorers',
   groupName: 'Example Unit',
   photoConsent,
-  dietaryFingerprint: null,
 });
 
 async function camp(status = 'open') {

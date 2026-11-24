@@ -159,7 +159,7 @@ export interface PreparedRow {
   /** Where the row is in the file, for workbooks with several tabs ("Juniors, row 5"). */
   where?: string;
   /** The fields that will be sent. */
-  row: Omit<ImportRow, 'dietaryFingerprint' | 'dietary'>;
+  row: Omit<ImportRow, 'hasDietaryNotes' | 'dietary'>;
   /** Source dietary text (all chosen columns together). Stays on this device; only shown in the review step. */
   dietaryText: string;
   /** The same text, column by column, so the review can show each one. */
@@ -219,7 +219,7 @@ export function flagDuplicates(prepared: PreparedRow[]): void {
   }
 }
 
-/** Normalise dietary text before fingerprinting so whitespace/case edits don't trigger review. */
+/** Tidy dietary text (spaces and case) for comparing notes on the device. */
 export function normaliseDietaryText(text: string): string {
   return text.trim().replace(/\s+/g, ' ').toLowerCase();
 }
@@ -265,15 +265,6 @@ export function isDietaryHeader(h: string): boolean {
   return /diet|allerg|food|meal/i.test(h) && !/medication/i.test(h);
 }
 
-/**
- * The text a person's dietary fingerprint is made from: each different note,
- * tidied, in a fixed order. The same notes give the same fingerprint whatever
- * order the files or columns are in, so unchanged dietaries aren't reviewed
- * again.
- */
-export function dietaryFingerprintText(parts: { text: string }[]): string {
-  return [...new Set(parts.map((p) => normaliseDietaryText(p.text)).filter(Boolean))].sort().join('\n');
-}
 
 // ---------------------------------------------------------------- workbooks with several tabs
 

@@ -12,7 +12,6 @@ const person = (participantId: string, o: Record<string, unknown> = {}) => ({
   level: 'Seniors',
   groupName: 'Example Club',
   photoConsent: 'yes',
-  dietaryFingerprint: null,
   ...o,
 });
 
@@ -32,7 +31,7 @@ async function camp(): Promise<Camp> {
   const director = await createUser();
   await grant(director.id, 'event_manager', eventId);
   const rows = [
-    person('100', { dietaryFingerprint: 'a'.repeat(64), dietary: [{ category: 'allergy', item: 'Peanut', severity: 'anaphylactic', note: '' }] }),
+    person('100', { hasDietaryNotes: true, dietary: [{ category: 'allergy', item: 'Peanut', severity: 'anaphylactic', note: '' }] }),
     person('200', { photoConsent: 'no' }),
     person('300', { kind: 'adult', level: 'Leaders' }),
   ];

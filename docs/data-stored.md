@@ -17,6 +17,7 @@ read it.
 | Status (active or withdrawn) | Running the camp | Plain | 2 years |
 | Photo consent (Yes or No) | Marking lanyards so photographers know | Plain | **90 days** |
 | Dietary needs and allergies (type, item, anaphylactic yes/no, short note) | Meals | Item and note encrypted | **90 days** |
+| Whether their dietary needs have been reviewed (yes or no) | Not asking again on the next import | Plain | **90 days** |
 | Leader's car registration (if they give one at the gate) | Contacting the owner about their car | Encrypted | **90 days** |
 | Lanyard QR code and typed code | Scanning | Encrypted | Code disabled at 90 days, deleted at 2 years |
 | Scans: who, where, when, in or out, which phone or staff member | Attendance and whereabouts | Personal | 2 years |
@@ -51,7 +52,7 @@ contact details. It can't be changed and is kept for 7 years.
 - Home addresses, phone numbers or emails of participants
 - Dates of birth, Medicare numbers, guardian or emergency contacts
 - Medical conditions, medication or swimming ability
-- Free-text medical notes
+- Free-text medical or dietary notes, or any hash or fingerprint made from them
 - Preferred names, positions or any other spreadsheet column
 - The imported spreadsheet (it's read on the importing device and never uploaded)
 - Device locations

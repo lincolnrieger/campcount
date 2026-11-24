@@ -9,7 +9,6 @@ const person = (participantId: string, kind: 'youth' | 'adult', firstName: strin
   level: kind === 'adult' ? 'Leaders' : 'Seniors',
   groupName: 'Example Group',
   photoConsent: 'yes',
-  dietaryFingerprint: null,
 });
 
 async function camp() {

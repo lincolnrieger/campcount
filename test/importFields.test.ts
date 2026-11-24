@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseDelimited } from '../src/shared/csv';
-import { autoMap, combineSheets, defaultFileColumns, dietaryColumns, dietaryFingerprintText, marryTables, findHeaderRow, flagDuplicates, initial, missingRequired, parsePhotoConsent, prepareRows, splitFullName } from '../src/shared/importFields';
+import { autoMap, combineSheets, defaultFileColumns, dietaryColumns, marryTables, findHeaderRow, flagDuplicates, initial, missingRequired, parsePhotoConsent, prepareRows, splitFullName } from '../src/shared/importFields';
 
 const HEADER = 'Participant ID\tFirst Name\tLast Name\tHome Group Name\tYear Level\tAddress\tDate of Birth\tMobile\tEmail\tMedicare Number\tMedical Conditions\tSwimming Ability\tDietary Requirements\tPhoto Consent';
 const ROW_1 = '1001\tSam\tTaylor\tRed Gum Club\tJuniors\t1 Example St\t2014-01-01\t0400000000\tsam@example.test\t123\tAsthma\tStrong\tPeanut allergy\tYes';
@@ -280,16 +280,5 @@ describe('dietaries in several files', () => {
     expect(rows[1]!.dietaryParts).toEqual([{ label: 'Consent › Dietary requirements', text: 'Halal' }]);
   });
 
-  it('gives the same fingerprint text whatever order the files are in, so unchanged dietaries are not reviewed again', () => {
-    const a = pooled([
-      { name: 'Registrations', table: registrations },
-      { name: 'Consent', table: consent },
-    ]).rows[0]!;
-    const b = pooled([
-      { name: 'Consent', table: consent },
-      { name: 'Registrations', table: registrations },
-    ]).rows[0]!;
-    expect(dietaryFingerprintText(a.dietaryParts)).toBe(dietaryFingerprintText(b.dietaryParts));
-    expect(dietaryFingerprintText(a.dietaryParts)).toBe('peanuts\nvegetarian');
-  });
+
 });
