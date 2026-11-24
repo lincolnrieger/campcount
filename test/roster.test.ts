@@ -45,7 +45,8 @@ describe('roster import', () => {
 
   it('stores names, IDs, groups, levels, dietary details and lanyard codes encrypted, and shows them decrypted', async () => {
     const { eventId, director } = await setup({ dietary: true });
-    const dietary = [{ category: 'allergy', item: 'Peanut', severity: 'anaphylactic', note: 'Carries EpiPen' }];
+    // A full 80-character note still fits once encrypted.
+    const dietary = [{ category: 'allergy', item: 'Peanut', severity: 'anaphylactic', note: 'Carries EpiPen'.padEnd(80, '.') }];
     await api(`/events/${eventId}/import/commit`, { cookie: director.cookie, body: { rows: [row('7001', { groupName: 'Red Gum Club', level: 'Juniors', dietary })] } });
     await api(`/events/${eventId}/credentials/issue`, { cookie: director.cookie, body: { mode: 'missing' } });
 
