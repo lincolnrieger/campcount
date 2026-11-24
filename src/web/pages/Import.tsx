@@ -11,7 +11,9 @@ import {
   combineSheets,
   defaultFileColumns,
   dietaryColumns,
+  firstDietaryColumn,
   isDietaryHeader,
+  isMedicalHeader,
   marryTables,
   flagDuplicates,
   missingRequired,
@@ -242,6 +244,11 @@ export function Import() {
     setTable(married);
     setSheets(married.sheets);
     const auto = autoMap(married.headers, married.rows);
+    // No column named for dietaries: one like "Medical Conditions" is read for them instead (on this device only).
+    if (auto.dietary === undefined) {
+      const d = firstDietaryColumn(married.headers);
+      if (d !== undefined && !Object.values(auto).includes(d)) auto.dietary = d;
+    }
     // Several tabs and no group column: the tab is usually the group.
     const tabAt = married.headers.indexOf(TAB_COLUMN);
     if (auto.groupName === undefined && tabAt >= 0 && !Object.values(auto).includes(tabAt)) auto.groupName = tabAt;
@@ -1019,8 +1026,9 @@ function DietaryColumnsField({ table, chosen, onChange }: { table: { headers: st
       <legend className="field-label">
         Dietaries <span className="field-optional">(optional)</span>
         <InfoTip label="About dietary columns">
-          Tick every column with dietary needs. In the dietary review you&apos;ll see each one separately for every person, and choose what to record. The column text itself is
-          never sent.
+          Tick every column with dietary needs, from every file, including columns like &quot;Medical Conditions&quot; when that&apos;s where a file keeps them. In the
+          dietary review you&apos;ll see each one separately for every person, on this device only, and choose what to record. Only what you record is sent; the column text
+          is never sent or kept.
         </InfoTip>
       </legend>
       {shown.length === 0 && <p className="meta">No columns look like dietary needs.</p>}
@@ -1030,7 +1038,13 @@ function DietaryColumnsField({ table, chosen, onChange }: { table: { headers: st
           <Choice
             key={i}
             label={table.headers[i] || `Column ${i + 1}`}
-            description={sample ? `e.g. ${sample.slice(0, 60)}` : 'Empty'}
+            description={
+              isMedicalHeader(table.headers[i] ?? '')
+                ? 'May include other medical details: shown in the dietary review on this device only, never sent'
+                : sample
+                  ? `e.g. ${sample.slice(0, 60)}`
+                  : 'Empty'
+            }
             checked={set.has(i)}
             onChange={(e) => onChange(table.headers.map((_, x) => x).filter((x) => (x === i ? e.target.checked : set.has(x))))}
           />

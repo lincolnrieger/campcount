@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseDelimited } from '../src/shared/csv';
-import { autoMap, combineSheets, defaultFileColumns, dietaryColumns, marryTables, findHeaderRow, flagDuplicates, initial, missingRequired, parsePhotoConsent, prepareRows, splitFullName } from '../src/shared/importFields';
+import { autoMap, combineSheets, defaultFileColumns, dietaryColumns, firstDietaryColumn, isDietaryHeader, marryTables, findHeaderRow, flagDuplicates, initial, missingRequired, parsePhotoConsent, prepareRows, splitFullName } from '../src/shared/importFields';
 
 const HEADER = 'Participant ID\tFirst Name\tLast Name\tHome Group Name\tYear Level\tAddress\tDate of Birth\tMobile\tEmail\tMedicare Number\tMedical Conditions\tSwimming Ability\tDietary Requirements\tPhoto Consent';
 const ROW_1 = '1001\tSam\tTaylor\tRed Gum Club\tJuniors\t1 Example St\t2014-01-01\t0400000000\tsam@example.test\t123\tAsthma\tStrong\tPeanut allergy\tYes';
@@ -128,9 +128,11 @@ describe('workbooks with a tab per group', () => {
       ['1003', 'Cal', 'Smith', 'Leaders', 'yes'],
     ]);
     expect(rows[2]!.where).toBe('Saltbush, row 3');
-    // Dietaries split over two columns are read together; medical conditions never are.
-    expect(rows[0]!.dietaryText).toBe('Vegetarian; No nuts');
+    // Dietary columns (including a medical-conditions one) are read together on the device for the review...
+    expect(rows[0]!.dietaryText).toBe('Vegetarian; Asthma; No nuts');
+    // ...but none of that text is ever in what's sent.
     expect(JSON.stringify(rows.map((r) => r.row))).not.toContain('Asthma');
+    expect(JSON.stringify(rows.map((r) => r.row))).not.toContain('Vegetarian');
     // The tab can be sent as the group.
     const tabAt = t.headers.indexOf('Tab');
     expect(prepareRows(t.rows, { ...m, groupName: tabAt }).map((r) => r.row.groupName)).toEqual(['Red Gum', 'Red Gum', 'Saltbush']);
@@ -176,7 +178,8 @@ describe('joining several spreadsheets', () => {
     const m = autoMap(t.headers, t.rows);
     const rows = prepareRows(t.rows, m, undefined, { dietaryColumns: dietaryColumns(t.headers, m) });
     expect(rows.map((r) => [r.row.participantId, r.row.firstName, r.row.groupName, r.row.level, r.row.photoConsent, r.dietaryText])).toEqual([
-      ['0101', 'Ava', 'Red Gum', 'Juniors', 'yes', 'Vegetarian'],
+      // Medical Conditions is read for the dietary review too (on the device only).
+      ['0101', 'Ava', 'Red Gum', 'Juniors', 'yes', 'Vegetarian; Asthma'],
       ['0102', 'Ben', 'Red Gum', 'Juniors', 'no', ''],
       // Club was blank in the first file, so the second fills it.
       ['0103', 'Cal', 'Saltbush', 'Seniors', 'no', ''],
@@ -269,6 +272,26 @@ describe('dietaries in several files', () => {
     const m = autoMap(t.headers, t.rows);
     return { t, rows: prepareRows(t.rows, m, undefined, { dietaryColumns: dietaryColumns(t.headers, m), headers: t.headers }) };
   };
+
+  it('reads a file whose only dietary column is called "Medical Conditions", as a dietary source on the device', () => {
+    const myExport = sheet([
+      ['Member number', 'First name', 'Medical Conditions', 'Medicare Number', 'Medication'],
+      ['1', 'Ava', 'Coeliac. Asthma (Ventolin)', '1234', 'Ventolin'],
+    ]);
+    const t = marryTables([{ name: 'Registrations', table: myExport }]);
+    const m = autoMap(t.headers, t.rows);
+    expect(m.dietary).toBeUndefined(); // never matched as a field on its own…
+    const d = firstDietaryColumn(t.headers);
+    expect(t.headers[d!]).toBe('Medical Conditions'); // …but offered for the dietary review
+    const [row] = prepareRows(t.rows, { ...m, dietary: d }, undefined, { dietaryColumns: dietaryColumns(t.headers, { ...m, dietary: d }), headers: t.headers });
+    expect(row!.dietaryParts).toEqual([{ label: 'Medical Conditions', text: 'Coeliac. Asthma (Ventolin)' }]);
+    // Medicare and medication columns are never dietary sources, and nothing from the text is in what's sent.
+    expect(isDietaryHeader('Medicare Number')).toBe(false);
+    expect(isDietaryHeader('Medication')).toBe(false);
+    expect(isDietaryHeader('Photo consent')).toBe(false);
+    expect(isDietaryHeader('Emergency contact phone')).toBe(false);
+    expect(JSON.stringify(row!.row)).not.toMatch(/Coeliac|Asthma|Ventolin|1234/);
+  });
 
   it('keeps every file’s dietary columns, even with the same name, so they can be read together', () => {
     const { t, rows } = pooled([

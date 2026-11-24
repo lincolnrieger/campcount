@@ -65,7 +65,7 @@ server rejects anything else.
 | Group (optional) | registration.group_name, encrypted | Display, reports |
 | Level (optional) | registration.level, encrypted; youth or adult from the camp's level settings | Lanyard band, youth totals |
 | Photo consent (optional) | registration.photo_consent: yes or no (anything unclear is no) | Photo indicator |
-| Dietaries (optional) | **Not stored.** Read on the device during dietary review (§4). | Source of dietary entries |
+| Dietaries (optional: any columns named for diet, allergies, food or meals, or for medical conditions, health or special requirements) | **Not stored or sent.** Read on the device during dietary review (§4). | Source of dietary entries |
 
 **Never sent to the server**: every other column, including address, phone,
 email, date of birth, Medicare number, medical conditions, medication,

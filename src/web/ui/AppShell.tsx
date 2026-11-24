@@ -112,9 +112,6 @@ function Sidebar({ isAdmin }: { isAdmin: boolean }) {
                 <NavLink to="/admin/accounts">Accounts</NavLink>
               </li>
               <li>
-                <NavLink to="/admin/log">Activity log</NavLink>
-              </li>
-              <li>
                 <NavLink to="/admin/demo">Demo camps</NavLink>
               </li>
             </ul>
