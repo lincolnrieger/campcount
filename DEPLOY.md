@@ -63,7 +63,7 @@ Then open these in a browser:
 
 - `https://campcount.com/api/health` should show `{"ok":true}`. If it
   shows `ok:false` or an error, the database or `AUTH_SECRET` isn't set up.
-- `https://campcount.com/robots.txt` should show `Disallow: /`.
+- `https://campcount.com/robots.txt` should show `Disallow: /api/` (pages stay fetchable so search engines can read their `noindex`).
 
 ## 4. Monitoring (15 minutes, once)
 
