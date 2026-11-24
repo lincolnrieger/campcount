@@ -416,7 +416,7 @@ async function validatedImport(c: AppContext, eventId: string) {
   // People without an ID: matched by name to someone already here, or given one.
   const withIds = fillParticipantIds(input.rows, existing, guestNumber);
   // Levels are filed under the camp's own names; new ones are added when the import is saved.
-  const filed = await fileUnderLevels(c.env, eventId, withIds);
+  const filed = await fileUnderLevels(c.env, eventId, withIds, input.levelLinks);
   return { input: { ...input, rows: filed.rows }, saveLevels: filed.save, plan: planImport(filed.rows, existing, input.withdrawMissing) };
 }
 

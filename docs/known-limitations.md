@@ -71,11 +71,6 @@ mitigation or a planned fix.
 - **Encryption key:** participant data can only be read with `DATA_KEY`. If
   that secret is lost, the data is lost with it; keep a safe copy. There is
   no key-rotation tool yet.
-- **Kept on the importing device:** if a camp manager keeps the unsent
-  columns on their device (an import option, on by default), those columns,
-  which can include contact or medical details, sit unencrypted in that
-  browser's storage until they sign out. Turn the option off on shared
-  computers.
 - **Activity log search:** platform admins can no longer search the activity
   log by participant name or ID (they're encrypted).
 - **Retention:** the purge runs once a day. Times are UTC, so "90 days" may

@@ -160,8 +160,10 @@ export interface PreparedRow {
   where?: string;
   /** The fields that will be sent. */
   row: Omit<ImportRow, 'dietaryFingerprint' | 'dietary'>;
-  /** Source dietary text. Stays on this device; only shown in the review step. */
+  /** Source dietary text (all chosen columns together). Stays on this device; only shown in the review step. */
   dietaryText: string;
+  /** The same text, column by column, so the review can show each one. */
+  dietaryParts: { label: string; text: string }[];
   errors: string[];
 }
 
@@ -170,7 +172,7 @@ export function prepareRows(
   rows: string[][],
   mapping: ColumnMapping,
   names: NameOptions = { firstName: 'full', lastName: 'full' },
-  opts: { dietaryColumns?: number[]; origins?: string[] } = {},
+  opts: { dietaryColumns?: number[]; origins?: string[]; headers?: string[] } = {},
 ): PreparedRow[] {
   const get = (r: string[], f: ImportField) => (mapping[f] === undefined ? '' : (r[mapping[f]!] ?? '').trim());
   const dietCols = opts.dietaryColumns ?? (mapping.dietary === undefined ? [] : [mapping.dietary]);
@@ -191,6 +193,7 @@ export function prepareRows(
       ...(opts.origins?.[i] ? { where: opts.origins[i] } : {}),
       errors,
       dietaryText: [...new Set(dietCols.map((c) => (r[c] ?? '').trim()).filter(Boolean))].join('; '),
+      dietaryParts: dietCols.map((c) => ({ label: opts.headers?.[c] || 'Dietaries', text: (r[c] ?? '').trim() })).filter((x) => x.text),
       row: {
         participantId,
         firstName: (names.firstName === 'initial' ? initial(first) : first).slice(0, 60),
@@ -398,7 +401,7 @@ export interface MarriedTable extends CombinedTable {
  * are one column: the earlier file's value wins, a later file only fills
  * blanks. Everything happens on the device.
  */
-export function marryTables(files: { name: string; table: CombinedTable }[]): MarriedTable {
+export function marryTables(files: { name: string; table: CombinedTable; columns?: number[] }[]): MarriedTable {
   const headers: string[] = [];
   const keyOf = (h: string) => h.trim().toLowerCase().replace(/\s+/g, ' ');
   const colOf = new Map<string, number>();
@@ -425,7 +428,9 @@ export function marryTables(files: { name: string; table: CombinedTable }[]): Ma
     const t = file.table;
     const m = autoMap(t.headers, t.rows);
     const fieldAt = new Map(Object.entries(m).map(([f, i]) => [i, f as ImportField]));
-    const cols = t.headers.map((h, i) => col(h, fieldAt.get(i)));
+    // A later file adds only the columns chosen for it (its ID and name columns are still used to match people).
+    const chosen = f > 0 && file.columns ? new Set(file.columns) : null;
+    const cols = t.headers.map((h, i) => (chosen && !chosen.has(i) ? -1 : col(h, fieldAt.get(i))));
     const by: FileMatch['by'] = f === 0 ? 'first' : m.participantId !== undefined ? 'id' : 'name';
     const r: FileMatch = { name: file.name, people: t.rows.length, matched: 0, added: 0, by, ambiguous: 0 };
     t.rows.forEach((row, i) => {
@@ -449,7 +454,7 @@ export function marryTables(files: { name: string; table: CombinedTable }[]): Ma
       const p = people[at]!;
       row.forEach((v, c) => {
         const value = (v ?? '').trim();
-        if (value && !p.cells.get(cols[c]!)) p.cells.set(cols[c]!, value);
+        if (value && cols[c]! >= 0 && !p.cells.get(cols[c]!)) p.cells.set(cols[c]!, value);
       });
       if (!p.id && who.id) p.id = who.id;
       index(at);
@@ -467,4 +472,19 @@ export function marryTables(files: { name: string; table: CombinedTable }[]): Ma
     ),
     files: report,
   };
+}
+
+/** Columns that look like they hold dietary needs: worth reading together. */
+export const DIETARY_COLUMN = /diet|allerg|food|meal/i;
+
+/**
+ * The columns a later spreadsheet adds by default: ones that match a CampCount
+ * field, and dietary ones. Everything else is left out unless ticked.
+ */
+export function defaultFileColumns(table: CombinedTable): number[] {
+  const m = autoMap(table.headers, table.rows);
+  const fields = new Set(Object.values(m));
+  return table.headers
+    .map((h, i) => i)
+    .filter((i) => fields.has(i) || (DIETARY_COLUMN.test(table.headers[i] ?? '') && !/medication/i.test(table.headers[i] ?? '')));
 }

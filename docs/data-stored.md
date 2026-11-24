@@ -57,9 +57,5 @@ contact details. It can't be changed and is kept for 7 years.
 - Device locations
 - IP addresses (Cloudflare's own request logs see them, but CampCount doesn't store them)
 
-## On the importing device only (optional)
-
-If the camp manager leaves "Keep the other columns on this device" on during
-an import, the columns that weren't sent stay in that browser (IndexedDB),
-shown on each person's page on that device only. They're never uploaded and
-are wiped when that person signs out, or with "Remove from this device".
+Nothing from an import is kept on the importing device either: columns that
+aren't sent are left in the spreadsheet.

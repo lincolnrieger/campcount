@@ -1,6 +1,6 @@
 import type { ImportRow, PersonEntry } from '../../shared/schemas';
 import type { LevelSetting } from '../../shared/levels';
-import { kindForLevel, defaultLevel, normalizeLevel, withLevels } from '../../shared/levels';
+import { kindForLevel, defaultLevel, linkLevels, normalizeLevel, withLevels } from '../../shared/levels';
 import type { Env } from '../env';
 import { randomInt } from '../lib/crypto';
 import { nowIso } from '../lib/time';
@@ -108,8 +108,16 @@ export async function dietaryInsert(
  * level names are added to the camp. Returns the rows and the camp's levels
  * (with any additions) and statements to save them.
  */
-export async function fileUnderLevels(env: Env, eventId: string, rows: ImportRow[]): Promise<{ rows: ImportRow[]; levels: LevelSetting[]; save: D1PreparedStatement[] }> {
-  const before = await loadLevels(env.DB, eventId);
+export async function fileUnderLevels(
+  env: Env,
+  eventId: string,
+  rows: ImportRow[],
+  links?: Record<string, string>,
+): Promise<{ rows: ImportRow[]; levels: LevelSetting[]; save: D1PreparedStatement[] }> {
+  const stored = await loadLevels(env.DB, eventId);
+  // Names linked on the import screen ("Early Bird Youth" → Youth) are remembered on the level.
+  const linked = links && Object.keys(links).length ? linkLevels(stored, links) : { levels: stored, changed: false };
+  const before = linked.levels;
   const named = rows.map((r) => ({ ...r, level: r.level.trim() ? normalizeLevel(r.level, before) : '' }));
   const { levels, added } = withLevels(
     before,
@@ -119,7 +127,7 @@ export async function fileUnderLevels(env: Env, eventId: string, rows: ImportRow
     const level = r.level || defaultLevel(r.kind, levels);
     return { ...r, level, kind: kindForLevel(level, levels) };
   });
-  const save = added.length ? [levelSettingsStatement(env.DB, eventId, levels)] : [];
+  const save = added.length || linked.changed ? [levelSettingsStatement(env.DB, eventId, levels)] : [];
   return { rows: filed, levels, save };
 }
 

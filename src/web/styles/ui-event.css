@@ -655,3 +655,31 @@
   align-items: center;
   gap: var(--space-1);
 }
+
+/* Settings › Levels: imported names linked to a level */
+.sec-links {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 0 0 8px;
+}
+.sec-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px 2px 10px;
+  border-radius: 999px;
+  background: var(--surface-2, #eef1ef);
+  font-size: 0.875rem;
+}
+.sec-link-remove {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  min-width: 28px;
+  min-height: 28px;
+  font-size: 1rem;
+  line-height: 1;
+}

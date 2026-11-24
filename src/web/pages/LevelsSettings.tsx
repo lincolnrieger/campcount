@@ -51,6 +51,7 @@ export function LevelsSettings() {
             word: r.word.trim(),
             colour: r.colour,
             youth: r.youth,
+            ...(r.aliases?.length ? { aliases: r.aliases } : {}),
           })),
         },
       });
@@ -82,7 +83,7 @@ export function LevelsSettings() {
         summary={`${plural(rows.length, 'level')} · ${plural(rows.filter((r) => r.youth).length, 'youth level')}`}
         help={
           <>
-            Renaming a level moves everyone in it. Youth levels count as youth everywhere: reports, bookings and the Side Quest; everyone else is an adult. A level that appears
+            Renaming a level moves everyone in it. Youth levels count as youth everywhere: reports, bookings and the Side Quest; everyone else is an adult. Names linked on the import screen are listed under each level. A level that appears
             in an import is added here automatically.
           </>
         }
@@ -147,6 +148,24 @@ export function LevelsSettings() {
                       </Button>
                     )}
                   </span>
+                  {(r.aliases?.length ?? 0) > 0 && (
+                    <div className="sec-links">
+                      <span className="meta">Also imported as:</span>
+                      {r.aliases!.map((a) => (
+                        <span key={a} className="sec-link">
+                          {a}
+                          <button
+                            type="button"
+                            className="sec-link-remove"
+                            aria-label={`Stop linking ${a} to ${label}`}
+                            onClick={() => set(r.id, { aliases: r.aliases!.filter((x) => x !== a) })}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}

@@ -34,9 +34,8 @@ even by mistake.
 
 **Never stored:** addresses, phone numbers, emails, dates of birth, Medicare
 numbers, medical conditions, medication, swimming ability, guardian and
-emergency contacts, and the spreadsheet itself. If the manager chooses, the
-other columns are kept in that browser only, to look up at camp; they're
-never uploaded and are wiped when they sign out.
+emergency contacts, and the spreadsheet itself. Nothing from the file is kept
+on the importing device either.
 
 ## Encryption and where the data is
 

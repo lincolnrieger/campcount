@@ -9,7 +9,9 @@ import {
   TAB_COLUMN,
   autoMap,
   combineSheets,
+  defaultFileColumns,
   dietaryColumns,
+  DIETARY_COLUMN,
   marryTables,
   flagDuplicates,
   missingRequired,
@@ -41,9 +43,10 @@ import {
   useToast,
 } from '../ui';
 import { readSheets } from '../import/xlsx';
-import { saveLocalColumns } from '../import/localColumns';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
+import type { LevelSetting } from '../../shared/levels';
+import { normalizeLevel } from '../../shared/levels';
 
 interface ImportContext {
   fingerprintKey: string;
@@ -100,12 +103,15 @@ const STEP_LABEL: Record<Step, string> = {
 };
 
 /** A key for a row before it has a participant ID: its line in the file. */
+/** One spreadsheet: its people, and (for files after the first) the columns it adds. */
+type ImportFile = { name: string; table: CombinedTable; columns?: number[] };
+
 const rowKey = (p: PreparedRow) => p.row.participantId || `line-${p.line}`;
 
 /**
  * People › Import: read a spreadsheet (.xlsx or .csv) on this device, choose
  * which fields to send, check what will change, then send only those fields
- * when Import is pressed. Every other column stays on this device.
+ * when Import is pressed. Nothing else from the file is kept anywhere.
  */
 export function Import() {
   const { event, base } = useEvent();
@@ -119,15 +125,17 @@ export function Import() {
     origins: string[];
   } | null>(null);
   /** The spreadsheets read so far (joined into `table`), and how each matched. */
-  const [files, setFiles] = useState<{ name: string; table: CombinedTable }[]>([]);
+  const [files, setFiles] = useState<ImportFile[]>([]);
   const [matches, setMatches] = useState<FileMatch[]>([]);
   /** The workbook's tabs: how many people each had, or why it was skipped. */
   const [sheets, setSheets] = useState<SheetSummary[]>([]);
   const [mapping, setMapping] = useState<ColumnMapping>({});
   const [firstMode, setFirstMode] = useState<FirstNameMode>('full');
   const [lastMode, setLastMode] = useState<LastNameMode>('full');
-  /** Keep the columns that aren't sent on this device (never uploaded). */
-  const [keepLocal, setKeepLocal] = useState(true);
+  /** Dietary columns ticked by hand (null: the ones that look dietary). */
+  const [dietChoice, setDietChoice] = useState<number[] | null>(null);
+  /** Each imported level name and the camp level it goes under, where changed from the suggestion. */
+  const [levelChoice, setLevelChoice] = useState<Record<string, string>>({});
   const [prepared, setPrepared] = useState<PreparedRow[]>([]);
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -140,12 +148,19 @@ export function Import() {
   const invalid = prepared.filter((p) => p.errors.length > 0);
   const valid = prepared.filter((p) => p.errors.length === 0);
   const reviewing = Boolean(context.data?.dietaryEnabled && context.data.canEditDietary && mapping.dietary !== undefined);
+  const dietCols = dietChoice ?? (table ? dietaryColumns(table.headers, mapping) : []);
+  /** The camp level an imported level name goes under: chosen here, else the camp's own match (linked names included), else itself. */
+  const levelTarget = (raw: string) => levelChoice[raw] ?? normalizeLevel(raw, event.levels);
+  /** Imported names linked to a different level, to remember for next time. */
+  const levelLinks = () => {
+    const links: Record<string, string> = {};
+    for (const [raw, to] of Object.entries(levelChoice)) if (to.trim() && to.trim().toLowerCase() !== raw.trim().toLowerCase()) links[raw.trim()] = to.trim();
+    return Object.keys(links).length ? links : undefined;
+  };
   const pending = useMemo(() => (plan ? plan.rows.filter((r) => r.dietaryPending).map((r) => ({ plan: r, source: valid[r.index]! })) : []), [plan, valid]);
-  const used = new Set(Object.values(mapping));
-  const otherColumns = table ? table.headers.map((h, i) => ({ h: h || `Column ${i + 1}`, i })).filter(({ i }) => !used.has(i)) : [];
 
   /** Read one file on this device: every tab of a workbook, or a CSV as one tab. */
-  async function readFile(file: File): Promise<{ name: string; table: CombinedTable }> {
+  async function readFile(file: File): Promise<ImportFile> {
     let tabs: { name: string; rows: string[][] }[];
     if (/\.xlsx$/i.test(file.name)) {
       tabs = await readSheets(await file.arrayBuffer());
@@ -163,8 +178,10 @@ export function Import() {
   }
 
   /** Use these files: join them into one list of people, and match the columns again. */
-  function applyFiles(next: { name: string; table: CombinedTable }[]) {
+  function applyFiles(next: ImportFile[]) {
     const married = marryTables(next);
+    setDietChoice(null);
+    setLevelChoice({});
     setFiles(next);
     setMatches(next.length > 1 ? married.files : []);
     setTable(married);
@@ -183,7 +200,8 @@ export function Import() {
     setBusy(true);
     try {
       const read = await Promise.all(list.map(readFile));
-      applyFiles([...(add ? files : []), ...read]);
+      // Every file after the first adds only the columns chosen for it (the field-like ones to start with).
+      applyFiles([...(add ? files : []), ...read].map((f, i) => (i > 0 && !f.columns ? { ...f, columns: defaultFileColumns(f.table) } : f)));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'That file could not be read.');
     } finally {
@@ -210,15 +228,9 @@ export function Import() {
 
   function check() {
     if (!table) return;
-    const next = prepareRows(
-      table.rows,
-      mapping,
-      { firstName: firstMode, lastName: lastMode },
-      {
-        dietaryColumns: dietaryColumns(table.headers, mapping),
-        origins: table.origins,
-      },
-    );
+    const next = prepareRows(table.rows, mapping, { firstName: firstMode, lastName: lastMode }, { dietaryColumns: dietCols, origins: table.origins, headers: table.headers });
+    // Each imported level name goes under the camp level chosen for it.
+    for (const p of next) if (p.row.level) p.row.level = levelTarget(p.row.level);
     flagDuplicates(next);
     setPrepared(next);
     setPlan(null);
@@ -232,7 +244,7 @@ export function Import() {
     try {
       const built = rows.length ? rows : await buildRows();
       setRows(built);
-      const res = await api<{ plan: Plan }>(`/events/${event.id}/import/preview`, { body: { rows: built, withdrawMissing: withdraw } });
+      const res = await api<{ plan: Plan }>(`/events/${event.id}/import/preview`, { body: { rows: built, withdrawMissing: withdraw, levelLinks: levelLinks() } });
       setPlan(res.plan);
     } catch (err) {
       setError(err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.');
@@ -253,19 +265,8 @@ export function Import() {
         counts: Plan['counts'];
         participantIds: string[];
       }>(`/events/${event.id}/import/commit`, {
-        body: { rows: body, withdrawMissing },
+        body: { rows: body, withdrawMissing, levelLinks: levelLinks() },
       });
-      // The columns that weren't sent stay on this device, filed by each person's participant ID.
-      if (keepLocal && table && otherColumns.length > 0) {
-        await saveLocalColumns(
-          event.id,
-          otherColumns.map((c) => c.h),
-          valid.map((p, i) => ({
-            participantId: res.participantIds[i] ?? '',
-            values: otherColumns.map((c) => (table.rows[p.line - 2]?.[c.i] ?? '').trim()),
-          })),
-        ).catch(() => toast('The other columns could not be kept on this device.'));
-      }
       setResult(res.counts);
       setStep('done');
       toast(`Imported ${plural(res.counts.create + res.counts.update, 'person', 'people')}`);
@@ -281,7 +282,7 @@ export function Import() {
     <PageHeader
       title="Import people"
       back={back}
-      help="Reads a spreadsheet on this device. You choose which fields to send; nothing is sent until you press Import, and everything else stays on this device."
+      help="Reads spreadsheets on this device. You choose which fields to send; nothing is sent until you press Import, and nothing else from the files is kept."
     />
   );
   if (context.loading && !context.data)
@@ -342,6 +343,7 @@ export function Import() {
               busy={busy}
               onAdd={(list) => void loadFiles(list, true)}
               onRemove={(i) => (files.length > 1 ? applyFiles(files.filter((_, x) => x !== i)) : setStep('file'))}
+              onColumns={(i, columns) => applyFiles(files.map((f, x) => (x === i ? { ...f, columns } : f)))}
             />
             {files.some((f) => f.table.sheets.length > 1) && <TabSummary sheets={sheets} />}
             <p className="meta">
@@ -351,68 +353,71 @@ export function Import() {
               </InfoTip>
             </p>
             {missing.length > 0 && <Banner tone="warning">Choose the column with each person's first name.</Banner>}
-            {mapping.dietary !== undefined && dietaryColumns(table.headers, mapping).length > 1 && (
-              <p className="meta">
-                Dietaries are read from{' '}
-                {dietaryColumns(table.headers, mapping)
-                  .map((i) => table.headers[i])
-                  .join(', ')}
-                , together.
-              </p>
-            )}
             {mapping.dietary !== undefined && !reviewing && (
               <Banner tone="info">
                 {context.data?.dietaryEnabled ? 'Dietaries will be flagged for an event manager to review.' : 'Dietary needs are off for this event, so that column is not sent.'}
               </Banner>
             )}
             <div className="map-grid">
-              {shownFields.map((field) => (
-                <FieldRow
-                  key={field}
-                  field={field}
-                  table={table}
-                  mapping={mapping}
-                  onChange={setMapping}
-                  extra={
-                    field === 'firstName' ? (
-                      <Segmented
-                        label="How much of the first name to send"
-                        value={firstMode}
-                        onChange={setFirstMode}
-                        options={[
-                          { value: 'full', label: 'Full' },
-                          { value: 'initial', label: 'Initial only' },
-                        ]}
-                      />
-                    ) : field === 'lastName' ? (
-                      <Segmented
-                        label="How much of the last name to send"
-                        value={lastMode}
-                        onChange={setLastMode}
-                        options={[
-                          { value: 'full', label: 'Full' },
-                          { value: 'initial', label: 'Initial only' },
-                          { value: 'none', label: "Don't send" },
-                        ]}
-                      />
-                    ) : null
-                  }
-                />
-              ))}
+              {shownFields
+                .filter((f) => f !== 'dietary')
+                .map((field) => (
+                  <FieldRow
+                    key={field}
+                    field={field}
+                    table={table}
+                    mapping={mapping}
+                    onChange={setMapping}
+                    extra={
+                      field === 'firstName' ? (
+                        <Segmented
+                          label="How much of the first name to send"
+                          value={firstMode}
+                          onChange={setFirstMode}
+                          options={[
+                            { value: 'full', label: 'Full' },
+                            { value: 'initial', label: 'Initial only' },
+                          ]}
+                        />
+                      ) : field === 'lastName' ? (
+                        <Segmented
+                          label="How much of the last name to send"
+                          value={lastMode}
+                          onChange={setLastMode}
+                          options={[
+                            { value: 'full', label: 'Full' },
+                            { value: 'initial', label: 'Initial only' },
+                            { value: 'none', label: "Don't send" },
+                          ]}
+                        />
+                      ) : null
+                    }
+                  />
+                ))}
             </div>
-            {otherColumns.length > 0 && (
-              <div className="local-columns">
-                <Toggle
-                  checked={keepLocal}
-                  onChange={setKeepLocal}
-                  label={`Keep the other ${plural(otherColumns.length, 'column')} on this device`}
-                  hint={
-                    keepLocal ? 'Never sent. Shown on each person’s page on this device only, and removed when you sign out.' : 'They’re left in your file and not kept anywhere.'
-                  }
-                />
-                <p className="meta">Not sent: {otherColumns.map((c) => c.h).join(', ')}</p>
-              </div>
+            <DietaryColumnsField
+              table={table}
+              chosen={dietCols}
+              onChange={(cols) => {
+                setDietChoice(cols);
+                const next = { ...mapping };
+                if (cols.length) next.dietary = cols[0]!;
+                else delete next.dietary;
+                setMapping(next);
+              }}
+            />
+            {mapping.level !== undefined && (
+              <LevelLinks
+                values={table.rows.map((r) => (r[mapping.level!] ?? '').trim()).filter(Boolean)}
+                levels={event.levels}
+                target={levelTarget}
+                onChange={(raw, to) => setLevelChoice({ ...levelChoice, [raw]: to })}
+              />
             )}
+            <p className="meta import-privacy">
+              <Icon name="lock" size={16} />
+              Only the fields above are sent, when you press Import. Nothing from the file is kept on this device or anywhere else.
+            </p>
             <div className="btn-row form-actions">
               <Button kind="primary" disabled={missing.length > 0} onClick={check}>
                 Next
@@ -571,7 +576,18 @@ export function Import() {
                         <span className="meta">{source.row.groupName}</span>
                         {decided && <Badge tone="success">Reviewed</Badge>}
                       </div>
-                      <blockquote className="source-note">{source.dietaryText || 'The note was removed in the new file.'}</blockquote>
+                      {source.dietaryParts.length > 0 ? (
+                        <dl className="source-notes">
+                          {source.dietaryParts.map((part) => (
+                            <div key={part.label} className="source-note-part">
+                              <dt>{part.label}</dt>
+                              <dd>{part.text}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      ) : (
+                        <blockquote className="source-note">The note was removed in the new file.</blockquote>
+                      )}
                       <DietaryEditor
                         value={decided}
                         onChange={(entries) => setDietary({ ...dietary, [key]: entries })}
@@ -818,12 +834,14 @@ function FilesPanel({
   busy,
   onAdd,
   onRemove,
+  onColumns,
 }: {
-  files: { name: string; table: CombinedTable }[];
+  files: ImportFile[];
   matches: FileMatch[];
   busy: boolean;
   onAdd: (files: File[]) => void;
   onRemove: (index: number) => void;
+  onColumns: (index: number, columns: number[]) => void;
 }) {
   return (
     <div className="panel panel-pad import-files">
@@ -831,24 +849,27 @@ function FilesPanel({
         {files.map((f, i) => {
           const m = matches[i];
           return (
-            <li key={`${f.name}-${i}`} className="row">
-              <span className="row-main">
-                <span className="row-title">{f.name}</span>
-                <span className="row-meta">
-                  {plural(f.table.rows.length, 'person', 'people')}
-                  {m && i > 0 && (
-                    <>
-                      {' '}
-                      · matched {m.matched} by {m.by === 'id' ? 'participant ID' : 'name'}, {m.added} new
-                      {m.ambiguous > 0 && `, ${plural(m.ambiguous, 'name')} shared by two people (added separately)`}
-                    </>
-                  )}
-                  {i === 0 && files.length > 1 && ' · the starting list; its values win'}
+            <li key={`${f.name}-${i}`} className="import-file">
+              <div className="row">
+                <span className="row-main">
+                  <span className="row-title">{f.name}</span>
+                  <span className="row-meta">
+                    {plural(f.table.rows.length, 'person', 'people')}
+                    {m && i > 0 && (
+                      <>
+                        {' '}
+                        · matched {m.matched} by {m.by === 'id' ? 'participant ID' : 'name'}, {m.added} new
+                        {m.ambiguous > 0 && `, ${plural(m.ambiguous, 'name')} shared by two people (added separately)`}
+                      </>
+                    )}
+                    {i === 0 && files.length > 1 && ' · the starting list; its values win'}
+                  </span>
                 </span>
-              </span>
-              <Button small kind="ghost" aria-label={`Remove ${f.name}`} onClick={() => onRemove(i)}>
-                <Icon name="trash" size={16} />
-              </Button>
+                <Button small kind="ghost" aria-label={`Remove ${f.name}`} onClick={() => onRemove(i)}>
+                  <Icon name="trash" size={16} />
+                </Button>
+              </div>
+              {i > 0 && <FileColumns file={f} onChange={(cols) => onColumns(i, cols)} />}
             </li>
           );
         })}
@@ -873,5 +894,161 @@ function FilesPanel({
         </InfoTip>
       </div>
     </div>
+  );
+}
+
+/** The first value in a column, as an example. */
+const sampleOf = (table: { rows: string[][] }, i: number) => table.rows.find((r) => (r[i] ?? '').trim())?.[i]?.trim() ?? '';
+
+/** Which columns a later spreadsheet adds. Its ID and name columns still match people either way. */
+function FileColumns({ file, onChange }: { file: ImportFile; onChange: (columns: number[]) => void }) {
+  const chosen = new Set(file.columns ?? []);
+  const t = file.table;
+  return (
+    <details className="file-columns">
+      <summary>
+        <Icon name="chevron" /> Columns to add from this file ({chosen.size} of {t.headers.length})
+      </summary>
+      <fieldset className="choices file-columns-list">
+        <legend className="visually-hidden">Columns to add from {file.name}</legend>
+        {t.headers.map((h, i) => {
+          const sample = sampleOf(t, i);
+          return (
+            <Choice
+              key={i}
+              label={h || `Column ${i + 1}`}
+              description={sample ? `e.g. ${sample.slice(0, 60)}` : 'Empty'}
+              checked={chosen.has(i)}
+              onChange={(e) => onChange(t.headers.map((_, x) => x).filter((x) => (x === i ? e.target.checked : chosen.has(x))))}
+            />
+          );
+        })}
+      </fieldset>
+      <p className="field-hint">Ticked columns fill in people&apos;s blanks. Its ID and name columns are always used to match people, even if they&apos;re not ticked.</p>
+    </details>
+  );
+}
+
+/**
+ * Dietaries: tick every column that holds dietary needs. They're all shown,
+ * column by column, in the dietary review, where you choose what to record.
+ */
+function DietaryColumnsField({ table, chosen, onChange }: { table: { headers: string[]; rows: string[][] }; chosen: number[]; onChange: (columns: number[]) => void }) {
+  const [all, setAll] = useState(false);
+  const set = new Set(chosen);
+  const likely = table.headers.map((h, i) => i).filter((i) => set.has(i) || (DIETARY_COLUMN.test(table.headers[i] ?? '') && !/medication/i.test(table.headers[i] ?? '')));
+  const shown = all ? table.headers.map((_, i) => i) : likely;
+  return (
+    <fieldset className="panel panel-pad choices dietary-columns">
+      <legend className="field-label">
+        Dietaries <span className="field-optional">(optional)</span>
+        <InfoTip label="About dietary columns">
+          Tick every column with dietary needs. In the dietary review you&apos;ll see each one separately for every person, and choose what to record. The column text itself is
+          never sent.
+        </InfoTip>
+      </legend>
+      {shown.length === 0 && <p className="meta">No columns look like dietary needs.</p>}
+      {shown.map((i) => {
+        const sample = sampleOf(table, i);
+        return (
+          <Choice
+            key={i}
+            label={table.headers[i] || `Column ${i + 1}`}
+            description={sample ? `e.g. ${sample.slice(0, 60)}` : 'Empty'}
+            checked={set.has(i)}
+            onChange={(e) => onChange(table.headers.map((_, x) => x).filter((x) => (x === i ? e.target.checked : set.has(x))))}
+          />
+        );
+      })}
+      <Button small kind="ghost" onClick={() => setAll(!all)}>
+        {all ? 'Show only dietary-looking columns' : 'Show all columns'}
+      </Button>
+    </fieldset>
+  );
+}
+
+/**
+ * The level names in the file, each linked to one of the camp's levels: an
+ * existing one, a new one with the same name, or a new name ("Early Bird Youth"
+ * and "Full Participant Youth" both under Youth). Links are remembered.
+ */
+function LevelLinks({
+  values,
+  levels,
+  target,
+  onChange,
+}: {
+  values: string[];
+  levels: readonly LevelSetting[];
+  target: (raw: string) => string;
+  onChange: (raw: string, to: string) => void;
+}) {
+  const counts = new Map<string, number>();
+  for (const v of values) counts.set(v, (counts.get(v) ?? 0) + 1);
+  const raws = [...counts.keys()].sort((a, b) => a.localeCompare(b));
+  const [naming, setNaming] = useState<Record<string, boolean>>({});
+  const known = new Set(levels.map((l) => l.name.toLowerCase()));
+  // Levels to offer: the camp's, plus any new names chosen on this screen.
+  const options = [...new Set([...levels.map((l) => l.name), ...raws.map(target)])];
+  const NEW = '\u0000new';
+  return (
+    <fieldset className="panel panel-pad level-links">
+      <legend className="field-label">
+        Levels in this file
+        <InfoTip label="About levels">
+          Choose the level each name in the file goes under. Several names can share one level (for example two kinds of youth ticket both under Youth). CampCount remembers these
+          links for the next import. Levels are set up in Settings › Levels.
+        </InfoTip>
+      </legend>
+      <div className="level-links-list">
+        {raws.map((raw) => {
+          const to = target(raw);
+          const isNew = !known.has(to.toLowerCase());
+          return (
+            <div key={raw} className="level-link">
+              <span className="level-link-from">
+                {raw} <span className="meta">({counts.get(raw)})</span>
+              </span>
+              <span className="meta" aria-hidden="true">
+                →
+              </span>
+              {naming[raw] ? (
+                <input
+                  className="input"
+                  ref={(el) => el?.focus()}
+                  maxLength={40}
+                  aria-label={`New level for ${raw}`}
+                  defaultValue=""
+                  placeholder="New level name"
+                  onBlur={(e) => {
+                    if (e.target.value.trim()) onChange(raw, e.target.value.trim());
+                    setNaming({ ...naming, [raw]: false });
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                  }}
+                />
+              ) : (
+                <select
+                  className="select"
+                  aria-label={`Level for ${raw}`}
+                  value={to}
+                  onChange={(e) => (e.target.value === NEW ? setNaming({ ...naming, [raw]: true }) : onChange(raw, e.target.value))}
+                >
+                  {options.map((o) => (
+                    <option key={o} value={o}>
+                      {o}
+                      {known.has(o.toLowerCase()) ? '' : ' (new level)'}
+                    </option>
+                  ))}
+                  <option value={NEW}>Another new level…</option>
+                </select>
+              )}
+              {isNew && !naming[raw] && <Badge tone="info">New</Badge>}
+            </div>
+          );
+        })}
+      </div>
+    </fieldset>
   );
 }

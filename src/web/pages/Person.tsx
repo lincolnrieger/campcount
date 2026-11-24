@@ -14,7 +14,6 @@ import { useApi } from '../useApi';
 import { Badge, Banner, Button, ButtonLink, Field, Icon, InfoTip, LoadError, Loading, Menu, PageHeader, Section, Sheet, SkeletonHeader, SkeletonRows, useConfirm, useToast } from '../ui';
 import type { MenuItem, Tone } from '../ui';
 import { useEvent } from './EventLayout';
-import { clearLocalColumns, loadLocalColumns } from '../import/localColumns';
 
 interface PersonData {
   registration: {
@@ -491,7 +490,6 @@ export function Person() {
                 </div>
               )}
             </dl>
-            <OnThisDevice eventId={event.id} participantId={r.participantId} />
           </Section>
         </div>
       </div>
@@ -737,55 +735,5 @@ function LanyardPanel({
         ) : null}
       </div>
     </Section>
-  );
-}
-
-/**
- * Columns from an import that were kept on this device only (never sent to
- * CampCount). Shown just to whoever imported on this device, until sign-out.
- */
-function OnThisDevice({ eventId, participantId }: { eventId: string; participantId: string }) {
-  const [cols, setCols] = useState<{ headers: string[]; values: string[] } | null>(null);
-  useEffect(() => {
-    let live = true;
-    void loadLocalColumns(eventId)
-      .then((l) => {
-        const values = l?.byId[participantId.toUpperCase()];
-        if (live && l && values) setCols({ headers: l.headers, values });
-      })
-      .catch(() => undefined);
-    return () => {
-      live = false;
-    };
-  }, [eventId, participantId]);
-  if (!cols) return null;
-  const shown = cols.headers.map((h, i) => [h, cols.values[i] ?? ''] as const).filter(([, v]) => v);
-  if (shown.length === 0) return null;
-  return (
-    <details className="panel panel-pad on-this-device">
-      <summary>
-        <Icon name="lock" size={16} /> On this device only ({shown.length})
-      </summary>
-      <p className="meta">From the spreadsheet you imported here. Never sent to CampCount; removed when you sign out.</p>
-      <dl className="person-dl">
-        {shown.map(([h, v]) => (
-          <div key={h}>
-            <dt>{h}</dt>
-            <dd>{v}</dd>
-          </div>
-        ))}
-      </dl>
-      <Button
-        small
-        kind="ghost"
-        onClick={() =>
-          void clearLocalColumns(eventId).then(() => {
-            setCols(null);
-          })
-        }
-      >
-        Remove from this device
-      </Button>
-    </details>
   );
 }

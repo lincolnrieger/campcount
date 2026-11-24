@@ -5,6 +5,7 @@ import { App } from './App';
 import { SessionProvider } from './session';
 import { SiteProvider } from './site';
 import { ConfirmProvider, ToastProvider } from './ui';
+import { removeKeptImportColumns } from './offline/db';
 import '@fontsource-variable/nunito-sans/wght.css';
 import './styles/tokens.css';
 import './styles/base.css';
@@ -23,6 +24,9 @@ import './styles/ui-programme.css';
 import './styles/ui-event.css';
 import './styles/ui-platform.css';
 import './styles/screens-participant.css';
+
+// Clear anything an earlier version kept on this device from an import.
+void removeKeptImportColumns().catch(() => undefined);
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
