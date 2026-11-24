@@ -84,7 +84,7 @@ export function BookLink() {
             </p>
             {!info.open ? <p className="book-link-msg">Booking is closed right now.</p> : s.full ? <p className="book-link-msg">This activity is full.</p> : null}
             <form onSubmit={book} className="form" noValidate>
-              <Field id="book-number" label="Scouts SA Membership Number">
+              <Field id="book-number" label="Membership Number">
                 <input className="input book-link-input" inputMode="numeric" autoComplete="off" maxLength={24} value={number} onChange={(e) => setNumber(e.target.value)} />
               </Field>
               <Button type="submit" kind="primary" busy={busy} busyLabel="Opening…" disabled={!number.trim()}>

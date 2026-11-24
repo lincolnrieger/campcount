@@ -104,7 +104,7 @@ export function JoinLink() {
             </header>
             <form onSubmit={open} noValidate>
               <label htmlFor="join-number" className="field-label">
-                Scouts SA Membership Number
+                Membership Number
               </label>
               <div className="join-row">
                 <input

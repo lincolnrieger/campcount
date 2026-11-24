@@ -1,6 +1,6 @@
 # CampCount
 
-Camp and event operations for Scouts SA: rosters, QR lanyards, activity and
+Camp and event operations: rosters, QR lanyards, activity and
 meal scanning that keeps working with patchy signal, and close-out reports.
 
 - Requirements: [`docs/requirements.md`](docs/requirements.md)

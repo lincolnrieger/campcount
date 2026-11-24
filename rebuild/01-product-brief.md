@@ -2,7 +2,7 @@
 
 ## What CampCount is
 
-CampCount lets Scouts SA camp staff know **where every young person and leader is** during a camp. Everyone wears a lanyard with a QR code. Staff scan it:
+CampCount lets camp staff know **where every young person and leader is** during a camp. Everyone wears a lanyard with a QR code. Staff scan it:
 - At the **gate** (arrived or left camp).
 - At **meals** (served, with a dietary alert).
 - At **activities** (signed in, optionally signed out).

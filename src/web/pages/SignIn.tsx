@@ -176,7 +176,7 @@ export function SignIn() {
           <Field id="name" label="Your name">
             <input id="name" className="input" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
-          <Field id="signup-email" label="Email address" hint="Your Scouts SA email is best.">
+          <Field id="signup-email" label="Email address" hint="Use the email you use for camp.">
             <input
               id="signup-email"
               className="input"

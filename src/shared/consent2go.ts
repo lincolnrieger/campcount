@@ -5,7 +5,7 @@ import type { SECTIONS } from './sections';
 /**
  * Consent2Go exports: one workbook, a tab per group, a title row, then a
  * header row of school-style columns ("Student ID", "HomeRoom", "Year"…).
- * Scouts SA registers people in MyScout; activity consent and dietary needs
+ * People are registered in MyScout; activity consent and dietary needs
  * come from Consent2Go. People are matched on membership number, which
  * Consent2Go holds in "Student ID".
  */

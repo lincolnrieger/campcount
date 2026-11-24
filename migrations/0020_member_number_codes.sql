@@ -1,4 +1,4 @@
--- Each lanyard's typed code becomes the person's Scouts SA membership number
+-- Each lanyard's typed code becomes the person's membership number
 -- (the QR code doesn't change). Guests, who have no membership number, keep
 -- their random code. A code is only changed if no other card at the camp
 -- already uses that number.
