@@ -135,7 +135,7 @@ const OUTCOME: Record<string, { label: string; tone: Tone } | undefined> = {
   void: { label: 'Undone', tone: 'neutral' },
 };
 
-/** Admin › Activity log: every scan and every change, newest first, as plain sentences. */
+/** Admin › Activity log (not in the menus; open /admin/log): every scan and every change, newest first, as plain sentences. */
 export function AdminLog() {
   const events = useApi<{ events: EventSummary[] }>('/events');
   const [eventId, setEventId] = useRemembered('log:event', '');

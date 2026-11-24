@@ -5,11 +5,13 @@ import type { IconName } from '../ui';
 
 const AREAS: { to: string; label: string; hint: string; icon: IconName }[] = [
   { to: '/admin/accounts', label: 'Accounts', hint: 'Sign-ins, admins, set-up links', icon: 'team' },
-  { to: '/admin/log', label: 'Activity log', hint: 'Every scan and change', icon: 'clipboard' },
   { to: '/admin/demo', label: 'Demo camps', hint: 'Practice camps for training', icon: 'star' },
 ];
 
-/** Admin: the three admin areas. Platform admins only (the server checks too). */
+/**
+ * Admin: the admin areas. Platform admins only (the server checks too). The
+ * activity log isn't listed: it still records everything, and is at /admin/log.
+ */
 export function AdminIndex() {
   const { me } = useSession();
   if (me?.kind !== 'user' || !me.platformPermissions.includes('platform.users.manage')) return <Navigate to="/" replace />;
