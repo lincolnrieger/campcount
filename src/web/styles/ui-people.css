@@ -536,3 +536,14 @@
 .local-columns {
   margin-top: 16px;
 }
+
+/* Import › the spreadsheets being joined */
+.import-files {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.import-files .add-file {
+  justify-self: start;
+  cursor: pointer;
+}
