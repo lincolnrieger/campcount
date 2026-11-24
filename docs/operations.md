@@ -22,7 +22,7 @@ to recover the system. Keep a printed copy at camp HQ.
      name when a file has no IDs (only when exactly one person has that name).
      Where two files have the same column, the first file's value is kept.
      A workbook with a tab per group is read tab by tab.
-   - CampCount matches the columns by name (no AI, nothing sent). Check each
+   - CampCount matches the columns by name, on your device (nothing is sent). Check each
      field: First name (required), Last name, Group, Level, Participant ID,
      Dietaries and Photo consent. Choose "Don't send" for anything you don't
      need. First and last names can be sent in full or as initials only, and

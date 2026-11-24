@@ -3,8 +3,8 @@ import type { ImportRow } from './schemas';
 /**
  * Importing a spreadsheet: the fields CampCount can take, how a file's
  * columns are matched to them, and how rows are prepared. All of this runs on
- * the device that opened the file. Matching is plain word rules (no AI, no
- * network): exact header names first, then headers that contain the words.
+ * the device that opened the file. Matching is plain word rules, with no
+ * network: exact header names first, then headers that contain the words.
  */
 
 /** The fields CampCount can import. Everything else in a file stays on the device. */

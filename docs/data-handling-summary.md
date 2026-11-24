@@ -16,8 +16,8 @@ CampCount doesn't connect to any other system or pull data from one. A camp
 manager opens a spreadsheet (.xlsx or .csv) in CampCount, and it's read **on
 their own device**. The file itself is never uploaded.
 
-Columns are matched to CampCount's fields by their names, on the device. No
-AI is used and nothing is sent while matching. The manager checks each match
+Columns are matched to CampCount's fields by their names, on the device, and
+nothing is sent while matching. The manager checks each match
 and can choose "Don't send" for any field. **Nothing is sent until they press
 Import**, and then only the fields they chose:
 

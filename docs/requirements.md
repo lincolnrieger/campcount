@@ -52,8 +52,8 @@ server checks it. A permission matrix test enumerates every route × role.
 ## 3. Data we keep from an imported spreadsheet
 
 The import is an **allowlist**. The file is read **on the importing device**
-and never uploaded. Columns are matched to fields by name on the device (no
-AI, nothing sent); the manager checks each match or chooses "Don't send".
+and never uploaded. Columns are matched to fields by name on the device
+(nothing sent); the manager checks each match or chooses "Don't send".
 Nothing is sent until they press Import, and then only these fields. The
 server rejects anything else.
 
