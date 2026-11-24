@@ -81,11 +81,13 @@ const norm = (s: string) =>
 /**
  * Match a file's columns to CampCount fields. Exact header names win; then a
  * header that contains every word of a field's name ("Home Group Name" →
- * Group). Each column is used once, and personal-looking columns are skipped.
+ * Group). Each column is used once, personal-looking columns are skipped, and
+ * so are columns with nothing in them (when `rows` is given).
  */
-export function autoMap(headers: string[]): ColumnMapping {
+export function autoMap(headers: string[], rows?: string[][]): ColumnMapping {
   const mapping: ColumnMapping = {};
-  const used = new Set<number>();
+  // Columns with nothing in them are never matched (when the rows are known).
+  const used = new Set<number>(rows ? headers.map((_, i) => i).filter((i) => !rows.some((r) => (r[i] ?? '').trim())) : []);
   const normalised = headers.map(norm);
   const allowed = (i: number, field: ImportField) => !PERSONAL_COLUMN.test(headers[i] ?? '') || (field === 'dietary' && /allerg|diet/i.test(headers[i] ?? ''));
   const fields = IMPORT_FIELD_ORDER;
@@ -152,8 +154,10 @@ export function splitFullName(full: string): { first: string; last: string } {
 }
 
 export interface PreparedRow {
-  /** 1-based line in the source file (header is line 1). */
+  /** 1-based line in the combined table (header is line 1). */
   line: number;
+  /** Where the row is in the file, for workbooks with several tabs ("Juniors, row 5"). */
+  where?: string;
   /** The fields that will be sent. */
   row: Omit<ImportRow, 'dietaryFingerprint' | 'dietary'>;
   /** Source dietary text. Stays on this device; only shown in the review step. */
@@ -162,8 +166,14 @@ export interface PreparedRow {
 }
 
 /** Turn file rows into what CampCount will send: only the matched fields, names cut down as chosen. */
-export function prepareRows(rows: string[][], mapping: ColumnMapping, names: NameOptions = { firstName: 'full', lastName: 'full' }): PreparedRow[] {
+export function prepareRows(
+  rows: string[][],
+  mapping: ColumnMapping,
+  names: NameOptions = { firstName: 'full', lastName: 'full' },
+  opts: { dietaryColumns?: number[]; origins?: string[] } = {},
+): PreparedRow[] {
   const get = (r: string[], f: ImportField) => (mapping[f] === undefined ? '' : (r[mapping[f]!] ?? '').trim());
+  const dietCols = opts.dietaryColumns ?? (mapping.dietary === undefined ? [] : [mapping.dietary]);
   return rows.map((r, i) => {
     const errors: string[] = [];
     let first = get(r, 'firstName');
@@ -178,8 +188,9 @@ export function prepareRows(rows: string[][], mapping: ColumnMapping, names: Nam
     if (participantId && !/^[A-Za-z0-9-]{1,20}$/.test(participantId)) errors.push('Participant ID can only have letters, numbers and dashes');
     return {
       line: i + 2,
+      ...(opts.origins?.[i] ? { where: opts.origins[i] } : {}),
       errors,
-      dietaryText: get(r, 'dietary'),
+      dietaryText: [...new Set(dietCols.map((c) => (r[c] ?? '').trim()).filter(Boolean))].join('; '),
       row: {
         participantId,
         firstName: (names.firstName === 'initial' ? initial(first) : first).slice(0, 60),
@@ -195,13 +206,13 @@ export function prepareRows(rows: string[][], mapping: ColumnMapping, names: Nam
 
 /** Mark every row after the first with the same participant ID as an error. */
 export function flagDuplicates(prepared: PreparedRow[]): void {
-  const firstLine = new Map<string, number>();
+  const firstLine = new Map<string, string>();
   for (const p of prepared) {
     const key = p.row.participantId.toUpperCase();
     if (!key) continue;
     const seen = firstLine.get(key);
-    if (seen !== undefined) p.errors.push(`Same participant ID as line ${seen}`);
-    else firstLine.set(key, p.line);
+    if (seen !== undefined) p.errors.push(`Same participant ID as ${seen}`);
+    else firstLine.set(key, p.where ?? `line ${p.line}`);
   }
 }
 
@@ -232,4 +243,110 @@ export function saysNothing(text: string): boolean {
     .replace(/\s+/g, ' ')
     .trim();
   return t !== '' && SAYS_NOTHING.has(t);
+}
+
+/**
+ * Every column whose name says it's about diet ("Dietary Requirement 1",
+ * "Dietary Requirement 2", "Non-medical dietary requirements"…), with the
+ * chosen Dietaries column first, so notes split across columns are read
+ * together. Empty when Dietaries isn't being sent.
+ */
+export function dietaryColumns(headers: string[], mapping: ColumnMapping): number[] {
+  if (mapping.dietary === undefined) return [];
+  const others = headers.map((h, i) => ({ h, i })).filter(({ h, i }) => i !== mapping.dietary && /diet/i.test(h) && !/medication/i.test(h));
+  return [mapping.dietary, ...others.map((o) => o.i)];
+}
+
+// ---------------------------------------------------------------- workbooks with several tabs
+
+/** The column added when people come from several tabs: which tab each was on. */
+export const TAB_COLUMN = 'Tab';
+
+export interface SheetSummary {
+  name: string;
+  people: number;
+  /** Why the tab wasn't read, when it wasn't. */
+  skipped?: string;
+}
+
+export interface CombinedTable {
+  headers: string[];
+  rows: string[][];
+  /** "Tab, row N" for each row (only when there's more than one tab). */
+  origins: string[];
+  sheets: SheetSummary[];
+}
+
+const isEmptyRow = (r: string[]) => !r.some((c) => (c ?? '').trim());
+
+/**
+ * The header row of one tab: of its first ten rows, the one whose cells match
+ * the most CampCount fields (exports often put a title above the headers).
+ * It must have a name column. Null when no row looks like headers.
+ */
+export function findHeaderRow(rows: string[][]): number | null {
+  let best: { index: number; score: number } | null = null;
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    const m = autoMap(rows[i]!.map((c) => (c ?? '').trim()));
+    if (missingRequired(m).length) continue;
+    const score = Object.keys(m).length;
+    if (!best || score > best.score) best = { index: i, score };
+  }
+  return best?.index ?? null;
+}
+
+/**
+ * Read every tab of a workbook as one table. Each tab's header row is found on
+ * its own; columns are lined up by name (ignoring case and spacing), so tabs
+ * with different column orders still match. With more than one tab, a "Tab"
+ * column says which tab each person was on. Tabs with no names (a summary or
+ * instructions tab) are skipped and listed.
+ */
+export function combineSheets(sheets: { name: string; rows: string[][] }[]): CombinedTable {
+  const headers: string[] = [];
+  const keyOf = (h: string) => h.trim().toLowerCase().replace(/\s+/g, ' ');
+  const index = new Map<string, number>();
+  const read: { name: string; header: string[]; body: { cells: string[]; row: number }[] }[] = [];
+  const summary: SheetSummary[] = [];
+  for (const sheet of sheets) {
+    const h = findHeaderRow(sheet.rows);
+    if (h === null) {
+      if (sheet.rows.some((r) => !isEmptyRow(r))) summary.push({ name: sheet.name, people: 0, skipped: 'No name column' });
+      continue;
+    }
+    const header = sheet.rows[h]!.map((c) => (c ?? '').trim());
+    const body = sheet.rows
+      .map((cells, i) => ({ cells, row: i + 1 }))
+      .slice(h + 1)
+      .filter((r) => !isEmptyRow(r.cells));
+    if (body.length === 0) {
+      summary.push({ name: sheet.name, people: 0, skipped: 'No people' });
+      continue;
+    }
+    header.forEach((name, i) => {
+      const k = keyOf(name || `Column ${i + 1}`);
+      if (!index.has(k)) {
+        index.set(k, headers.length);
+        headers.push(name || `Column ${i + 1}`);
+      }
+    });
+    read.push({ name: sheet.name, header, body });
+    summary.push({ name: sheet.name, people: body.length });
+  }
+  const several = read.length > 1;
+  const tabName = several ? (headers.some((h) => keyOf(h) === keyOf(TAB_COLUMN)) ? 'Sheet tab' : TAB_COLUMN) : null;
+  if (tabName) headers.push(tabName);
+  const rows: string[][] = [];
+  const origins: string[] = [];
+  for (const t of read) {
+    const at = t.header.map((name, i) => index.get(keyOf(name || `Column ${i + 1}`))!);
+    for (const r of t.body) {
+      const out = headers.map(() => '');
+      at.forEach((col, i) => (out[col] = (r.cells[i] ?? '').trim()));
+      if (tabName) out[headers.length - 1] = t.name;
+      rows.push(out);
+      origins.push(several ? `${t.name}, row ${r.row}` : `Row ${r.row}`);
+    }
+  }
+  return { headers, rows, origins, sheets: summary };
 }

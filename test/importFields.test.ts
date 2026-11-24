@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseDelimited } from '../src/shared/csv';
-import { autoMap, flagDuplicates, initial, missingRequired, parsePhotoConsent, prepareRows, splitFullName } from '../src/shared/importFields';
+import { autoMap, combineSheets, dietaryColumns, findHeaderRow, flagDuplicates, initial, missingRequired, parsePhotoConsent, prepareRows, splitFullName } from '../src/shared/importFields';
 
 const HEADER = 'Participant ID\tFirst Name\tLast Name\tHome Group Name\tYear Level\tAddress\tDate of Birth\tMobile\tEmail\tMedicare Number\tMedical Conditions\tSwimming Ability\tDietary Requirements\tPhoto Consent';
 const ROW_1 = '1001\tSam\tTaylor\tRed Gum Club\tJuniors\t1 Example St\t2014-01-01\t0400000000\tsam@example.test\t123\tAsthma\tStrong\tPeanut allergy\tYes';
@@ -81,5 +81,72 @@ describe('importing a spreadsheet', () => {
   it('treats photo consent as Yes only when clearly yes', () => {
     expect(['Yes', 'y', 'TRUE', 'granted', 'OK'].map(parsePhotoConsent)).toEqual(['yes', 'yes', 'yes', 'yes', 'yes']);
     expect(['No', '', 'maybe', 'unknown', 'declined'].map(parsePhotoConsent)).toEqual(['no', 'no', 'no', 'no', 'no']);
+  });
+});
+
+describe('workbooks with a tab per group', () => {
+  // Like many consent and registration exports: a title row, then headers; one tab per group; dietaries split over columns.
+  const tab = (name: string, rows: string[][]) => ({ name, rows });
+  const HEAD = ['Student ID', 'FirstName', 'LastName', 'Year', 'Photo Use Authorised', 'Medical Conditions', 'Dietary Requirement 1', 'Dietary Requirement 2'];
+  const workbook = [
+    tab('Red Gum', [
+      ['Consent report: Summer Camp', '', ''],
+      [],
+      HEAD,
+      ['1001', 'Ava', 'Nguyen', 'Juniors', 'Yes', 'Asthma', 'Vegetarian', 'No nuts'],
+      ['1002', 'Ben', 'Taylor', 'Juniors', 'No', '', '', ''],
+    ]),
+    // Same columns, different order.
+    tab('Saltbush', [
+      ['Consent report: Summer Camp'],
+      ['LastName', 'FirstName', 'Student ID', 'Year', 'Photo Use Authorised', 'Dietary Requirement 1', 'Medical Conditions', 'Dietary Requirement 2'],
+      ['Smith', 'Cal', '1003', 'Leaders', 'Yes', 'Gluten free', '', ''],
+    ]),
+    tab('Summary', [['Total', '3'], ['Printed', 'today']]),
+    tab('Empty', []),
+  ];
+
+  it('finds the header row under a title', () => {
+    expect(findHeaderRow(workbook[0]!.rows)).toBe(2);
+    expect(findHeaderRow(workbook[2]!.rows)).toBeNull();
+  });
+
+  it('reads every tab, lines up columns by name, records the tab, and skips tabs with no names', () => {
+    const t = combineSheets(workbook);
+    expect(t.rows).toHaveLength(3);
+    expect(t.headers.at(-1)).toBe('Tab');
+    expect(t.sheets).toEqual([
+      { name: 'Red Gum', people: 2 },
+      { name: 'Saltbush', people: 1 },
+      { name: 'Summary', people: 0, skipped: 'No name column' },
+    ]);
+    const m = autoMap(t.headers);
+    const rows = prepareRows(t.rows, m, undefined, { dietaryColumns: dietaryColumns(t.headers, m), origins: t.origins });
+    expect(rows.map((r) => [r.row.participantId, r.row.firstName, r.row.lastName, r.row.level, r.row.photoConsent])).toEqual([
+      ['1001', 'Ava', 'Nguyen', 'Juniors', 'yes'],
+      ['1002', 'Ben', 'Taylor', 'Juniors', 'no'],
+      ['1003', 'Cal', 'Smith', 'Leaders', 'yes'],
+    ]);
+    expect(rows[2]!.where).toBe('Saltbush, row 3');
+    // Dietaries split over two columns are read together; medical conditions never are.
+    expect(rows[0]!.dietaryText).toBe('Vegetarian; No nuts');
+    expect(JSON.stringify(rows.map((r) => r.row))).not.toContain('Asthma');
+    // The tab can be sent as the group.
+    const tabAt = t.headers.indexOf('Tab');
+    expect(prepareRows(t.rows, { ...m, groupName: tabAt }).map((r) => r.row.groupName)).toEqual(['Red Gum', 'Red Gum', 'Saltbush']);
+  });
+
+  it('never matches an empty column (an unused "House" column is not the group)', () => {
+    const t = combineSheets([tab('A', [['First name', 'House', 'Year'], ['Ava', '', 'Juniors']]), tab('B', [['First name', 'House', 'Year'], ['Ben', '', 'Seniors']])]);
+    expect(autoMap(t.headers).groupName).toBe(1);
+    const m = autoMap(t.headers, t.rows);
+    expect(m.groupName).toBeUndefined();
+    expect(m.level).toBe(2);
+  });
+
+  it('treats a single tab or CSV the same way, without a Tab column', () => {
+    const t = combineSheets([workbook[0]!]);
+    expect(t.headers).not.toContain('Tab');
+    expect(t.rows).toHaveLength(2);
   });
 });
