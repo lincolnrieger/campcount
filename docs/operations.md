@@ -16,6 +16,12 @@ to recover the system. Keep a printed copy at camp HQ.
 3. **Fill the People list** (People › Import), or add someone with **Add person**:
    - Choose a spreadsheet (.xlsx or .csv). It's read on your device; the file
      is never uploaded.
+   - You can choose several files at once (or add more on the next step),
+     for example a registration list and a consent export. They're joined on
+     your device: people are matched by participant ID, or by first and last
+     name when a file has no IDs (only when exactly one person has that name).
+     Where two files have the same column, the first file's value is kept.
+     A workbook with a tab per group is read tab by tab.
    - CampCount matches the columns by name (no AI, nothing sent). Check each
      field: First name (required), Last name, Group, Level, Participant ID,
      Dietaries and Photo consent. Choose "Don't send" for anything you don't

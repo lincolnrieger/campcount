@@ -350,3 +350,121 @@ export function combineSheets(sheets: { name: string; rows: string[][] }[]): Com
   }
   return { headers, rows, origins, sheets: summary };
 }
+
+// ---------------------------------------------------------------- several spreadsheets
+
+/** Participant IDs compared without spaces, case or leading zeros (spreadsheets drop them). */
+export const idKey = (id: string) => id.replace(/\s+/g, '').toUpperCase().replace(/^0+(?=.)/, '');
+/** Names compared on letters and digits only, ignoring case. */
+const nameKey = (first: string, last: string) => `${first}|${last}`.toLowerCase().replace(/[^\p{L}\p{N}|]/gu, '');
+
+/** One row's participant ID and name, read with that file's own column matches. */
+function identity(row: string[], m: ColumnMapping): { id: string; name: string } {
+  const get = (f: ImportField) => (m[f] === undefined ? '' : (row[m[f]!] ?? '').trim());
+  let first = get('firstName');
+  let last = get('lastName');
+  if ((!first || m.lastName === undefined) && m.fullName !== undefined) {
+    const s = splitFullName(get('fullName'));
+    first ||= s.first;
+    if (m.lastName === undefined) last = s.last;
+  }
+  const id = get('participantId');
+  return { id: id ? idKey(id) : '', name: first ? nameKey(first, last) : '' };
+}
+
+export interface FileMatch {
+  name: string;
+  people: number;
+  /** Rows that matched someone from an earlier file. */
+  matched: number;
+  /** Rows added as new people. */
+  added: number;
+  /** How rows were matched: by participant ID, or by name when the file has no IDs. */
+  by: 'id' | 'name' | 'first';
+  /** Rows not matched because more than one person had that name. */
+  ambiguous: number;
+}
+
+export interface MarriedTable extends CombinedTable {
+  files: FileMatch[];
+}
+
+/**
+ * Join several spreadsheets into one list of people. The first file is the
+ * starting list; each later file's rows are matched to it by participant ID
+ * (or, if that file has no ID column, by first and last name, only when the
+ * name belongs to exactly one person). Matched rows fill in that person's
+ * columns; unmatched rows are added as new people. Columns with the same name
+ * are one column: the earlier file's value wins, a later file only fills
+ * blanks. Everything happens on the device.
+ */
+export function marryTables(files: { name: string; table: CombinedTable }[]): MarriedTable {
+  const headers: string[] = [];
+  const keyOf = (h: string) => h.trim().toLowerCase().replace(/\s+/g, ' ');
+  const colOf = new Map<string, number>();
+  // Columns that match the same CampCount field in different files ("Member ID", "Student ID") are one column.
+  const col = (h: string, field?: ImportField) => {
+    const k = field ? `field:${field}` : keyOf(h);
+    if (!colOf.has(k)) {
+      colOf.set(k, headers.length);
+      headers.push(h);
+    }
+    return colOf.get(k)!;
+  };
+  const people: { cells: Map<number, string>; origin: string; id: string; name: string }[] = [];
+  const byId = new Map<string, number>();
+  const byName = new Map<string, number | null>();
+  const index = (i: number) => {
+    const p = people[i]!;
+    if (p.id && !byId.has(p.id)) byId.set(p.id, i);
+    if (p.name) byName.set(p.name, byName.has(p.name) && byName.get(p.name) !== i ? null : i);
+  };
+  const report: FileMatch[] = [];
+
+  files.forEach((file, f) => {
+    const t = file.table;
+    const m = autoMap(t.headers, t.rows);
+    const fieldAt = new Map(Object.entries(m).map(([f, i]) => [i, f as ImportField]));
+    const cols = t.headers.map((h, i) => col(h, fieldAt.get(i)));
+    const by: FileMatch['by'] = f === 0 ? 'first' : m.participantId !== undefined ? 'id' : 'name';
+    const r: FileMatch = { name: file.name, people: t.rows.length, matched: 0, added: 0, by, ambiguous: 0 };
+    t.rows.forEach((row, i) => {
+      const who = identity(row, m);
+      let at: number | undefined;
+      if (f > 0) {
+        if (who.id) at = byId.get(who.id);
+        // Otherwise a name that belongs to exactly one person, as long as their IDs don't differ.
+        if (at === undefined && who.name) {
+          const hit = byName.get(who.name);
+          if (hit === null) r.ambiguous++;
+          else if (hit !== undefined && (!who.id || !people[hit]!.id || people[hit]!.id === who.id)) at = hit;
+        }
+      }
+      const origin = `${file.name}: ${t.origins[i] ?? `row ${i + 2}`}`;
+      if (at === undefined) {
+        people.push({ cells: new Map(), origin, id: who.id, name: who.name });
+        at = people.length - 1;
+        r.added++;
+      } else r.matched++;
+      const p = people[at]!;
+      row.forEach((v, c) => {
+        const value = (v ?? '').trim();
+        if (value && !p.cells.get(cols[c]!)) p.cells.set(cols[c]!, value);
+      });
+      if (!p.id && who.id) p.id = who.id;
+      index(at);
+    });
+    report.push(r);
+  });
+
+  return {
+    headers,
+    rows: people.map((p) => headers.map((_, c) => p.cells.get(c) ?? '')),
+    origins: people.map((p) => p.origin),
+    // A one-tab file (a CSV, say) is known by its file name; a tab of a workbook by both.
+    sheets: files.flatMap((f) =>
+      f.table.sheets.map((s) => ({ ...s, name: f.table.sheets.length === 1 ? f.name : files.length > 1 ? `${f.name} › ${s.name}` : s.name })),
+    ),
+    files: report,
+  };
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseDelimited } from '../src/shared/csv';
-import { autoMap, combineSheets, dietaryColumns, findHeaderRow, flagDuplicates, initial, missingRequired, parsePhotoConsent, prepareRows, splitFullName } from '../src/shared/importFields';
+import { autoMap, combineSheets, dietaryColumns, marryTables, findHeaderRow, flagDuplicates, initial, missingRequired, parsePhotoConsent, prepareRows, splitFullName } from '../src/shared/importFields';
 
 const HEADER = 'Participant ID\tFirst Name\tLast Name\tHome Group Name\tYear Level\tAddress\tDate of Birth\tMobile\tEmail\tMedicare Number\tMedical Conditions\tSwimming Ability\tDietary Requirements\tPhoto Consent';
 const ROW_1 = '1001\tSam\tTaylor\tRed Gum Club\tJuniors\t1 Example St\t2014-01-01\t0400000000\tsam@example.test\t123\tAsthma\tStrong\tPeanut allergy\tYes';
@@ -148,5 +148,69 @@ describe('workbooks with a tab per group', () => {
     const t = combineSheets([workbook[0]!]);
     expect(t.headers).not.toContain('Tab');
     expect(t.rows).toHaveLength(2);
+  });
+});
+
+describe('joining several spreadsheets', () => {
+  const sheet = (rows: string[][]) => combineSheets([{ name: 'Sheet1', rows }]);
+  // A registration list, and a consent export (other column names, other order, IDs with a dropped leading zero).
+  const registrations = sheet([
+    ['Member ID', 'Given Name', 'Surname', 'Year Level', 'Club'],
+    ['0101', 'Ava', 'Nguyen', 'Juniors', 'Red Gum'],
+    ['0102', 'Ben', 'Taylor', 'Juniors', 'Red Gum'],
+    ['0103', 'Cal', 'Smith', 'Seniors', ''],
+  ]);
+  const consent = sheet([
+    ['Student ID', 'FirstName', 'LastName', 'Photo Use Authorised', 'Dietary Requirement 1', 'Club', 'Medical Conditions'],
+    ['101', 'Ava', 'Nguyen', 'Yes', 'Vegetarian', 'Wrong Club', 'Asthma'],
+    ['103', 'Cal', 'Smith', 'No', '', 'Saltbush', ''],
+    ['104', 'Dee', 'Patel', 'Yes', 'Halal', 'Saltbush', ''],
+  ]);
+
+  it('matches people by participant ID, fills blanks, keeps the first file’s values, and adds people found only later', () => {
+    const t = marryTables([
+      { name: 'Registrations', table: registrations },
+      { name: 'Consent', table: consent },
+    ]);
+    expect(t.files[1]).toMatchObject({ matched: 2, added: 1, by: 'id', ambiguous: 0 });
+    const m = autoMap(t.headers, t.rows);
+    const rows = prepareRows(t.rows, m, undefined, { dietaryColumns: dietaryColumns(t.headers, m) });
+    expect(rows.map((r) => [r.row.participantId, r.row.firstName, r.row.groupName, r.row.level, r.row.photoConsent, r.dietaryText])).toEqual([
+      ['0101', 'Ava', 'Red Gum', 'Juniors', 'yes', 'Vegetarian'],
+      ['0102', 'Ben', 'Red Gum', 'Juniors', 'no', ''],
+      // Club was blank in the first file, so the second fills it.
+      ['0103', 'Cal', 'Saltbush', 'Seniors', 'no', ''],
+      ['104', 'Dee', 'Saltbush', '', 'yes', 'Halal'],
+    ]);
+    expect(JSON.stringify(rows.map((r) => r.row))).not.toContain('Asthma');
+  });
+
+  it('matches by name when a file has no IDs, but never when two people share the name', () => {
+    const extra = sheet([
+      ['Name', 'Tent'],
+      ['Ava Nguyen', 'T1'],
+      ['Sam Lee', 'T2'],
+      ['Sam Lee', 'T3'],
+    ]);
+    const twoSams = sheet([
+      ['ID', 'First name', 'Last name'],
+      ['1', 'Sam', 'Lee'],
+      ['2', 'Sam', 'Lee'],
+      ['3', 'Ava', 'Nguyen'],
+    ]);
+    const t = marryTables([
+      { name: 'Roster', table: twoSams },
+      { name: 'Tents', table: extra },
+    ]);
+    expect(t.files[1]).toMatchObject({ matched: 1, added: 2, by: 'name', ambiguous: 2 });
+    const tent = t.headers.indexOf('Tent');
+    expect(t.rows[2]![tent]).toBe('T1');
+    expect(t.rows[0]![tent]).toBe('');
+  });
+
+  it('never joins two different participant IDs, even with the same name', () => {
+    const a = sheet([['ID', 'First name', 'Last name'], ['1', 'Sam', 'Lee']]);
+    const b = sheet([['ID', 'First name', 'Last name'], ['2', 'Sam', 'Lee']]);
+    expect(marryTables([{ name: 'A', table: a }, { name: 'B', table: b }]).rows).toHaveLength(2);
   });
 });
