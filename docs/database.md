@@ -1,5 +1,7 @@
 # CampCount database: a simple overview
 
+![How data moves through CampCount](campcount-data-flow.png)
+
 ## Where it is
 
 - One database, hosted by Cloudflare and set to the Oceania region.
