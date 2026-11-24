@@ -1,3 +1,5 @@
 # CampCount is a private tool for running camps. Nothing here is for search engines.
+# Pages are not blocked here on purpose: every page says "noindex", and search
+# engines can only see that (and drop the page) if they're allowed to fetch it.
 User-agent: *
-Disallow: /
+Disallow: /api/
