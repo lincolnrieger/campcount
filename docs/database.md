@@ -2,6 +2,8 @@
 
 ![How data moves through CampCount](campcount-data-flow.png)
 
+For every item stored and when it's deleted, see [All data CampCount stores](data-stored.md).
+
 ## Where it is
 
 - One database, hosted by Cloudflare and set to the Oceania region.
