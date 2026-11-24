@@ -260,9 +260,30 @@ export function dietaryColumns(headers: string[], mapping: ColumnMapping): numbe
   return [mapping.dietary, ...others.map((o) => o.i)];
 }
 
+/** The first column that can hold dietary needs, for files whose only one is named something like "Medical Conditions". */
+export function firstDietaryColumn(headers: string[]): number | undefined {
+  const i = headers.findIndex((h) => isDietaryHeader(h));
+  return i >= 0 ? i : undefined;
+}
+
+/**
+ * Columns whose name says they may hold other medical details as well as
+ * dietary needs ("Medical Conditions", "Health info"). They're read the same
+ * way: shown on this device in the dietary review only, never sent or kept.
+ */
+export function isMedicalHeader(header: string): boolean {
+  const h = header.split(' › ').pop() ?? header;
+  return /medic|condition|health|special|requirement|note/i.test(h) && !/diet|allerg|food|meal/i.test(h);
+}
+
 /** Does this column look like it holds dietary needs (and not medication)? */
-export function isDietaryHeader(h: string): boolean {
-  return /diet|allerg|food|meal/i.test(h) && !/medication/i.test(h);
+export function isDietaryHeader(header: string): boolean {
+  // Judge the column's own name, not the file name it's labelled with when files are joined ("Consent › Dietary").
+  const h = header.split(' › ').pop() ?? header;
+  return (
+    /diet|allerg|intoleran|food|meal|medical|condition|health|special (need|req)|requirement/i.test(h) &&
+    !/medication|medicine|medicare|insurance|fund|doctor|\bgp\b|number|\bno\.?$|\bid\b|contact|phone|mobile|emergency|swim|consent/i.test(h)
+  );
 }
 
 

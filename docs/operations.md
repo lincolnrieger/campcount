@@ -34,7 +34,9 @@ to recover the system. Keep a printed copy at camp HQ.
      file" and tick only what it should bring in (for example photo consent
      and dietaries). Its ID and name columns are still used to match people.
    - **Dietaries:** tick every column that holds dietary needs (from every
-     file). The dietary review shows each column separately for every person,
+     file). Columns like "Medical Conditions", "Health info" or "Special
+     requirements" are included when that's where a file keeps dietaries;
+     they're read on your device only, like the rest. The dietary review shows each column separately for every person,
      and you choose what to record. The notes are never sent or kept, and
      neither is anything made from them: CampCount only remembers who has
      been reviewed. People already reviewed are skipped next time; switch on
