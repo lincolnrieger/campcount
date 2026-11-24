@@ -3,6 +3,7 @@
 Camp and event operations: rosters, QR lanyards, activity and
 meal scanning that keeps working with patchy signal, and close-out reports.
 
+- Database: [`docs/database.md`](docs/database.md)
 - Requirements: [`docs/requirements.md`](docs/requirements.md)
 - Architecture and threat model: [`docs/architecture.md`](docs/architecture.md)
 - Decisions: [`docs/discovery/decision-log.md`](docs/discovery/decision-log.md)
