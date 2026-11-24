@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { csvCell, parseDelimited } from '../../shared/csv';
-import type { ColumnMapping, FirstNameMode, ImportField, LastNameMode, PreparedRow } from '../../shared/importFields';
-import { IMPORT_FIELDS, IMPORT_FIELD_ORDER, autoMap, flagDuplicates, missingRequired, normaliseDietaryText, prepareRows, saysNothing } from '../../shared/importFields';
+import type { ColumnMapping, FirstNameMode, ImportField, LastNameMode, PreparedRow, SheetSummary } from '../../shared/importFields';
+import { IMPORT_FIELDS, IMPORT_FIELD_ORDER, TAB_COLUMN, autoMap, combineSheets, dietaryColumns, flagDuplicates, missingRequired, normaliseDietaryText, prepareRows, saysNothing } from '../../shared/importFields';
 import type { DietaryEntryInput, ImportRow } from '../../shared/schemas';
 import { ApiFailure, api } from '../api';
 import { DietaryEditor } from '../components/DietaryEditor';
@@ -27,7 +27,7 @@ import {
   plural,
   useToast,
 } from '../ui';
-import { readFirstSheet } from '../import/xlsx';
+import { readSheets } from '../import/xlsx';
 import { saveLocalColumns } from '../import/localColumns';
 import { useApi } from '../useApi';
 import { useEvent } from './EventLayout';
@@ -88,7 +88,9 @@ export function Import() {
   const toast = useToast();
   const context = useApi<ImportContext>(`/events/${event.id}/import/context`);
   const [step, setStep] = useState<Step>('file');
-  const [table, setTable] = useState<{ headers: string[]; rows: string[][] } | null>(null);
+  const [table, setTable] = useState<{ headers: string[]; rows: string[][]; origins: string[] } | null>(null);
+  /** The workbook's tabs: how many people each had, or why it was skipped. */
+  const [sheets, setSheets] = useState<SheetSummary[]>([]);
   const [mapping, setMapping] = useState<ColumnMapping>({});
   const [firstMode, setFirstMode] = useState<FirstNameMode>('full');
   const [lastMode, setLastMode] = useState<LastNameMode>('full');
@@ -117,17 +119,29 @@ export function Import() {
     setError(null);
     setBusy(true);
     try {
-      let parsed: { headers: string[]; rows: string[][] };
+      // Every tab of a workbook is read (a tab per group is common); a CSV is one tab.
+      let tabs: { name: string; rows: string[][] }[];
       if (/\.xlsx$/i.test(file.name)) {
-        const all = (await readFirstSheet(await file.arrayBuffer())).filter((r) => r.some((c) => c.trim()));
-        const [head = [], ...rest] = all;
-        parsed = { headers: head.map((h) => h.trim()), rows: rest.map((r) => head.map((_, i) => (r[i] ?? '').trim())) };
+        tabs = await readSheets(await file.arrayBuffer());
       } else {
-        parsed = parseDelimited(await file.text());
+        const csv = parseDelimited(await file.text());
+        tabs = [{ name: 'File', rows: [csv.headers, ...csv.rows] }];
       }
-      if (parsed.rows.length === 0) throw new Error('That file has a header row but no people in it.');
-      setTable(parsed);
-      setMapping(autoMap(parsed.headers));
+      const combined = combineSheets(tabs);
+      if (combined.rows.length === 0) {
+        throw new Error(
+          combined.sheets.length
+            ? 'No people found. Each tab needs a header row with a first name (or name) column.'
+            : 'That file has no rows to import.',
+        );
+      }
+      setTable(combined);
+      setSheets(combined.sheets);
+      const auto = autoMap(combined.headers, combined.rows);
+      // Several tabs and no group column: the tab is usually the group.
+      const tabAt = combined.headers.indexOf(TAB_COLUMN);
+      if (auto.groupName === undefined && tabAt >= 0 && !Object.values(auto).includes(tabAt)) auto.groupName = tabAt;
+      setMapping(auto);
       setStep('map');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'That file could not be read.');
@@ -155,7 +169,7 @@ export function Import() {
 
   function check() {
     if (!table) return;
-    const next = prepareRows(table.rows, mapping, { firstName: firstMode, lastName: lastMode });
+    const next = prepareRows(table.rows, mapping, { firstName: firstMode, lastName: lastMode }, { dietaryColumns: dietaryColumns(table.headers, mapping), origins: table.origins });
     flagDuplicates(next);
     setPrepared(next);
     setPlan(null);
@@ -266,6 +280,7 @@ export function Import() {
 
         {step === 'map' && table && (
           <Section title="Choose fields" id="map">
+            {sheets.length > 1 && <TabSummary sheets={sheets} />}
             <p className="meta">
               {plural(table.rows.length, 'person', 'people')} · {plural(table.headers.length, 'column')}
               <InfoTip label="How columns are matched">
@@ -273,6 +288,11 @@ export function Import() {
               </InfoTip>
             </p>
             {missing.length > 0 && <Banner tone="warning">Choose the column with each person's first name.</Banner>}
+            {mapping.dietary !== undefined && dietaryColumns(table.headers, mapping).length > 1 && (
+              <p className="meta">
+                Dietaries are read from {dietaryColumns(table.headers, mapping).map((i) => table.headers[i]).join(', ')}, together.
+              </p>
+            )}
             {mapping.dietary !== undefined && !reviewing && (
               <Banner tone="info">
                 {context.data?.dietaryEnabled ? 'Dietaries will be flagged for an event manager to review.' : 'Dietary needs are off for this event, so that column is not sent.'}
@@ -582,7 +602,7 @@ function Problems({ invalid }: { invalid: PreparedRow[] }) {
             <Button
               small
               onClick={() =>
-                downloadCsv('campcount-import-problems.csv', [['Line', 'Problem'], ...invalid.map((p) => [`Line ${p.line}`, p.errors.join('; ')])])
+                downloadCsv('campcount-import-problems.csv', [['Where', 'Problem'], ...invalid.map((p) => [p.where ?? `Line ${p.line}`, p.errors.join('; ')])])
               }
             >
               <Icon name="download" size={16} />
@@ -597,7 +617,7 @@ function Problems({ invalid }: { invalid: PreparedRow[] }) {
         <ul className="problem-list">
           {invalid.slice(0, 8).map((p) => (
             <li key={p.line}>
-              Line {p.line}: {p.errors.join('; ')}
+              {p.where ?? `Line ${p.line}`}: {p.errors.join('; ')}
             </li>
           ))}
           {invalid.length > 8 && <li className="meta">and {invalid.length - 8} more in the download</li>}
@@ -676,6 +696,21 @@ function NothingToRecord({
           </Button>
         </p>
       )}
+    </div>
+  );
+}
+
+/** The tabs read from a workbook, and any skipped. */
+function TabSummary({ sheets }: { sheets: SheetSummary[] }) {
+  const read = sheets.filter((t) => !t.skipped);
+  const skipped = sheets.filter((t) => t.skipped);
+  return (
+    <div className="panel panel-pad import-tabs">
+      <p>
+        <strong>Read {plural(read.length, 'tab')}</strong>: {read.map((t) => `${t.name} (${t.people})`).join(', ')}
+      </p>
+      {skipped.length > 0 && <p className="meta">Skipped: {skipped.map((t) => `${t.name} (${t.skipped!.toLowerCase()})`).join(', ')}</p>}
+      <p className="meta">Each person's tab is in the "{TAB_COLUMN}" column, which you can send as their group or level.</p>
     </div>
   );
 }
