@@ -24,8 +24,6 @@ export interface ReportPerson {
   firstName: string;
   lastName: string;
   participantId: string;
-  groupName: string;
-  level: string;
   kind: string;
   status: string;
 }
@@ -88,7 +86,7 @@ export async function loadEventModel(db: D1Database, eventId: string, includeSit
     db.prepare(`SELECT * FROM meal_services WHERE event_id = ? ORDER BY starts_at IS NULL, starts_at, created_at`).bind(eventId).all<Record<string, any>>(),
     db
       .prepare(
-        `SELECT r.id, p.first_name, p.last_name, p.participant_id, r.group_name, r.level, r.kind, r.status
+        `SELECT r.id, p.first_name, p.last_name, p.participant_id, r.kind, r.status
            FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.event_id = ?`,
       )
       .bind(eventId)
@@ -137,8 +135,6 @@ export async function loadEventModel(db: D1Database, eventId: string, includeSit
         firstName: p.first_name!,
         lastName: p.last_name!,
         participantId: p.participant_id!,
-        groupName: p.group_name!,
-        level: p.level!,
         kind: p.kind!,
         status: p.status!,
       },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { api, createEvent, createUser, grant, json, testEnv } from './helpers';
+import { api, createEvent, createUser, grant, json, testEnv, addPeople } from './helpers';
 
 /**
  * Camp-scale behaviour: hundreds of phones behind one internet address, and
@@ -13,9 +13,6 @@ const person = (participantId: string) => ({
   firstName: `First${participantId}`,
   lastName: 'Person',
   kind: 'youth',
-  level: 'Seniors',
-  groupName: 'Example Club',
-  photoConsent: 'yes',
 });
 
 async function camp(people: number, capacity: number) {
@@ -25,7 +22,7 @@ async function camp(people: number, capacity: number) {
   const manager = await createUser();
   await grant(manager.id, 'event_manager', eventId);
   const rows = Array.from({ length: people }, (_, i) => person(String(1000 + i)));
-  await api(`/events/${eventId}/import/commit`, { cookie: manager.cookie, body: { rows } });
+  await addPeople(eventId, manager.cookie, rows);
   await api(`/events/${eventId}/credentials/issue`, { cookie: manager.cookie, body: { mode: 'missing' } });
   const { cards } = await json(await api(`/events/${eventId}/credentials/print`, { cookie: manager.cookie, body: {} }));
   const activity = (
@@ -67,9 +64,7 @@ describe('a whole camp at once', () => {
 
   it('never overbooks: 40 people racing for 10 places get exactly 10', async () => {
     const c = await camp(40, 10);
-    const passes = await Promise.all(
-      c.tokens.map(async (token) => (await json(await api('/public/signup/identify', { body: { token } }))).pass as string),
-    );
+    const passes = await Promise.all(c.tokens.map(async (token) => (await json(await api('/public/signup/identify', { body: { token } }))).pass as string));
     const statuses = await Promise.all(passes.map((pass) => api('/public/signup/book', { body: { pass, activityId: c.activity } }).then((r) => r.status)));
     expect(statuses.filter((s) => s === 200)).toHaveLength(10);
     expect(statuses.filter((s) => s === 409)).toHaveLength(30);
@@ -99,7 +94,9 @@ describe('the live dashboard', () => {
       cookie: c.manager.cookie,
       body: {
         deviceId: 'test-device',
-        scans: [{ id: crypto.randomUUID(), contextType: 'site', contextId: null, direction: 'in', deviceTime: new Date().toISOString(), method: 'manual', registrationId: someone.id }],
+        scans: [
+          { id: crypto.randomUUID(), contextType: 'site', contextId: null, direction: 'in', deviceTime: new Date().toISOString(), method: 'manual', registrationId: someone.id },
+        ],
       },
     });
     expect(up.status).toBe(200);

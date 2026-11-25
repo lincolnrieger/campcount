@@ -1,15 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { codeHash } from '../src/worker/routes/scans';
-import { api, createEvent, createUser, grant, json, testEnv } from './helpers';
+import { api, createEvent, createUser, grant, json, testEnv, addPeople } from './helpers';
 
 const row = (participantId: string, firstName: string) => ({
   participantId,
   firstName,
   lastName: 'Code',
   kind: 'youth',
-  level: 'Seniors',
-  groupName: 'Example Club',
-  photoConsent: 'yes',
 });
 
 async function camp() {
@@ -19,13 +16,14 @@ async function camp() {
   const manager = await createUser();
   await grant(manager.id, 'event_manager', eventId);
   const n = String(3000000 + Math.floor(Math.random() * 999999));
-  await api(`/events/${eventId}/import/commit`, { cookie: manager.cookie, body: { rows: [row(n, 'Mem')] } });
+  await addPeople(eventId, manager.cookie, [row(n, 'Mem')]);
   await api(`/events/${eventId}/registrations`, {
     cookie: manager.cookie,
-    body: { firstName: 'Gus', lastName: 'Guest', participantId: null, kind: 'adult', level: 'Leaders', photoConsent: 'yes' },
+    body: { firstName: 'Gus', lastName: 'Guest', participantId: null, kind: 'adult' },
   });
   await api(`/events/${eventId}/credentials/issue`, { cookie: manager.cookie, body: { mode: 'missing' } });
-  const print = async () => (await json(await api(`/events/${eventId}/credentials/print`, { cookie: manager.cookie, body: {} }))).cards as { registrationId: string; name: string; shortCode: string }[];
+  const print = async () =>
+    (await json(await api(`/events/${eventId}/credentials/print`, { cookie: manager.cookie, body: {} }))).cards as { registrationId: string; name: string; shortCode: string }[];
   const code = (await json(await api(`/events/${eventId}/signup`, { cookie: manager.cookie }))).link.split('/signup/')[1] as string;
   return { eventId, manager, n, print, code };
 }
@@ -47,14 +45,29 @@ describe('lanyard code is the participant ID', () => {
     await api(`/events/${c.eventId}/credentials/issue`, { cookie: c.manager.cookie, body: { mode: 'replace', registrationIds: [mem.registrationId] } });
     const again = (await c.print()).find((x) => x.name.startsWith('Mem'))!;
     expect(again.shortCode).toBe(c.n);
-    const old = await testEnv.DB.prepare(`SELECT short_code FROM credentials WHERE registration_id = ? AND status = 'revoked'`).bind(mem.registrationId).first<{ short_code: string }>();
+    const old = await testEnv.DB.prepare(`SELECT short_code FROM credentials WHERE registration_id = ? AND status = 'revoked'`)
+      .bind(mem.registrationId)
+      .first<{ short_code: string }>();
     expect(old!.short_code).not.toBe(c.n);
     // Scanner: a typed participant ID finds them.
     await api(`/events/${c.eventId}/transition`, { cookie: c.manager.cookie, body: { to: 'open' } });
     const res = await json(
       await api(`/events/${c.eventId}/scans`, {
         cookie: c.manager.cookie,
-        body: { deviceId: 'test-device', scans: [{ id: crypto.randomUUID(), contextType: 'site', contextId: null, direction: 'in', deviceTime: new Date().toISOString(), method: 'code', codeHash: await codeHash(c.eventId, c.n) }] },
+        body: {
+          deviceId: 'test-device',
+          scans: [
+            {
+              id: crypto.randomUUID(),
+              contextType: 'site',
+              contextId: null,
+              direction: 'in',
+              deviceTime: new Date().toISOString(),
+              method: 'code',
+              codeHash: await codeHash(c.eventId, c.n),
+            },
+          ],
+        },
       }),
     );
     expect(res.results[0]).toMatchObject({ outcome: 'accepted', registrationId: mem.registrationId });

@@ -1,31 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { api, createEvent, createUser, grant, json, testEnv } from './helpers';
+import { api, createEvent, createUser, grant, json, testEnv, addPeople } from './helpers';
 
-const row = (participantId: string, firstName: string, level: string, kind = 'youth') => ({
+const row = (participantId: string, firstName: string, kind: 'youth' | 'adult' = 'youth') => ({
   participantId,
   firstName,
   lastName: 'Splash',
   kind,
-  level,
-  groupName: 'Example Club',
-  photoConsent: 'yes',
 });
 
 async function camp(sideQuest = true) {
   const admin = await createUser({ platformAdmin: true });
   const eventId = await createEvent(admin.id);
-  await testEnv.DB.prepare(`UPDATE events SET feature_self_signup = 1, feature_side_quest = ? WHERE id = ?`).bind(sideQuest ? 1 : 0, eventId).run();
+  await testEnv.DB.prepare(`UPDATE events SET feature_self_signup = 1, feature_side_quest = ? WHERE id = ?`)
+    .bind(sideQuest ? 1 : 0, eventId)
+    .run();
   const manager = await createUser();
   await grant(manager.id, 'event_manager', eventId);
   const base = 800000 + Math.floor(Math.random() * 90000);
-  const people = [
-    row(String(base + 1), 'Ava', 'Seniors'),
-    row(String(base + 2), 'Ben', 'Rangers'),
-    row(String(base + 3), 'Cal', 'Rangers'),
-    row(String(base + 4), 'Dee', 'Leaders', 'adult'),
-    row(String(base + 5), 'Eli', 'Juniors'),
-  ];
-  await api(`/events/${eventId}/import/commit`, { cookie: manager.cookie, body: { rows: people } });
+  const people = [row(String(base + 1), 'Ava'), row(String(base + 2), 'Ben'), row(String(base + 3), 'Cal'), row(String(base + 4), 'Dee', 'adult'), row(String(base + 5), 'Eli')];
+  await addPeople(eventId, manager.cookie, people);
   await api(`/events/${eventId}/credentials/issue`, { cookie: manager.cookie, body: { mode: 'missing' } });
   const { cards } = await json(await api(`/events/${eventId}/credentials/print`, { cookie: manager.cookie, body: {} }));
   const token = (first: string) => (cards as { name: string; qr: string }[]).find((x) => x.name.startsWith(first))!.qr.split('#')[1]!;
@@ -63,7 +56,7 @@ describe('Side Quest', () => {
 
     const first = await ava.open(c.token('Ben'));
     expect(first.body.collect.fresh).toBe(true);
-    expect(first.body.collect.friend).toMatchObject({ firstName: 'Ben', levelWord: 'Ranger' });
+    expect(first.body.collect.friend).toMatchObject({ firstName: 'Ben', levelWord: 'Participant' });
     // Totals count young people only (Dee is a leader).
     expect(first.body.collect.standing).toMatchObject({ collected: 1, total: 3, rank: 1, players: 1 });
     // The friend's own page (bookings, pass) is never shown on someone else's phone.
@@ -84,10 +77,9 @@ describe('Side Quest', () => {
       ['Ava S.', 2, true],
     ]);
 
-    // Quests: every youth level (no leaders quest).
+    // One quest: every other young person (no leaders).
     const quests = (await eli.open(c.token('Eli'))).body.sideQuest.quests;
-    expect(quests.find((q: { key: string }) => q.key === 'rangers')).toMatchObject({ collected: 2, total: 2, done: true });
-    expect(quests.find((q: { key: string }) => q.key === 'leaders')).toBeUndefined();
+    expect(quests).toEqual([{ key: 'everyone', label: 'Everyone', collected: 3, total: 3, done: true }]);
   });
 
   it('is for young people only: leaders neither collect nor get collected', async () => {

@@ -10,9 +10,6 @@ import { auditStatement } from '../services/audit';
 import { loadEventModel, openItems } from '../services/reports';
 import { can, eventPermissions } from '../services/principal';
 import { resolveSite } from '../services/site';
-import { syncKinds } from '../services/rosterWrites';
-import { seal } from '../lib/vault';
-import { parseLevelSettings } from '../../shared/levels';
 
 export interface EventRow {
   id: string;
@@ -27,8 +24,6 @@ export interface EventRow {
   feature_activities: number;
   feature_meals: number;
   feature_site: number;
-  feature_dietary: number;
-  feature_photo: number;
   feature_self_signup: number;
   feature_side_quest: number;
   created_at: string;
@@ -37,12 +32,7 @@ export interface EventRow {
   is_demo: number;
   subdomain: string | null;
   brand_color: string | null;
-  photo_marker: string;
-  photo_marker_colour: string;
-  photo_marker_label: number;
   lanyard_print_band: number;
-  youth_levels: string;
-  level_settings: string | null;
   contact_email: string;
   /** From event_logos, when the query includes it. */
   logo_updated_at?: string | null;
@@ -52,8 +42,6 @@ const FEATURE_COLUMNS: Record<keyof EventFeatures, keyof EventRow> = {
   activities: 'feature_activities',
   meals: 'feature_meals',
   site: 'feature_site',
-  dietary: 'feature_dietary',
-  photo: 'feature_photo',
   selfSignup: 'feature_self_signup',
   sideQuest: 'feature_side_quest',
 };
@@ -69,31 +57,21 @@ export function eventDto(row: EventRow) {
     endsOn: row.ends_on,
     timezone: row.timezone,
     status: row.status,
-    features: Object.fromEntries(
-      Object.entries(FEATURE_COLUMNS).map(([k, col]) => [k, row[col] === 1]),
-    ) as EventFeatures,
+    features: Object.fromEntries(Object.entries(FEATURE_COLUMNS).map(([k, col]) => [k, row[col] === 1])) as EventFeatures,
     closedAt: row.closed_at,
     isDemo: row.is_demo === 1,
     subdomain: row.subdomain,
     brandColor: row.brand_color,
     lanyard: {
-      photoMarker: (row.photo_marker ?? 'black_border') as LanyardSettings['photoMarker'],
-      photoMarkerColour: row.photo_marker_colour ?? '#B3261E',
-      photoMarkerLabel: row.photo_marker_label !== 0,
       printBand: row.lanyard_print_band !== 0,
     } satisfies LanyardSettings,
     contactEmail: row.contact_email ?? '',
-    youthLevels: parseLevelSettings(row.level_settings, row.youth_levels).filter((s) => s.youth).map((s) => s.name),
-    levels: parseLevelSettings(row.level_settings, row.youth_levels),
     logoUrl: row.logo_updated_at ? `/api/events/${row.id}/logo?v=${encodeURIComponent(row.logo_updated_at)}` : null,
   };
 }
 
 export async function getEventRow(db: D1Database, eventId: string): Promise<EventRow | null> {
-  return db
-    .prepare(`SELECT e.*, (SELECT updated_at FROM event_logos WHERE event_id = e.id) AS logo_updated_at FROM events e WHERE e.id = ?`)
-    .bind(eventId)
-    .first<EventRow>();
+  return db.prepare(`SELECT e.*, (SELECT updated_at FROM event_logos WHERE event_id = e.id) AS logo_updated_at FROM events e WHERE e.id = ?`).bind(eventId).first<EventRow>();
 }
 
 function slugify(name: string, startsOn: string): string {
@@ -142,9 +120,9 @@ eventRoutes.post('/', async (c) => {
   await c.env.DB.batch([
     c.env.DB.prepare(
       `INSERT INTO events (id, slug, name, description, location, starts_on, ends_on,
-         feature_activities, feature_meals, feature_site, feature_dietary, feature_photo, feature_self_signup, feature_side_quest,
+         feature_activities, feature_meals, feature_site, feature_self_signup, feature_side_quest,
          created_by, created_at, updated_at, subdomain, brand_color)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       id,
       slugify(input.name, input.startsOn),
@@ -156,8 +134,6 @@ eventRoutes.post('/', async (c) => {
       f.activities === false ? 0 : 1,
       f.meals ? 1 : 0,
       f.site ? 1 : 0,
-      f.dietary ? 1 : 0,
-      f.photo === false ? 0 : 1,
       f.selfSignup ? 1 : 0,
       f.sideQuest ? 1 : 0,
       user.userId,
@@ -219,34 +195,9 @@ eventRoutes.patch('/:eventId', async (c) => {
     await assertSubdomainFree(c.env.DB, input.subdomain, eventId);
     set('subdomain', input.subdomain);
   }
-  if (input.lanyard?.photoMarker !== undefined) set('photo_marker', input.lanyard.photoMarker);
-  if (input.lanyard?.photoMarkerColour !== undefined) set('photo_marker_colour', input.lanyard.photoMarkerColour.toUpperCase());
-  if (input.lanyard?.photoMarkerLabel !== undefined) set('photo_marker_label', input.lanyard.photoMarkerLabel ? 1 : 0);
   if (input.lanyard?.printBand !== undefined) set('lanyard_print_band', input.lanyard.printBand ? 1 : 0);
   for (const [key, value] of Object.entries(input.features ?? {})) {
     if (value !== undefined) set(FEATURE_COLUMNS[key as keyof EventFeatures], value ? 1 : 0);
-  }
-  if (input.youthLevels !== undefined && input.levels === undefined) set('youth_levels', JSON.stringify([...new Set(input.youthLevels)]));
-  // Levels: renames move everyone in them; an added level can go only once it's empty.
-  const renames: { from: string; to: string }[] = [];
-  // Levels are encrypted, so who is in which one is worked out here, not in SQL.
-  let people: { id: string; level: string }[] = [];
-  if (input.levels !== undefined) {
-    const list = input.levels;
-    const names = list.map((x) => x.name.toLowerCase());
-    if (new Set(names).size !== names.length) throw badRequest('Two levels have the same name.');
-    const before = parseLevelSettings(row.level_settings, row.youth_levels);
-    for (const x of list) if (x.from && x.from !== x.name && before.some((b) => b.name === x.from)) renames.push({ from: x.from, to: x.name });
-    const kept = new Set(list.map((x) => x.from ?? x.name));
-    const removed = before.filter((b) => !kept.has(b.name)).map((b) => b.name);
-    people = (await c.env.DB.prepare(`SELECT id, level FROM registrations WHERE event_id = ?`).bind(eventId).all<{ id: string; level: string }>()).results;
-    if (removed.length) {
-      const inUse = removed.map((l) => ({ level: l, n: people.filter((p) => p.level === l).length })).filter((x) => x.n > 0);
-      if (inUse.length) throw conflict(`Move everyone out of ${inUse.map((r) => `${r.level} (${r.n})`).join(', ')} before removing it.`);
-    }
-    const stored = list.map(({ name, word, colour, youth, aliases }) => ({ name, word, colour: colour.toUpperCase(), youth, ...(aliases?.length ? { aliases } : {}) }));
-    set('level_settings', JSON.stringify(stored));
-    set('youth_levels', JSON.stringify(stored.filter((x) => x.youth).map((x) => x.name)));
   }
   if (sets.length === 0) return c.json({ event: eventDto(row) });
 
@@ -257,12 +208,6 @@ eventRoutes.patch('/:eventId', async (c) => {
   set('updated_at', nowIso());
   await c.env.DB.batch([
     // Column names come from the fixed map above, never from the client.
-    // Renamed levels: everyone in them moves with the name (each person once, so swapping two names works).
-    ...(await Promise.all(
-      people
-        .filter((p) => renames.some((r) => r.from === p.level))
-        .map(async (p) => c.env.DB.prepare(`UPDATE registrations SET level = ? WHERE id = ?`).bind(await seal(c.env, renames.find((r) => r.from === p.level)!.to), p.id)),
-    )),
     c.env.DB.prepare(`UPDATE events SET ${sets.join(', ')} WHERE id = ?`).bind(...values, eventId),
     auditStatement(c.env.DB, {
       actor: { type: 'user', id: (principal as { userId: string }).userId },
@@ -273,8 +218,6 @@ eventRoutes.patch('/:eventId', async (c) => {
       detail: { fields: Object.keys(input).join(',') },
     }),
   ]);
-  // Everyone's youth or adult follows the new setting.
-  if (input.youthLevels !== undefined || input.levels !== undefined) await syncKinds(c.env, eventId);
   return c.json({ event: eventDto((await getEventRow(c.env.DB, eventId))!) });
 });
 

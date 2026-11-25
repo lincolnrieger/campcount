@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { BRAND_COLOR_PATTERN, subdomainProblem } from './site';
 
-
 const trimmed = (max: number) => z.string().trim().max(max);
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use the format YYYY-MM-DD');
 
@@ -20,7 +19,13 @@ export const passwordLinkCheckSchema = z.strictObject({ token: z.string().regex(
 export const passwordLinkUseSchema = passwordLinkCheckSchema.extend({ password: z.string().min(1).max(200) });
 
 export const signInVerifySchema = z.union([
-  z.strictObject({ email: emailSchema, code: z.string().trim().regex(/^\d{6}$/) }),
+  z.strictObject({
+    email: emailSchema,
+    code: z
+      .string()
+      .trim()
+      .regex(/^\d{6}$/),
+  }),
   z.strictObject({ token: z.string().regex(/^[A-Za-z0-9_-]{20,64}$/) }),
 ]);
 
@@ -36,23 +41,13 @@ export const eventFeaturesSchema = z.strictObject({
   activities: z.boolean(),
   meals: z.boolean(),
   site: z.boolean(),
-  dietary: z.boolean(),
-  photo: z.boolean(),
   selfSignup: z.boolean(),
   /** The secret Side Quest (participants collect each other's lanyards). */
   sideQuest: z.boolean(),
 });
 
-/** How a lanyard shows someone without photo consent (Settings › Lanyards). */
-export const PHOTO_MARKERS = ['black_border', 'colour_border', 'red_dot', 'camera_icon', 'none'] as const;
-export type PhotoMarker = (typeof PHOTO_MARKERS)[number];
-
 export const lanyardSettingsSchema = z.strictObject({
-  photoMarker: z.enum(PHOTO_MARKERS),
-  photoMarkerColour: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Choose a colour like #B3261E'),
-  /** Print a small "No photos" next to the level. */
-  photoMarkerLabel: z.boolean(),
-  /** With uploaded front artwork: print the coloured level band over it (or only the level word). */
+  /** With uploaded front artwork: print the coloured role band over it (or only the role word). */
   printBand: z.boolean(),
 });
 
@@ -77,9 +72,7 @@ const eventFields = {
   brandColor: z.string().regex(BRAND_COLOR_PATTERN, 'Choose a colour like #1F5C46').optional(),
 };
 
-export const createEventSchema = z
-  .strictObject(eventFields)
-  .refine((e) => e.endsOn >= e.startsOn, { message: 'The event must end on or after its start date', path: ['endsOn'] });
+export const createEventSchema = z.strictObject(eventFields).refine((e) => e.endsOn >= e.startsOn, { message: 'The event must end on or after its start date', path: ['endsOn'] });
 
 export const updateEventSchema = z
   .strictObject({
@@ -94,23 +87,6 @@ export const updateEventSchema = z
     lanyard: lanyardSettingsSchema.partial(),
     /** Who people email about the camp, e.g. to change a booking. Empty for none. */
     contactEmail: z.union([z.literal(''), z.email('Enter an email address like camp@example.org').max(200)]),
-    /** Levels that count as youth at this camp; everyone else is an adult. */
-    youthLevels: z.array(trimmed(40).min(1)).max(40),
-    /** The camp's levels (Settings › Levels). `from` is the name it had, for renames. */
-    levels: z
-      .array(
-        z.strictObject({
-          from: trimmed(40).optional(),
-          name: trimmed(40).min(1, 'Give each level a name'),
-          word: trimmed(20),
-          colour: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Choose a colour'),
-          youth: z.boolean(),
-          /** Imported names linked to this level ("Early Bird Youth"). */
-          aliases: z.array(trimmed(40).min(1)).max(50).optional(),
-        }),
-      )
-      .min(1, 'Keep at least one level')
-      .max(40),
   })
   .partial();
 
@@ -136,90 +112,49 @@ export const createAssignmentSchema = z
 
 export type EventFeatures = z.infer<typeof eventFeaturesSchema>;
 
-// ---------------------------------------------------------------- roster import
-
-export const DIETARY_CATEGORIES = ['allergy', 'intolerance', 'medical_diet', 'religious_cultural', 'preference'] as const;
-
-export const dietaryEntrySchema = z.strictObject({
-  category: z.enum(DIETARY_CATEGORIES),
-  item: trimmed(60).min(1),
-  severity: z.enum(['standard', 'anaphylactic']).default('standard'),
-  note: trimmed(80).default(''),
-});
-export type DietaryEntryInput = z.infer<typeof dietaryEntrySchema>;
+// ---------------------------------------------------------------- people
 
 /**
- * One roster row as sent by the browser. This strict allowlist is the server's
- * guarantee that nothing else from the source file (addresses, Medicare
- * numbers, guardian details, free-text medical notes) can ever be stored.
+ * Only three things are kept about a person: their name, their participant
+ * ID (membership number) and their role (participant or leader). Nothing
+ * else about them can be sent or stored.
  */
+
 /** A participant ID: letters, numbers and dashes. */
-export const participantIdSchema = z.string().trim().regex(/^[A-Za-z0-9-]{1,20}$/, 'Participant ID can only have letters, numbers and dashes');
+export const participantIdSchema = z
+  .string()
+  .trim()
+  .regex(/^[A-Za-z0-9-]{1,20}$/, 'Participant ID can only have letters, numbers and dashes');
 
-export const importRowSchema = z.strictObject({
-  /** Empty when the file has none: the server reuses the ID of someone already on this camp with the same name, or makes one. */
-  participantId: z.union([z.literal(''), participantIdSchema]).default(''),
-  /** A full first name, or just an initial. */
-  firstName: trimmed(60).min(1, 'First name is missing'),
-  /** A full last name, an initial, or nothing. */
-  lastName: trimmed(60).default(''),
-  /** Worked out by the server from the level; anything sent is ignored. */
-  kind: z.enum(['youth', 'adult']).default('youth'),
-  /** A level name. New names are added to the camp's levels. Empty: the camp's first level. */
-  level: trimmed(40).default(''),
-  groupName: trimmed(120).default(''),
-  photoConsent: z.enum(['yes', 'no']).default('no'),
-  /** Whether the files have dietary notes for this person (yes or no: never the notes, nor anything made from them). */
-  hasDietaryNotes: z.boolean().default(false),
-  /** Present only when the dietary text was reviewed in this import. */
-  dietary: z.array(dietaryEntrySchema).max(10).optional(),
-});
-export type ImportRow = z.infer<typeof importRowSchema>;
+/** Participant (youth) or leader (adult). */
+export const roleSchema = z.enum(['youth', 'adult']);
 
-/** Editing one person on an event (People page). Only the fields an import would bring in. */
+/** One person on a camp's roster, as written by the server. */
+export interface RosterRow {
+  participantId: string;
+  firstName: string;
+  lastName: string;
+  kind: 'youth' | 'adult';
+}
+
+/** Editing one person on an event (People page). */
 export const registrationPatchSchema = z.strictObject({
   participantId: participantIdSchema.optional(),
   firstName: trimmed(60).min(1, 'Enter a first name').optional(),
   lastName: trimmed(60).optional(),
-  kind: z.enum(['youth', 'adult']).optional(),
-  level: trimmed(40).min(1).optional(),
-  /** A leader's car registration, for contacting them about it at camp. */
-  carRego: trimmed(20).optional(),
-  groupName: trimmed(120).optional(),
-  photoConsent: z.enum(['yes', 'no']).optional(),
+  kind: roleSchema.optional(),
   status: z.enum(['active', 'withdrawn']).optional(),
 });
 
-export const dietaryUpdateSchema = z.strictObject({
-  entries: z.array(dietaryEntrySchema).max(10),
-});
-
-// ---------------------------------------------------------------- registration
-
-/** One person, as entered on the public registration page or by an event manager. */
+/** One person, added by an event manager (or at the sign-up screen). */
 export const personEntrySchema = z.strictObject({
   firstName: trimmed(60).min(1, 'Enter a first name'),
   lastName: trimmed(60).default(''),
   /** Null when they don't have one (an ID is made for them). */
   participantId: participantIdSchema.nullable(),
-  kind: z.enum(['youth', 'adult']),
-  /** A level name. New names are added to the camp's levels. */
-  level: trimmed(40).min(1),
-  groupName: trimmed(120).default(''),
-  photoConsent: z.enum(['yes', 'no']),
-  dietary: z.array(dietaryEntrySchema).max(10).default([]),
+  kind: roleSchema,
 });
 export type PersonEntry = z.infer<typeof personEntrySchema>;
-
-export const importRequestSchema = z.strictObject({
-  rows: z.array(importRowSchema).min(1).max(2000),
-  withdrawMissing: z.boolean().default(false),
-  /** Imported level names linked to the camp's levels on the import screen, remembered for next time. */
-  levelLinks: z
-    .record(trimmed(40).min(1), trimmed(40).min(1))
-    .refine((o) => Object.keys(o).length <= 200, 'Too many level links')
-    .optional(),
-});
 
 // ---------------------------------------------------------------- activities, meals, stations, scans
 
@@ -259,7 +194,10 @@ export const activityInputSchema = z.strictObject({
   signupOpen: activityFields.signupOpen.default(false),
   kind: activityFields.kind.default('activity'),
 });
-export const activityPatchSchema = z.strictObject(activityFields).partial().extend({ status: z.enum(['active', 'cancelled']).optional() });
+export const activityPatchSchema = z
+  .strictObject(activityFields)
+  .partial()
+  .extend({ status: z.enum(['active', 'cancelled']).optional() });
 
 const mealFields = {
   name: trimmed(80).min(1),
@@ -280,7 +218,10 @@ export const mealInputSchema = z.strictObject({
   startsAt: mealFields.startsAt.default(null),
   endsAt: mealFields.endsAt.default(null),
 });
-export const mealPatchSchema = z.strictObject(mealFields).partial().extend({ status: z.enum(['active', 'cancelled']).optional() });
+export const mealPatchSchema = z
+  .strictObject(mealFields)
+  .partial()
+  .extend({ status: z.enum(['active', 'cancelled']).optional() });
 
 /** A whole programme at once (Activities › Import programme). Saved all together, or not at all. */
 export const programImportSchema = z

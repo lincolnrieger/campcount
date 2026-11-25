@@ -317,24 +317,6 @@
   padding: var(--space-1) var(--space-3);
 }
 
-/* ---------- Import with column matching ---------- */
-.import-page {
-  gap: var(--space-5);
-}
-.import-source {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2) var(--space-3);
-}
-.import-source .field-label {
-  margin: 0;
-}
-.import-privacy {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
 .map-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
@@ -380,30 +362,7 @@
   grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
   gap: 0 var(--space-4);
 }
-.import-withdraw {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-.import-problems {
-  display: grid;
-  gap: var(--space-2);
-}
-.import-problems .problem-list {
-  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-6);
-  border-radius: var(--radius);
-  background: var(--surface);
-  font-size: var(--text-md);
-}
-.import-progress {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  margin-left: auto;
-}
-.import-tabs .row {
-  min-height: 2.75rem;
-}
+
 .review-item {
   padding: var(--space-4);
 }
@@ -422,19 +381,6 @@
     grid-template-columns: repeat(auto-fill, minmax(26rem, 1fr));
     align-items: start;
   }
-}
-
-/* ---------- Dietary editor (admin) ---------- */
-.dietary-editor .dietary-row {
-  min-height: 2.75rem;
-  padding-top: var(--space-1);
-  padding-bottom: var(--space-1);
-}
-.dietary-editor .quick-picks .chip {
-  min-height: 2.25rem;
-}
-.dietary-editor details.more-options > summary {
-  min-height: 2.25rem;
 }
 
 /* ---------- Import & check ---------- */
@@ -518,42 +464,6 @@
   background: var(--surface);
 }
 
-/* Import › the spreadsheets being joined */
-.import-files {
-  display: grid;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-.import-files .add-file {
-  justify-self: start;
-  cursor: pointer;
-}
-
-/* Import › dietary columns, level links and a later file's columns */
-.dietary-columns,
-.level-links {
-  margin-top: 12px;
-  display: grid;
-  gap: 6px;
-}
-.dietary-columns > .btn {
-  justify-self: start;
-}
-.level-links-list {
-  display: grid;
-  gap: 8px;
-}
-.level-link {
-  display: grid;
-  grid-template-columns: minmax(10rem, 1fr) auto minmax(10rem, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-}
-@media (max-width: 600px) {
-  .level-link {
-    grid-template-columns: 1fr;
-  }
-}
 .file-columns {
   flex-basis: 100%;
   margin: 4px 0 8px;

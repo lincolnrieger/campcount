@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { api, createEvent, createUser, grant, json } from './helpers';
+import { api, createEvent, createUser, grant, json, addPeople } from './helpers';
 
 // A 1×1 PNG.
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
@@ -9,9 +9,6 @@ const person = (participantId: string, kind: 'youth' | 'adult') => ({
   firstName: `P${participantId}`,
   lastName: 'Person',
   kind,
-  level: kind === 'adult' ? 'Leaders' : 'Seniors',
-  groupName: 'Example Group',
-  photoConsent: 'yes',
 });
 
 describe('participant page banner', () => {
@@ -20,7 +17,7 @@ describe('participant page banner', () => {
     const eventId = await createEvent(admin.id, { status: 'open' });
     const manager = await createUser();
     await grant(manager.id, 'event_manager', eventId);
-    await api(`/events/${eventId}/import/commit`, { cookie: manager.cookie, body: { rows: [person('100', 'youth')] } });
+    await addPeople(eventId, manager.cookie, [person('100', 'youth')]);
     await api(`/events/${eventId}/credentials/issue`, { cookie: manager.cookie, body: { mode: 'missing' } });
     const { cards } = await json(await api(`/events/${eventId}/credentials/print`, { cookie: manager.cookie, body: {} }));
     const token = cards[0].qr.split('#')[1];

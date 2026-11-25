@@ -14,15 +14,9 @@ export interface SnapshotPerson {
   fullName?: string;
   /** Only for people who can see the roster. */
   participantId?: string;
-  group: string;
-  level: string;
   kind: 'youth' | 'adult';
   withdrawn: boolean;
   booked: boolean;
-  noPhotos?: boolean;
-  /** A leader not yet asked for their car's rego. */
-  askRego?: boolean;
-  dietaryAlert?: string | null;
   state: PersonState | null;
 }
 
@@ -147,7 +141,8 @@ export function useScanSession(eventId: string, type: ContextType, contextId: st
           item = { ...base, method: 'qr', credentialHash: tokenHash };
         } else if (input.kind === 'code') {
           const code = normaliseShortCode(input.code);
-          if (!isTypedCode(code)) return { key: id, tone: 'stop', title: 'Check the number', message: 'Type the participant ID printed on their card.', person: null, warning: null };
+          if (!isTypedCode(code))
+            return { key: id, tone: 'stop', title: 'Check the number', message: 'Type the participant ID printed on their card.', person: null, warning: null };
           const codeHash = await sha256Hex(`code:${eventId}:${code}`);
           credential = lookup.byCode.get(codeHash);
           item = { ...base, method: 'code', codeHash };

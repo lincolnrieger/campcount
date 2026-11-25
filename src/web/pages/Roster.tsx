@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { ApiFailure, api } from '../api';
+import { ROLE_LABEL } from '../../shared/roles';
 import type { Registration } from '../model';
 import { useApi } from '../useApi';
 import { matchesSearch } from '../../shared/search';
@@ -19,7 +20,6 @@ import {
   SelectionBar,
   SkeletonRows,
   SortHeader,
-  Toggle,
   Toolbar,
   plural,
   sortRows,
@@ -32,20 +32,11 @@ import type { SortState } from '../ui';
 import { useEvent } from './EventLayout';
 
 type Filter = 'all' | 'youth' | 'adult' | 'nocard' | 'withdrawn';
-type Column = 'name' | 'group' | 'level' | 'card';
-interface MoreFilters {
-  level: string;
-  group: string;
-  allergy: boolean;
-  noPhotos: boolean;
-}
-const NO_MORE: MoreFilters = { level: '', group: '', allergy: false, noPhotos: false };
-const SORT_LABEL: Record<Column, string> = { name: 'Name', level: 'Level', group: 'Group', card: 'Lanyard' };
+type Column = 'name' | 'id' | 'role' | 'card';
+const SORT_LABEL: Record<Column, string> = { name: 'Name', id: 'Participant ID', role: 'Role', card: 'Lanyard' };
 
 const fullName = (r: Registration) => `${r.firstName} ${r.lastName}`.trim();
-const roleOf = (r: Registration) => r.level;
-const hasAllergy = (r: Registration) => !!r.dietary?.some((d) => d.category === 'allergy');
-const uniqueSorted = (values: string[]) => [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b));
+const roleOf = (r: Registration) => ROLE_LABEL[r.kind];
 
 /** People: everyone on the event, searchable, filterable and sortable, with bulk actions on the selected. */
 export function Roster() {
@@ -56,7 +47,6 @@ export function Roster() {
   const { data, error, loading, reload } = useApi<{ registrations: Registration[] }>(`/events/${event.id}/registrations`);
   const [query, setQuery] = useRemembered(`people:${event.id}:q`, '');
   const [filter, setFilter] = useRemembered<Filter>(`people:${event.id}:filter`, 'all');
-  const [more, setMore] = useRemembered<MoreFilters>(`people:${event.id}:more`, NO_MORE);
   const [sort, setSort] = useRemembered<SortState<Column>>(`people:${event.id}:sort`, { key: 'name', dir: 'asc' });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const toggleSort = (k: Column) => setSort((s) => (s.key === k ? { key: k, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key: k, dir: 'asc' }));
@@ -69,18 +59,9 @@ export function Roster() {
   const active = all.filter((r) => r.status === 'active');
   const withdrawn = all.length - active.length;
   const withoutCard = active.filter((r) => !r.shortCode).length;
-  const levels = uniqueSorted(all.map(roleOf));
-  const groups = uniqueSorted(all.map((r) => r.groupName));
-  const moreCount = [more.level, more.group, more.allergy, more.noPhotos].filter(Boolean).length;
 
   // Everything except the chip filter, so the chips can show what each would give.
-  const base = all.filter((r) => {
-    if (more.level && roleOf(r) !== more.level) return false;
-    if (more.group && r.groupName !== more.group) return false;
-    if (more.allergy && !hasAllergy(r)) return false;
-    if (more.noPhotos && r.photoConsent !== 'no') return false;
-    return matchesSearch(query, fullName(r), r.firstName, r.participantId, r.shortCode, r.groupName);
-  });
+  const base = all.filter((r) => matchesSearch(query, fullName(r), r.firstName, r.participantId, r.shortCode));
   const inFilter = (r: Registration, f: Filter) => {
     if (f === 'withdrawn' ? r.status !== 'withdrawn' : r.status !== 'active') return false;
     if (f === 'youth' && r.kind !== 'youth') return false;
@@ -91,7 +72,7 @@ export function Roster() {
   const count = (f: Filter) => base.filter((r) => inFilter(r, f)).length;
   const shown = sortRows(
     base.filter((r) => inFilter(r, filter)),
-    (r) => (sort.key === 'name' ? `${r.lastName} ${r.firstName}` : sort.key === 'group' ? r.groupName : sort.key === 'card' ? r.shortCode : roleOf(r)),
+    (r) => (sort.key === 'name' ? `${r.lastName} ${r.firstName}` : sort.key === 'id' ? r.participantId : sort.key === 'card' ? r.shortCode : roleOf(r)),
     sort.dir,
   );
   const picked = all.filter((r) => selected.has(r.id));
@@ -102,7 +83,6 @@ export function Roster() {
   const clearAll = () => {
     setQuery('');
     setFilter('all');
-    setMore(NO_MORE);
   };
   const failMessage = (err: unknown) => (err instanceof ApiFailure ? err.message : 'No connection. Try again.');
 
@@ -111,7 +91,7 @@ export function Roster() {
     const n = people.length;
     const ok = await confirm({
       title: n === 1 ? `Delete ${fullName(people[0]!)}?` : `Delete ${n} people?`,
-      body: <p>Their lanyards, dietary needs and scans are deleted too. This can't be undone. To keep the records, withdraw instead.</p>,
+      body: <p>Their lanyards and scans are deleted too. This can't be undone. To keep the records, withdraw instead.</p>,
       confirm: n === 1 ? 'Delete person' : `Delete ${n} people`,
       danger: true,
     });
@@ -176,7 +156,7 @@ export function Roster() {
       summary={
         all.length > 0 && (
           <span>
-            {active.length} on the event · {active.filter((r) => r.kind === 'youth').length} youth · {active.filter((r) => r.kind === 'adult').length} leaders
+            {active.length} on the event · {active.filter((r) => r.kind === 'youth').length} participants · {active.filter((r) => r.kind === 'adult').length} leaders
           </span>
         )
       }
@@ -188,7 +168,7 @@ export function Roster() {
           </ButtonLink>
         )
       }
-      // Import, lanyards, the leader roster, the roll sheet and links are in the navigation (People, Links & sign-up).
+      // Lanyards, the leader roster, the roll sheet and links are in the navigation (People, Links & sign-up).
     />
   );
 
@@ -231,65 +211,35 @@ export function Roster() {
   const flags = (r: Registration) => (
     <>
       {r.status === 'withdrawn' && <Badge>Withdrawn</Badge>}
-      {event.features.photo && r.photoConsent === 'no' && <Badge tone="error">No photos</Badge>}
-      {hasAllergy(r) && <Badge tone="error">Allergy</Badge>}
       {r.status === 'active' && !r.shortCode && <Badge tone="warning">No lanyard</Badge>}
     </>
   );
 
-  const moreFilters = (
-    <Popover label="More filters" icon="layers" button={moreCount ? `Filters · ${moreCount}` : 'Filters'} align="end">
+  const sortMenu = (
+    <Popover label="Sort" icon="layers" button="Sort" align="end">
       <div className="field">
-        <label className="field-label" htmlFor="people-level">
-          Level
+        <label className="field-label" htmlFor="people-sort">
+          Sort by
         </label>
-        <select id="people-level" className="select" value={more.level} onChange={(e) => setMore({ ...more, level: e.target.value })}>
-          <option value="">All levels</option>
-          {levels.map((s) => (
-            <option key={s}>{s}</option>
-          ))}
-        </select>
-      </div>
-      <div className="field">
-        <label className="field-label" htmlFor="people-group">
-          Group
-        </label>
-        <select id="people-group" className="select" value={more.group} onChange={(e) => setMore({ ...more, group: e.target.value })}>
-          <option value="">All groups</option>
-          {groups.map((g) => (
-            <option key={g}>{g}</option>
-          ))}
-        </select>
-      </div>
-      <Toggle label="Allergies only" checked={more.allergy} onChange={(v) => setMore({ ...more, allergy: v })} />
-      {event.features.photo && <Toggle label="No photos only" checked={more.noPhotos} onChange={(v) => setMore({ ...more, noPhotos: v })} />}
-      {!wide && (
-        <div className="field">
-          <label className="field-label" htmlFor="people-sort">
-            Sort by
-          </label>
-          <select id="people-sort" className="select" value={`${sort.key}:${sort.dir}`} onChange={(e) => {
+        <select
+          id="people-sort"
+          className="select"
+          value={`${sort.key}:${sort.dir}`}
+          onChange={(e) => {
             const [key, dir] = e.target.value.split(':') as [Column, 'asc' | 'desc'];
             setSort({ key, dir });
-          }}>
-            {(Object.keys(SORT_LABEL) as Column[]).flatMap((k) => [
-              <option key={`${k}:asc`} value={`${k}:asc`}>
-                {SORT_LABEL[k]} (A–Z)
-              </option>,
-              <option key={`${k}:desc`} value={`${k}:desc`}>
-                {SORT_LABEL[k]} (Z–A)
-              </option>,
-            ])}
-          </select>
-        </div>
-      )}
-      {moreCount > 0 && (
-        <div>
-          <Button small kind="ghost" onClick={() => setMore(NO_MORE)}>
-            Clear these filters
-          </Button>
-        </div>
-      )}
+          }}
+        >
+          {(Object.keys(SORT_LABEL) as Column[]).flatMap((k) => [
+            <option key={`${k}:asc`} value={`${k}:asc`}>
+              {SORT_LABEL[k]} (A–Z)
+            </option>,
+            <option key={`${k}:desc`} value={`${k}:desc`}>
+              {SORT_LABEL[k]} (Z–A)
+            </option>,
+          ])}
+        </select>
+      </div>
     </Popover>
   );
 
@@ -301,25 +251,31 @@ export function Roster() {
           title="No one on this event yet"
           actions={
             <>
-              {can('roster.import') && (
-                <ButtonLink to="import" kind="primary">
-                  Import a spreadsheet
+              {canEdit && (
+                <ButtonLink to="add" kind="primary">
+                  Add person
                 </ButtonLink>
               )}
-              {canEdit && <ButtonLink to="add">Add person</ButtonLink>}
             </>
           }
         />
       ) : (
         <div className="section people-list">
           {canCards && withoutCard > 0 && (
-            <Banner tone="warning" action={<ButtonLink to="lanyards/print" small>Issue lanyards</ButtonLink>}>
+            <Banner
+              tone="warning"
+              action={
+                <ButtonLink to="lanyards/print" small>
+                  Issue lanyards
+                </ButtonLink>
+              }
+            >
               {withoutCard === 1 ? '1 person has no lanyard' : `${withoutCard} people have no lanyard`}
             </Banner>
           )}
           <Toolbar sticky label="Search and filter people">
             <SearchField id="people-q" label="Search name, participant ID or lanyard code" placeholder="Search people" value={query} onChange={setQuery} slash />
-            {moreFilters}
+            {!wide && sortMenu}
             <div className="toolbar-end">
               <p className="toolbar-count" aria-live="polite">
                 {plural(shown.length, 'person', 'people')}
@@ -331,7 +287,7 @@ export function Roster() {
               onChange={setFilter}
               options={[
                 { value: 'all', label: 'Everyone', count: count('all') },
-                { value: 'youth', label: 'Youth', count: count('youth') },
+                { value: 'youth', label: 'Participants', count: count('youth') },
                 { value: 'adult', label: 'Leaders', count: count('adult') },
                 ...(withoutCard > 0 || filter === 'nocard' ? [{ value: 'nocard' as const, label: 'No lanyard', count: count('nocard') }] : []),
                 ...(withdrawn > 0 || filter === 'withdrawn' ? [{ value: 'withdrawn' as const, label: 'Withdrawn', count: count('withdrawn') }] : []),
@@ -361,8 +317,8 @@ export function Roster() {
                       </th>
                     )}
                     <SortHeader label="Name" column="name" sort={sort} onSort={toggleSort} />
-                    <SortHeader label="Level" column="level" sort={sort} onSort={toggleSort} />
-                    <SortHeader label="Group" column="group" sort={sort} onSort={toggleSort} />
+                    <SortHeader label="Participant ID" column="id" sort={sort} onSort={toggleSort} />
+                    <SortHeader label="Role" column="role" sort={sort} onSort={toggleSort} />
                     <SortHeader label="Lanyard" column="card" sort={sort} onSort={toggleSort} />
                     <th scope="col">Status</th>
                   </tr>
@@ -383,8 +339,8 @@ export function Roster() {
                             {name}
                           </Link>
                         </td>
+                        <td className="code-cell">{r.participantId}</td>
                         <td>{roleOf(r)}</td>
-                        <td>{r.groupName}</td>
                         <td className="code-cell">{r.shortCode ?? '—'}</td>
                         <td>
                           <span className="badges">{flags(r)}</span>
@@ -414,7 +370,7 @@ export function Roster() {
               <ul className="list people-rows">
                 {shown.map((r) => {
                   const name = fullName(r);
-                  const meta = [roleOf(r), r.groupName].filter(Boolean).join(' · ');
+                  const meta = [roleOf(r), r.participantId].filter(Boolean).join(' · ');
                   const on = selected.has(r.id);
                   return (
                     <li key={r.id} className={['row row-link', r.status === 'withdrawn' && 'is-muted', on && 'is-highlight'].filter(Boolean).join(' ')}>

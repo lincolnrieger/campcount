@@ -1,6 +1,5 @@
 import type { EventFeatures, EventStatus, LanyardSettings } from '../shared/schemas';
 import type { Permission } from '../shared/permissions';
-import type { LevelSetting } from '../shared/levels';
 
 export interface EventSummary {
   id: string;
@@ -18,15 +17,11 @@ export interface EventSummary {
   /** The event's own address: <subdomain>.campcount.com (null until an admin sets one). */
   subdomain: string | null;
   brandColor: string | null;
-  /** How lanyards mark someone without photo consent. */
+  /** Lanyard print settings. */
   lanyard: LanyardSettings;
   logoUrl: string | null;
-  /** Levels that count as youth at this camp; everyone else is an adult. */
   /** Who people email about the camp (shown on booking links). */
   contactEmail: string;
-  youthLevels: string[];
-  /** The camp's levels: names, lanyard words, colours, youth (Settings › Levels). */
-  levels: LevelSetting[];
   permissions: Permission[];
 }
 

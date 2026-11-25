@@ -10,38 +10,34 @@ A short summary for reviewers. The detail is in
 CampCount is a general tool for camps and events. It isn't tied to any one
 organisation or membership system.
 
-## Importing: the file stays on the device
+## Name, participant ID and role only
 
-CampCount doesn't connect to any other system or pull data from one. A camp
-manager opens a spreadsheet (.xlsx or .csv) in CampCount, and it's read **on
-their own device**. The file itself is never uploaded.
+CampCount is a check-in and check-out tool. It keeps three things about each
+person, and nothing else:
 
-Columns are matched to CampCount's fields by their names, on the device, and
-nothing is sent while matching. The manager checks each match
-and can choose "Don't send" for any field. **Nothing is sent until they press
-Import**, and then only the fields they chose:
+- **Name:** first name (required) and last name (optional). Either can be
+  just an initial.
+- **Participant ID**, such as a membership number. If someone doesn't have
+  one, CampCount makes one up. It's also the typed code on their lanyard.
+- **Role:** participant or leader.
 
-- First name (required). It can be sent in full or as an initial.
-- Last name (optional). It can be sent in full, as an initial, or not at all.
-- Group, level and participant ID (all optional; an ID is made if there
-  isn't one).
-- Photo consent, as Yes or No. Anything unclear counts as No.
-- Dietary needs, as short items the manager confirms (for example "Peanut,
-  anaphylactic"). Free-text notes are read on the device and never sent.
+People are added one at a time (Add person). CampCount doesn't import
+spreadsheets, doesn't connect to any other system, and doesn't pull data
+from one. The server rejects any other field, so nothing outside that list
+can be stored, even by mistake.
 
-The server rejects anything else, so nothing outside that list can be stored,
-even by mistake.
+**Never stored:** groups, levels, photo consent, dietary needs or allergies,
+medical conditions, medication, car registrations, addresses, phone numbers,
+emails, dates of birth, Medicare numbers, and guardian and emergency
+contacts.
 
-**Never stored:** addresses, phone numbers, emails, dates of birth, Medicare
-numbers, medical conditions, medication, swimming ability, guardian and
-emergency contacts, and the spreadsheet itself. Nothing from the file is kept
-on the importing device either.
+Alongside that, CampCount records what happens at camp: scans in and out
+(who, where, when), activity bookings, teams and duty rosters.
 
 ## Encryption and where the data is
 
-- **All participant data is encrypted before it's stored:** names,
-  participant IDs, groups, levels, car registrations, dietary details and
-  typed lanyard codes. It uses AES-256-GCM with a key (`DATA_KEY`) held as a
+- **Names, participant IDs and typed lanyard codes are encrypted before
+  they're stored.** It uses AES-256-GCM with a key (`DATA_KEY`) held as a
   Cloudflare secret, separate from the database. Someone who got a copy of
   the database or a backup would see only scrambled values.
 - People are found by participant ID using a keyed hash, so IDs are never
@@ -52,19 +48,18 @@ on the importing device either.
 - All traffic uses HTTPS only, and Cloudflare also encrypts the database at
   rest.
 - There are no third-party analytics, trackers or external scripts.
-- Scanner phones keep a short offline list (names, participant IDs, groups,
-  plus dietary alerts on meal phones only), protected by the phone's own
-  encryption and wiped on sign-out.
+- Scanner phones keep a short offline list (names and roles, plus
+  participant IDs for staff who can see the roster), protected by the
+  phone's own encryption and wiped on sign-out.
 
 ## Access and retention
 
 - Staff sign in with their own account. Each person sees only the camps and
   the parts of a camp their role allows.
-- Exports, imports, role changes and corrections are recorded in an
-  append-only audit log, which holds no names or dietary details.
-- Dietary details, photo consent and car registrations are deleted
-  automatically 90 days after a camp. Names are deleted after 2 years, and
-  only totals are kept after that.
+- Exports, role changes and corrections are recorded in an append-only audit
+  log, which holds no names.
+- Lanyard codes stop working 90 days after a camp. Names, IDs and attendance
+  are deleted after 2 years, and only totals are kept after that.
 - The site tells search engines not to list it.
 
 ## Still to do

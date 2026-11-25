@@ -11,21 +11,36 @@ import { testEnv } from './helpers';
 const MATRIX: Record<string, string[]> = {
   platform_admin: ['platform.audit.read', 'platform.events.create', 'platform.events.oversee', 'platform.users.manage'],
   event_manager: [
-    'activities.manage', 'activity.bookings', 'activity.scan', 'activity.view_roster', 'attendance.correct', 'credentials.manage',
-    'dietary.edit', 'dietary.view_alert', 'dietary.view_detail', 'event.close', 'event.configure', 'event.view',
-    'meal.scan', 'meals.manage', 'photo.view_status', 'reports.export', 'reports.export_sensitive', 'reports.view',
-    'roster.edit', 'roster.import', 'roster.view', 'site.scan', 'staff.manage', 'stations.manage',
+    'activities.manage',
+    'activity.bookings',
+    'activity.scan',
+    'activity.view_roster',
+    'attendance.correct',
+    'credentials.manage',
+    'event.close',
+    'event.configure',
+    'event.view',
+    'meal.scan',
+    'meals.manage',
+    'reports.export',
+    'reports.view',
+    'roster.edit',
+    'roster.view',
+    'site.scan',
+    'staff.manage',
+    'stations.manage',
   ],
-  scanner: ['activity.bookings', 'activity.scan', 'activity.view_roster', 'event.view', 'photo.view_status', 'site.scan'],
-  meal_leader: ['dietary.view_alert', 'event.view', 'meal.scan'],
-  activity_leader: ['activity.bookings', 'activity.scan', 'activity.view_roster', 'event.view', 'photo.view_status'],
+  scanner: ['activity.bookings', 'activity.scan', 'activity.view_roster', 'event.view', 'site.scan'],
+  meal_leader: ['event.view', 'meal.scan'],
+  activity_leader: ['activity.bookings', 'activity.scan', 'activity.view_roster', 'event.view'],
 };
 
 describe('system roles', () => {
   it('match the approved permission matrix exactly', async () => {
-    const { results } = await testEnv.DB.prepare(
-      `SELECT r.key, rp.permission FROM roles r JOIN role_permissions rp ON rp.role_id = r.id WHERE r.is_system = 1`,
-    ).all<{ key: string; permission: string }>();
+    const { results } = await testEnv.DB.prepare(`SELECT r.key, rp.permission FROM roles r JOIN role_permissions rp ON rp.role_id = r.id WHERE r.is_system = 1`).all<{
+      key: string;
+      permission: string;
+    }>();
     const actual: Record<string, string[]> = {};
     for (const row of results) (actual[row.key] ??= []).push(row.permission);
     for (const key of Object.keys(actual)) actual[key]!.sort();
@@ -33,19 +48,21 @@ describe('system roles', () => {
   });
 
   it('only contain known permissions valid for their scope', async () => {
-    const { results } = await testEnv.DB.prepare(
-      `SELECT r.key, r.scope, rp.permission FROM roles r JOIN role_permissions rp ON rp.role_id = r.id`,
-    ).all<{ key: string; scope: RoleScope; permission: string }>();
+    const { results } = await testEnv.DB.prepare(`SELECT r.key, r.scope, rp.permission FROM roles r JOIN role_permissions rp ON rp.role_id = r.id`).all<{
+      key: string;
+      scope: RoleScope;
+      permission: string;
+    }>();
     for (const row of results) {
       expect(isPermission(row.permission), `${row.key}: ${row.permission}`).toBe(true);
       expect(permissionsAllowedForScope(row.scope), `${row.key}: ${row.permission}`).toContain(row.permission);
     }
   });
 
-  it('never give dietary detail or sensitive export to volunteer roles', () => {
-    for (const role of ['scanner']) {
-      expect(MATRIX[role]).not.toContain('dietary.view_detail');
-      expect(MATRIX[role]).not.toContain('reports.export_sensitive');
+  it('never give the roster or exports to volunteer roles', () => {
+    for (const role of ['scanner', 'meal_leader', 'activity_leader']) {
+      expect(MATRIX[role]).not.toContain('roster.view');
+      expect(MATRIX[role]).not.toContain('reports.export');
     }
   });
 });

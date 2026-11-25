@@ -28,7 +28,6 @@ import { Schedule } from './pages/Schedule';
 import { TeamEventPage, TeamEvents } from './pages/Teams';
 import { LeaderRoster } from './pages/LeaderRoster';
 import { BannerSettings } from './pages/BannerSettings';
-import { LevelsSettings } from './pages/LevelsSettings';
 import { BookingLinks } from './pages/BookingLinks';
 const BookLink = lazy(() => import('./pages/BookLink').then((m) => ({ default: m.BookLink })));
 const SideQuest = lazy(() => import('./pages/SideQuest').then((m) => ({ default: m.SideQuest })));
@@ -59,7 +58,6 @@ const Scan = lazy(() => import('./pages/Scan').then((m) => ({ default: m.Scan })
 const ParticipantLinks = lazy(() => import('./pages/ParticipantLinks').then((m) => ({ default: m.ParticipantLinks })));
 const LanyardDesigner = lazy(() => import('./pages/LanyardDesigner').then((m) => ({ default: m.LanyardDesigner })));
 const LanyardPrint = lazy(() => import('./pages/LanyardPrint').then((m) => ({ default: m.LanyardPrint })));
-const Import = lazy(() => import('./pages/Import').then((m) => ({ default: m.Import })));
 const SignupKiosk = lazy(() => import('./pages/Signup').then((m) => ({ default: m.SignupKiosk })));
 const Participant = lazy(() => import('./pages/Participant').then((m) => ({ default: m.Participant })));
 
@@ -205,7 +203,6 @@ function EventSiteApp({ site }: { site: Extract<SiteInfo, { kind: 'event' }> }) 
             <Route path="scan" element={<ScanHub />} />
             <Route path="people" element={<Roster />} />
             <Route path="people/add" element={<AddPerson />} />
-            <Route path="people/import" element={<Import />} />
             <Route path="people/lanyards" element={<LanyardDesigner />} />
             <Route path="people/lanyards/print" element={<LanyardPrint />} />
             <Route path="people/roll-sheet" element={<RollSheet />} />
@@ -232,7 +229,6 @@ function EventSiteApp({ site }: { site: Extract<SiteInfo, { kind: 'event' }> }) 
               <Route index element={<SettingsIndex />} />
               <Route path="event" element={<EventDetails />} />
               <Route path="banner" element={<BannerSettings />} />
-              <Route path="levels" element={<LevelsSettings />} />
               <Route path="staff" element={<Staff />} />
               <Route path="staff/add" element={<AddStaff />} />
               <Route path="stations" element={<Stations />} />
@@ -289,7 +285,6 @@ function PlatformApp() {
             <Route index element={<PlatformEventHome />} />
             <Route path="people" element={<Roster />} />
             <Route path="people/add" element={<AddPerson />} />
-            <Route path="people/import" element={<Import />} />
             <Route path="people/lanyards" element={<LanyardDesigner />} />
             <Route path="people/lanyards/print" element={<LanyardPrint />} />
             <Route path="people/roll-sheet" element={<RollSheet />} />
@@ -316,7 +311,6 @@ function PlatformApp() {
               <Route index element={<SettingsIndex />} />
               <Route path="event" element={<EventDetails />} />
               <Route path="banner" element={<BannerSettings />} />
-              <Route path="levels" element={<LevelsSettings />} />
               <Route path="staff" element={<Staff />} />
               <Route path="staff/add" element={<AddStaff />} />
               <Route path="stations" element={<Stations />} />
@@ -326,7 +320,6 @@ function PlatformApp() {
             {/* Old addresses */}
             <Route path="live" element={<Moved to="" />} />
             <Route path="roster/*" element={<Moved to="people" />} />
-            <Route path="import" element={<Moved to="people/import" />} />
             <Route path="lanyards" element={<Moved to="people/lanyards" />} />
             <Route path="roll-sheet" element={<Moved to="people/roll-sheet" />} />
             <Route path="qr-codes" element={<Moved to="activities/signup" />} />

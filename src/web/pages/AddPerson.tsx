@@ -30,7 +30,7 @@ export function AddPerson() {
     if (Object.keys(local).length) return;
     setBusy(true);
     try {
-      const res = await api<{ registrationId?: string }>(`/events/${event.id}/registrations`, { body: personBody(person, event.levels) });
+      const res = await api<{ registrationId?: string }>(`/events/${event.id}/registrations`, { body: personBody(person) });
       toast(`Added ${person.firstName} ${person.lastName}`.trim());
       navigate(res.registrationId ? `${people}/${res.registrationId}` : people, { replace: true });
     } catch (err) {
@@ -51,17 +51,10 @@ export function AddPerson() {
 
   return (
     <>
-      <PageHeader title="Add person" back={{ to: people, label: 'People' }} help="They join the event straight away with a lanyard. For lots of people, use Import instead." />
+      <PageHeader title="Add person" back={{ to: people, label: 'People' }} help="They join the event straight away with a lanyard." />
       <form className="form" onSubmit={submit} noValidate>
         <ErrorSummary errors={summary} />
-        <PersonFields
-          levels={event.levels}
-          value={person}
-          onChange={setPerson}
-          askPhotos={event.features.photo}
-          askDietary={event.features.dietary}
-          errors={errors}
-        />
+        <PersonFields value={person} onChange={setPerson} errors={errors} />
         <div className="btn-row form-actions">
           <Button type="submit" kind="primary" busy={busy} busyLabel="Adding…">
             Add person

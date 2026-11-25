@@ -32,7 +32,7 @@ describe('can()', () => {
     expect(can(p, 'event.view', { eventId: E1 })).toBe(true);
     expect(can(p, 'staff.manage', { eventId: E1 })).toBe(true);
     expect(can(p, 'roster.view', { eventId: E1 })).toBe(false);
-    expect(can(p, 'dietary.view_detail', { eventId: E1 })).toBe(false);
+    expect(can(p, 'roster.edit', { eventId: E1 })).toBe(false);
   });
 
   it('limits activity-scoped grants to their activity', () => {
@@ -53,8 +53,8 @@ describe('can()', () => {
   it('confines stations to their event and context', () => {
     const meal: Principal = { kind: 'station', stationId: 's', eventId: E1, contextType: 'meal', contextId: 'm1' };
     expect(can(meal, 'meal.scan', { eventId: E1 })).toBe(true);
-    expect(can(meal, 'dietary.view_alert', { eventId: E1 })).toBe(true);
-    expect(can(meal, 'dietary.view_detail', { eventId: E1 })).toBe(false);
+    expect(can(meal, 'event.view', { eventId: E1 })).toBe(true);
+    expect(can(meal, 'reports.view', { eventId: E1 })).toBe(false);
     expect(can(meal, 'meal.scan', { eventId: E2 })).toBe(false);
     expect(can(meal, 'activity.scan', { eventId: E1, activityId: 'm1' })).toBe(false);
     expect(can(meal, 'roster.view', { eventId: E1 })).toBe(false);

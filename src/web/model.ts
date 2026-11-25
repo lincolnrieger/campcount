@@ -1,5 +1,4 @@
 /** Shapes the API returns, shared between screens. */
-import type { DietaryEntryInput } from '../shared/schemas';
 
 export interface Activity {
   id: string;
@@ -26,7 +25,6 @@ export interface Activity {
 export interface TeamMember {
   registrationId: string;
   name: string;
-  groupName: string;
   level: string;
   source: 'manual' | 'self_signup';
 }
@@ -64,14 +62,8 @@ export interface Registration {
   lastName: string;
   displayName: string;
   kind: 'youth' | 'adult';
-  level: string;
-  groupName: string;
   status: 'active' | 'withdrawn';
   shortCode: string | null;
-  photoConsent?: 'yes' | 'no';
-  dietary?: DietaryEntryInput[];
-  /** Their dietary needs have been reviewed. */
-  dietaryReviewed?: boolean;
 }
 
 /** Where someone is right now. */

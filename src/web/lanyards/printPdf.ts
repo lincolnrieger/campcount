@@ -3,7 +3,7 @@ import type { CardPerson, FontId, FontWeight, ImageElement, LanyardDesign, SideK
 import { cardSize } from '../../shared/lanyardDesign';
 import { fontBytes } from './fonts';
 import type { Box, ImageCache, Painter, RenderContext } from './render';
-import { PT_TO_MM, designFonts, drawPhotoSymbol, drawSide, fitImage, qrGeometry, qrModules } from './render';
+import { PT_TO_MM, designFonts, drawSide, fitImage, qrGeometry, qrModules } from './render';
 
 /**
  * Print-ready PDFs of a lanyard design, built in the browser.
@@ -151,14 +151,6 @@ class PdfPainter implements Painter {
         c = end;
       }
     });
-  }
-
-  photoSymbol(kind: 'red_dot' | 'camera_icon', box: Box) {
-    drawPhotoSymbol(this, kind, box);
-  }
-
-  line(x1: number, y1: number, x2: number, y2: number, width: number, colour: string) {
-    this.page.drawLine({ start: { x: this.X(x1), y: this.Y(y1) }, end: { x: this.X(x2), y: this.Y(y2) }, thickness: width * MM, color: this.col(colour), lineCap: this.lib.LineCapStyle.Round });
   }
 }
 

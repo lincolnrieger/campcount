@@ -41,9 +41,7 @@ async function dutyRow(c: AppContext, eventId: string, dutyId: string) {
 async function checkPeople(c: AppContext, eventId: string, ids: string[]) {
   if (ids.length === 0) return;
   const unique = [...new Set(ids)];
-  const { results } = await c.env.DB.prepare(
-    `SELECT id FROM registrations WHERE event_id = ? AND status = 'active' AND id IN (SELECT value FROM json_each(?))`,
-  )
+  const { results } = await c.env.DB.prepare(`SELECT id FROM registrations WHERE event_id = ? AND status = 'active' AND id IN (SELECT value FROM json_each(?))`)
     .bind(eventId, JSON.stringify(unique))
     .all<{ id: string }>();
   if (results.length !== unique.length) throw notFound();
@@ -62,7 +60,7 @@ dutyRoutes.get('/duties', async (c) => {
     ).bind(eventId),
     // Who can be rostered: leaders (adults) first, then everyone else.
     c.env.DB.prepare(
-      `SELECT r.id, r.kind, r.level, r.group_name, p.first_name, p.last_name
+      `SELECT r.id, r.kind, p.first_name, p.last_name
          FROM registrations r JOIN people p ON p.id = r.person_id
         WHERE r.event_id = ? AND r.status = 'active'`,
     ).bind(eventId),
@@ -88,11 +86,10 @@ dutyRoutes.get('/duties', async (c) => {
       endsAt: d.ends_at,
       people: byDuty.get(d.id) ?? [],
     })),
-    people: (leaders!.results as (Name & { id: string; kind: string; level: string; group_name: string })[]).map((p) => ({
+    people: (leaders!.results as (Name & { id: string; kind: string })[]).map((p) => ({
       id: p.id,
       name: full(p),
       shortName: displayName(p.first_name, p.last_name),
-      groupName: p.group_name,
       leader: p.kind === 'adult',
     })),
   });
@@ -180,7 +177,14 @@ dutyRoutes.post('/duties/:dutyId/people', async (c) => {
   await checkPeople(c, eventId, [registrationId]);
   await c.env.DB.batch([
     c.env.DB.prepare(`INSERT OR IGNORE INTO duty_assignments (duty_id, registration_id, created_at) VALUES (?, ?, ?)`).bind(dutyId, registrationId, nowIso()),
-    auditStatement(c.env.DB, { actor: { type: 'user', id: user.userId }, action: 'duty.assign', eventId, targetType: 'registration', targetId: registrationId, onlyIfChanged: true }),
+    auditStatement(c.env.DB, {
+      actor: { type: 'user', id: user.userId },
+      action: 'duty.assign',
+      eventId,
+      targetType: 'registration',
+      targetId: registrationId,
+      onlyIfChanged: true,
+    }),
   ]);
   return c.json({ ok: true });
 });
@@ -195,7 +199,14 @@ dutyRoutes.delete('/duties/:dutyId/people/:registrationId', async (c) => {
   await dutyRow(c, eventId, dutyId);
   await c.env.DB.batch([
     c.env.DB.prepare(`DELETE FROM duty_assignments WHERE duty_id = ? AND registration_id = ?`).bind(dutyId, registrationId),
-    auditStatement(c.env.DB, { actor: { type: 'user', id: user.userId }, action: 'duty.unassign', eventId, targetType: 'registration', targetId: registrationId, onlyIfChanged: true }),
+    auditStatement(c.env.DB, {
+      actor: { type: 'user', id: user.userId },
+      action: 'duty.unassign',
+      eventId,
+      targetType: 'registration',
+      targetId: registrationId,
+      onlyIfChanged: true,
+    }),
   ]);
   return c.json({ ok: true });
 });
@@ -215,5 +226,12 @@ export async function dutiesFor(db: D1Database, eventId: string, registrationId:
     )
     .bind(registrationId, registrationId, eventId)
     .all<{ title: string; location: string; notes: string; starts_at: string; ends_at: string | null; others: string | null }>();
-  return results.map((d) => ({ title: d.title, location: d.location, notes: d.notes, startsAt: d.starts_at, endsAt: d.ends_at, with: (d.others ?? '').split(', ').filter(Boolean).sort(compareText).join(', ') }));
+  return results.map((d) => ({
+    title: d.title,
+    location: d.location,
+    notes: d.notes,
+    startsAt: d.starts_at,
+    endsAt: d.ends_at,
+    with: (d.others ?? '').split(', ').filter(Boolean).sort(compareText).join(', '),
+  }));
 }

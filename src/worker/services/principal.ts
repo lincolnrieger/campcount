@@ -57,9 +57,9 @@ const ACTIVITY_LEVEL = new Set<Permission>(['activity.scan', 'activity.view_rost
 function stationPermissions(p: StationPrincipal): Set<Permission> {
   switch (p.contextType) {
     case 'activity':
-      return new Set(['event.view', 'activity.scan', 'photo.view_status']);
+      return new Set(['event.view', 'activity.scan']);
     case 'meal':
-      return new Set(['event.view', 'meal.scan', 'dietary.view_alert']);
+      return new Set(['event.view', 'meal.scan']);
     case 'site':
       return new Set(['event.view', 'site.scan']);
   }
@@ -85,11 +85,7 @@ export function can(principal: Principal, permission: Permission, scope: Scope =
       continue;
     }
     if (!scope.eventId) continue;
-    if (
-      grant.eventId === null &&
-      grant.permissions.has('platform.events.oversee') &&
-      OVERSIGHT.has(permission)
-    ) {
+    if (grant.eventId === null && grant.permissions.has('platform.events.oversee') && OVERSIGHT.has(permission)) {
       return true;
     }
     if (grant.eventId !== scope.eventId || !grant.permissions.has(permission)) continue;
@@ -105,11 +101,7 @@ export function can(principal: Principal, permission: Permission, scope: Scope =
  * For an activity-level permission, which activities in the event the
  * principal holds it for: 'all', or a specific set.
  */
-export function activityAccess(
-  principal: Principal,
-  permission: 'activity.scan' | 'activity.view_roster' | 'activity.bookings',
-  eventId: string,
-): 'all' | Set<string> {
+export function activityAccess(principal: Principal, permission: 'activity.scan' | 'activity.view_roster' | 'activity.bookings', eventId: string): 'all' | Set<string> {
   if (principal.kind === 'station') {
     if (principal.eventId !== eventId || principal.contextType !== 'activity') return new Set();
     if (!stationPermissions(principal).has(permission)) return new Set();

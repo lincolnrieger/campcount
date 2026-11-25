@@ -8,7 +8,6 @@ import {
   Badge,
   Banner,
   Button,
-  ButtonLink,
   EmptyState,
   Field,
   FilterTabs,
@@ -42,7 +41,6 @@ interface Item {
 interface Reconciliation {
   items: Item[];
   devices: { deviceId: string; lastUpload: string; scans: number }[];
-  pendingDietary: number;
   timezone: string;
 }
 
@@ -52,10 +50,7 @@ const DESCRIPTION: Record<string, string> = {
   'activity-summary': 'Each activity: bookings, attendance, sign-outs',
   'meal-counts': 'Each meal: number served',
   site: 'Each person: arrived and left',
-  catering: 'Totals per dietary need, for the kitchen',
-  'dietary-list': 'Each person and their dietary needs',
 };
-const SENSITIVE = new Set(['dietary-list', 'catering']);
 
 type Tab = 'checkup' | 'downloads' | 'quest';
 type Kind = 'all' | 'present' | 'check';
@@ -63,7 +58,19 @@ type Kind = 'all' | 'present' | 'check';
 const fail = (err: unknown) => (err instanceof ApiFailure ? err.message : 'No connection. Check your signal and try again.');
 
 /** Ask for the reason a correction is made (kept in the record). */
-function ReasonForm({ label, defaultReason, submitLabel, onSubmit, onCancel }: { label: string; defaultReason: string; submitLabel: string; onSubmit: (reason: string) => Promise<void>; onCancel: () => void }) {
+function ReasonForm({
+  label,
+  defaultReason,
+  submitLabel,
+  onSubmit,
+  onCancel,
+}: {
+  label: string;
+  defaultReason: string;
+  submitLabel: string;
+  onSubmit: (reason: string) => Promise<void>;
+  onCancel: () => void;
+}) {
   const [reason, setReason] = useState(defaultReason);
   const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
@@ -98,7 +105,7 @@ function ReasonForm({ label, defaultReason, submitLabel, onSubmit, onCancel }: {
 
 /** Reports: the check-up before closing, downloads, and closing the event. */
 export function Reports() {
-  const { event, can, base, reload: reloadEvent } = useEvent();
+  const { event, can, reload: reloadEvent } = useEvent();
   const toast = useToast();
   const confirm = useConfirm();
   const rec = useApi<Reconciliation>(`/events/${event.id}/reconciliation`);
@@ -118,9 +125,7 @@ export function Reports() {
     const ok = await confirm({
       title: closing ? `Close ${event.name}?` : `Reopen ${event.name}?`,
       body: closing ? (
-        <p>
-          {items.length > 0 ? `${plural(items.length, 'record')} still to sort out. ` : ''}Scanning stops and settings are locked. You can reopen it for late corrections.
-        </p>
+        <p>{items.length > 0 ? `${plural(items.length, 'record')} still to sort out. ` : ''}Scanning stops and settings are locked. You can reopen it for late corrections.</p>
       ) : (
         <p>Staff can scan again and settings can be changed.</p>
       ),
@@ -177,7 +182,7 @@ export function Reports() {
   const data = rec.data!;
   const time = (iso: string | null) => (iso ? new Date(iso).toLocaleString('en-AU', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: data.timezone }) : '');
   const stale = data.devices.filter((d) => loadedAt - Date.parse(d.lastUpload) > 60 * 60_000);
-  const allClear = items.length === 0 && data.pendingDietary === 0 && stale.length === 0;
+  const allClear = items.length === 0 && stale.length === 0;
   const presentCount = items.filter((i) => i.kind === 'still_present').length;
   const checkCount = items.length - presentCount;
   const shownItems = items
@@ -212,23 +217,11 @@ export function Reports() {
               ]}
             />
 
-            {(allClear || data.pendingDietary > 0) && (
+            {allClear && (
               <div className="banners">
-                {allClear && <Banner tone="success">All clear <span className="meta">· no one signed in, no scans to check, every phone has uploaded</span></Banner>}
-                {data.pendingDietary > 0 && (
-                  <Banner
-                    tone="warning"
-                    action={
-                      can('roster.edit') ? (
-                        <ButtonLink to={`${base}/people/import`} small>
-                          Review
-                        </ButtonLink>
-                      ) : undefined
-                    }
-                  >
-                    {plural(data.pendingDietary, 'person has', 'people have')} dietary notes to review <span className="meta">· import the roster again</span>
-                  </Banner>
-                )}
+                <Banner tone="success">
+                  All clear <span className="meta">· no one signed in, no scans to check, every phone has uploaded</span>
+                </Banner>
               </div>
             )}
 
@@ -380,11 +373,6 @@ export function Reports() {
                     <span className="download-text">
                       <span className="row-title">{e.label}</span>
                       {DESCRIPTION[e.key] && <span className="row-meta">{DESCRIPTION[e.key]}</span>}
-                      {SENSITIVE.has(e.key) && (
-                        <span>
-                          <Badge tone="warning">Contains dietary information</Badge>
-                        </span>
-                      )}
                     </span>
                     <a className="btn btn-secondary btn-small" href={`/api/events/${event.id}/exports/${e.key}.csv`} download>
                       <Icon name="download" />
@@ -396,7 +384,6 @@ export function Reports() {
             )}
           </section>
         )}
-
       </div>
 
       <Sheet open={ask !== null} title={ask?.title ?? ''} onClose={() => setAsk(null)}>
@@ -405,4 +392,3 @@ export function Reports() {
     </>
   );
 }
-

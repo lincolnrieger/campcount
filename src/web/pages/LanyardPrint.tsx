@@ -10,7 +10,26 @@ import { pageCount, sheetGrid } from '../lanyards/printPdf';
 import type { RenderContext } from '../lanyards/render';
 import { CanvasPainter, ImageCache, designFonts, drawSide } from '../lanyards/render';
 import { fetchDesign } from '../lanyards/useDesign';
-import { Banner, Button, ButtonLink, EmptyState, FilterChips, Icon, InfoTip, LoadError, Loading, Notice, PageHeader, Progress, SearchField, Segmented, Toggle, Toolbar, useRemembered, useToast } from '../ui';
+import {
+  Banner,
+  Button,
+  ButtonLink,
+  EmptyState,
+  FilterChips,
+  Icon,
+  InfoTip,
+  LoadError,
+  Loading,
+  Notice,
+  PageHeader,
+  Progress,
+  SearchField,
+  Segmented,
+  Toggle,
+  Toolbar,
+  useRemembered,
+  useToast,
+} from '../ui';
 import { useEvent } from './EventLayout';
 import { CardThumb } from './LanyardDesigner';
 
@@ -48,10 +67,14 @@ export function LanyardTabs({ base, current, end }: { base: string; current: 'de
   );
 }
 
-const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const slug = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
 
 type Status = 'all' | 'unprinted' | 'printed';
-type Sort = 'group' | 'newest' | 'oldest';
+type Sort = 'name' | 'newest' | 'oldest';
 
 const SIDES_HELP: Record<PrintLayout, Record<PrintSides, string>> = {
   sheet: {
@@ -80,16 +103,14 @@ export function LanyardPrint() {
   const [sides, setSides] = useRemembered<PrintSides>(`${key}:sides`, 'both');
   const [cutLines, setCutLines] = useRemembered(`${key}:cut`, true);
   const [query, setQuery] = useState('');
-  const [group, setGroup] = useRemembered(`${key}:group`, '');
-  const [level, setLevel] = useRemembered(`${key}:level`, '');
-  const [onlyNoPhotos, setOnlyNoPhotos] = useRemembered(`${key}:nophoto`, false);
+  const [level, setLevel] = useRemembered(`${key}:role`, '');
   const [status, setStatus] = useRemembered<Status>(`${key}:status`, 'all');
-  const [sort, setSort] = useRemembered<Sort>(`${key}:sort`, 'group');
+  const [sort, setSort] = useRemembered<Sort>(`${key}:order`, 'name');
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [progress, setProgress] = useState<number | null>(null);
   const [redraw, setRedraw] = useState(0);
   const images = useMemo(() => new ImageCache(event.id), [event.id]);
-  const ctx: RenderContext = useMemo(() => ({ campName: event.name, marker: event.lanyard }), [event.name, event.lanyard]);
+  const ctx: RenderContext = useMemo(() => ({ campName: event.name }), [event.name]);
 
   const load = useCallback(async () => {
     try {
@@ -114,30 +135,28 @@ export function LanyardPrint() {
   }, [load]);
 
   const all = useMemo(() => cards ?? [], [cards]);
-  const levelWord = (c: Card) => c.style?.word || c.level;
-  const groups = useMemo(() => [...new Set(all.map((c) => c.groupName))].filter(Boolean).sort(), [all]);
+  const levelWord = (c: Card) => c.style?.word ?? '';
   const levels = useMemo(() => [...new Set(all.map(levelWord))].filter(Boolean).sort(), [all]);
   const countBy = (pick: (c: Card) => string) => all.reduce<Record<string, number>>((m, c) => ((m[pick(c)] = (m[pick(c)] ?? 0) + 1), m), {});
-  const groupCounts = useMemo(() => countBy((c) => c.groupName), [all]); // eslint-disable-line react-hooks/exhaustive-deps
   const levelCounts = useMemo(() => countBy(levelWord), [all]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Filters that no longer match anything (a group renamed, say) don't hide everyone.
-  const activeGroup = groups.includes(group) ? group : '';
+  // A filter that no longer matches anything doesn't hide everyone.
   const activeLevel = levels.includes(level) ? level : '';
 
   const shown = all
     .filter(
       (c) =>
-        (!activeGroup || c.groupName === activeGroup) &&
         (!activeLevel || levelWord(c) === activeLevel) &&
-        (!onlyNoPhotos || c.noPhotos) &&
         (status === 'all' || (status === 'unprinted' ? !c.printedAt : !!c.printedAt)) &&
         (!query || `${c.name} ${c.shortCode}`.toLowerCase().includes(query.toLowerCase())),
     )
-    .sort((a, b) => (sort === 'group' ? 0 : (sort === 'newest' ? b.issuedAt.localeCompare(a.issuedAt) : a.issuedAt.localeCompare(b.issuedAt)) || a.name.localeCompare(b.name)));
+    .sort((a, b) =>
+      sort !== 'newest' && sort !== 'oldest'
+        ? a.name.localeCompare(b.name)
+        : (sort === 'newest' ? b.issuedAt.localeCompare(a.issuedAt) : a.issuedAt.localeCompare(b.issuedAt)) || a.name.localeCompare(b.name),
+    );
   const unprintedCount = all.filter((c) => !c.printedAt).length;
   const selected = shown.filter((c) => !excluded.has(c.registrationId));
-  const noPhotoCount = all.filter((c) => c.noPhotos).length;
-  const filtered = !!(activeGroup || activeLevel || onlyNoPhotos || status !== 'all' || query);
+  const filtered = !!(activeLevel || status !== 'all' || query);
 
   async function issueMissing() {
     try {
@@ -198,7 +217,8 @@ export function LanyardPrint() {
         summary={cards && cards.length > 0 ? `${plural(cards.length, 'lanyard')} · ${unprintedCount} not printed` : undefined}
         help={
           <>
-            Choose who and how, then download a PDF. Print it at 100% (actual size). Downloading marks those lanyards as printed. A lanyard is enough to be scanned as that person, so keep spare ones secure.
+            Choose who and how, then download a PDF. Print it at 100% (actual size). Downloading marks those lanyards as printed. A lanyard is enough to be scanned as that person,
+            so keep spare ones secure.
           </>
         }
       />
@@ -244,9 +264,7 @@ export function LanyardPrint() {
   const chooseNone = () => setExcluded(new Set(shown.map((c) => c.registrationId)));
   const clearFilters = () => {
     setQuery('');
-    setGroup('');
     setLevel('');
-    setOnlyNoPhotos(false);
     setStatus('all');
   };
   const busy = progress !== null;
@@ -307,19 +325,9 @@ export function LanyardPrint() {
           <section className="ly-who" aria-label="Who to print">
             <Toolbar label="Find people">
               <SearchField id="ly-q" label="Search name or code" placeholder="Name or code" value={query} onChange={setQuery} slash />
-              {groups.length > 1 && (
-                <select className="select" aria-label="Group" value={activeGroup} onChange={(e) => setGroup(e.target.value)}>
-                  <option value="">All groups</option>
-                  {groups.map((g) => (
-                    <option key={g} value={g}>
-                      {g} ({groupCounts[g] ?? 0})
-                    </option>
-                  ))}
-                </select>
-              )}
               {levels.length > 1 && (
-                <select className="select" aria-label="Level" value={activeLevel} onChange={(e) => setLevel(e.target.value)}>
-                  <option value="">All levels</option>
+                <select className="select" aria-label="Role" value={activeLevel} onChange={(e) => setLevel(e.target.value)}>
+                  <option value="">Everyone</option>
                   {levels.map((s) => (
                     <option key={s} value={s}>
                       {s} ({levelCounts[s] ?? 0})
@@ -339,15 +347,6 @@ export function LanyardPrint() {
                   { value: 'printed', label: 'Printed', count: all.length - unprintedCount },
                 ]}
               />
-              {noPhotoCount > 0 && (
-                <FilterChips<'nophoto'>
-                  multi
-                  label="Photo consent"
-                  value={onlyNoPhotos ? ['nophoto'] : []}
-                  onChange={(v) => setOnlyNoPhotos(v.length > 0)}
-                  options={[{ value: 'nophoto', label: 'No photo consent', count: noPhotoCount }]}
-                />
-              )}
               {filtered && (
                 <button type="button" className="link-button ly-clear" onClick={clearFilters}>
                   Clear filters
@@ -373,7 +372,7 @@ export function LanyardPrint() {
                 </label>
                 <div className="ly-list-head-actions">
                   <select className="select select-small ly-sort" aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
-                    <option value="group">By group and name</option>
+                    <option value="name">By name</option>
                     <option value="newest">Newest issued first</option>
                     <option value="oldest">Oldest issued first</option>
                   </select>
@@ -399,12 +398,9 @@ export function LanyardPrint() {
                       <label className="ly-person">
                         <input type="checkbox" checked={!excluded.has(c.registrationId)} onChange={() => toggle(c.registrationId)} />
                         <span className="ly-person-main">
-                          <span className="ly-person-name">
-                            {c.name}
-                            {c.noPhotos && <Icon name="noPhoto" size={16} label="No photo consent" />}
-                          </span>
+                          <span className="ly-person-name">{c.name}</span>
                           <span className="ly-person-meta">
-                            {[c.groupName, levelWord(c)].filter(Boolean).join(' · ')} · Issued {stamp(c.issuedAt)}
+                            {[levelWord(c)].filter(Boolean).join(' · ')} · Issued {stamp(c.issuedAt)}
                           </span>
                         </span>
                         {c.printedAt ? (
@@ -468,19 +464,33 @@ export function LanyardPrint() {
             <div className="ly-panel ly-preview">
               <div className="ly-preview-head">
                 <h2 className="ly-label">Preview</h2>
-                <span className="meta">
-                  {plural(pages, 'page')} · print at 100%
-                </span>
+                <span className="meta">{plural(pages, 'page')} · print at 100%</span>
               </div>
               {selected.length === 0 ? (
                 <p className="meta">Choose who to print.</p>
               ) : layout === 'sheet' ? (
-                <SheetPreview design={design} people={selected.slice(0, grid.perPage)} side={sides === 'back' ? 'back' : 'front'} ctx={ctx} images={images} redraw={redraw} cutLines={cutLines} />
+                <SheetPreview
+                  design={design}
+                  people={selected.slice(0, grid.perPage)}
+                  side={sides === 'back' ? 'back' : 'front'}
+                  ctx={ctx}
+                  images={images}
+                  redraw={redraw}
+                  cutLines={cutLines}
+                />
               ) : (
                 <div className="print-cards-preview">
                   {(sides === 'back' ? (['back'] as SideKey[]) : sides === 'front' ? (['front'] as SideKey[]) : (['front', 'back'] as SideKey[])).map((s) => (
                     <figure key={s}>
-                      <CardThumb design={design} side={s} person={selected[0]!} ctx={ctx} images={images} redraw={redraw} width={cardSize(design.format, design.orientation).w > 60 ? 220 : 130} />
+                      <CardThumb
+                        design={design}
+                        side={s}
+                        person={selected[0]!}
+                        ctx={ctx}
+                        images={images}
+                        redraw={redraw}
+                        width={cardSize(design.format, design.orientation).w > 60 ? 220 : 130}
+                      />
                       <figcaption className="meta">{s === 'front' ? 'Front' : 'Back'}</figcaption>
                     </figure>
                   ))}
@@ -525,7 +535,23 @@ export function LanyardPrint() {
 }
 
 /** The first A4 page, drawn with the same renderer as the PDF. */
-function SheetPreview({ design, people, side, ctx, images, redraw, cutLines }: { design: LanyardDesign; people: CardPerson[]; side: SideKey; ctx: RenderContext; images: ImageCache; redraw: number; cutLines: boolean }) {
+function SheetPreview({
+  design,
+  people,
+  side,
+  ctx,
+  images,
+  redraw,
+  cutLines,
+}: {
+  design: LanyardDesign;
+  people: CardPerson[];
+  side: SideKey;
+  ctx: RenderContext;
+  images: ImageCache;
+  redraw: number;
+  cutLines: boolean;
+}) {
   const ref = useRef<HTMLCanvasElement>(null);
   const width = 420;
   useEffect(() => {

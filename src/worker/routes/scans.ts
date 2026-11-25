@@ -1,5 +1,4 @@
 import { Hono } from 'hono';
-import { seal } from '../lib/vault';
 import { sortByName } from '../lib/sort';
 import { setCookie } from 'hono/cookie';
 import { z } from 'zod';
@@ -19,7 +18,7 @@ import { forgetDashboard } from '../services/reports';
 import type { ScanContext } from '../services/contexts';
 import { canScan, loadContext, loadTimeline } from '../services/contexts';
 import type { Principal } from '../services/principal';
-import { activityAccess, can } from '../services/principal';
+import { can } from '../services/principal';
 import { SESSION_COOKIE, createSession } from '../services/sessions';
 import { getEventRow } from './events';
 import { displayName } from '../../shared/names';
@@ -36,14 +35,6 @@ async function authorisedContext(c: AppContext, eventId: string, type: ContextTy
   if (!canScan(principal, eventId, type, id)) throw forbidden();
   const ctx = await loadContext(c.env.DB, eventId, type, id);
   return { principal, ctx };
-}
-
-function dietaryAlert(entries: { category: string; item: string; severity: string }[]): string | null {
-  if (entries.length === 0) return null;
-  const sorted = [...entries].sort((a, b) => Number(b.category === 'allergy') - Number(a.category === 'allergy'));
-  return sorted
-    .map((e) => (e.category === 'allergy' ? `Allergy: ${e.item}${e.severity === 'anaphylactic' ? ' (anaphylactic)' : ''}` : e.item))
-    .join('; ');
 }
 
 export function codeHash(eventId: string, code: string): Promise<string> {
@@ -65,14 +56,11 @@ async function snapshot(c: AppContext) {
   const event = (await getEventRow(c.env.DB, eventId))!;
   if (event.status !== 'open') throw conflict('This event is not open for scanning.');
 
-  const showPhoto = event.feature_photo === 1 && can(principal, 'photo.view_status', { eventId });
-  const showDietary = ctx.type === 'meal' && event.feature_dietary === 1 && can(principal, 'dietary.view_alert', { eventId });
   const showNumbers = can(principal, 'roster.view', { eventId });
 
-  const [people, credentials, dietary, bookings, timeline] = await Promise.all([
+  const [people, credentials, bookings, timeline] = await Promise.all([
     c.env.DB.prepare(
-      `SELECT r.id, p.participant_id, p.first_name, p.last_name, r.kind, r.level, r.group_name, r.photo_consent, r.status,
-              r.car_rego_asked_at
+      `SELECT r.id, p.participant_id, p.first_name, p.last_name, r.kind, r.status
          FROM registrations r JOIN people p ON p.id = r.person_id WHERE r.event_id = ?`,
     )
       .bind(eventId)
@@ -80,19 +68,12 @@ async function snapshot(c: AppContext) {
     c.env.DB.prepare(`SELECT registration_id, token_hash, short_code, status FROM credentials WHERE event_id = ?`)
       .bind(eventId)
       .all<{ registration_id: string; token_hash: string; short_code: string; status: string }>(),
-    showDietary
-      ? c.env.DB.prepare(`SELECT registration_id, category, item, severity FROM dietary_entries WHERE event_id = ?`)
-          .bind(eventId)
-          .all<{ registration_id: string; category: string; item: string; severity: string }>()
-      : Promise.resolve({ results: [] as { registration_id: string; category: string; item: string; severity: string }[] }),
     ctx.type === 'activity'
       ? c.env.DB.prepare(`SELECT registration_id FROM activity_bookings WHERE activity_id = ?`).bind(ctx.id).all<{ registration_id: string }>()
       : Promise.resolve({ results: [] as { registration_id: string }[] }),
     loadTimeline(c.env.DB, eventId, ctx),
   ]);
 
-  const dietaryBy = new Map<string, { category: string; item: string; severity: string }[]>();
-  for (const d of dietary.results) dietaryBy.set(d.registration_id, [...(dietaryBy.get(d.registration_id) ?? []), d]);
   const booked = new Set(bookings.results.map((b) => b.registration_id));
   const { states } = replay(ctx.rules, timeline);
 
@@ -108,15 +89,9 @@ async function snapshot(c: AppContext) {
         // Full name for staff search on the scanner (lanyards only show the initial).
         fullName: `${p.first_name} ${p.last_name}`,
         ...(showNumbers ? { participantId: p.participant_id } : {}),
-        group: p.group_name,
-        level: p.level,
         kind: p.kind,
         withdrawn: p.status === 'withdrawn',
         booked: booked.has(p.id!),
-        // Leaders are asked for their car's rego the first time they're scanned.
-        ...(p.kind === 'adult' && !p.car_rego_asked_at && p.status === 'active' ? { askRego: true } : {}),
-        ...(showPhoto && p.photo_consent !== 'yes' ? { noPhotos: true } : {}),
-        ...(showDietary ? { dietaryAlert: dietaryAlert(dietaryBy.get(p.id!) ?? []) } : {}),
         state: state ? { present: state.present, visits: state.visits, lastAcceptedAt: state.lastAcceptedAt } : null,
       };
     }),
@@ -312,9 +287,7 @@ scanRoutes.post('/scans/:scanId/void', async (c) => {
   const principal = requirePermission(c, 'attendance.correct', { eventId });
   if (!scanId.success) throw notFound();
   const { reason } = await parseBody(c, voidScanSchema);
-  const original = await c.env.DB.prepare(
-    `SELECT id, context_type, context_id, registration_id, direction FROM scans WHERE id = ? AND event_id = ? AND outcome <> 'void'`,
-  )
+  const original = await c.env.DB.prepare(`SELECT id, context_type, context_id, registration_id, direction FROM scans WHERE id = ? AND event_id = ? AND outcome <> 'void'`)
     .bind(scanId.data, eventId)
     .first<{ id: string; context_type: string; context_id: string | null; registration_id: string | null; direction: string }>();
   if (!original) throw notFound();
@@ -452,16 +425,18 @@ pairingRoutes.post('/pair', async (c) => {
   if (!station) throw new ApiError(400, 'invalid_code', 'That pairing code is not valid or has expired. Ask a director for a new one.');
 
   // Single use: clear the code atomically.
-  const claimed = await c.env.DB.prepare(
-    `UPDATE stations SET paired_at = ?, pairing_code_hash = NULL WHERE id = ? AND paired_at IS NULL`,
-  )
-    .bind(now, station.id)
-    .run();
+  const claimed = await c.env.DB.prepare(`UPDATE stations SET paired_at = ?, pairing_code_hash = NULL WHERE id = ? AND paired_at IS NULL`).bind(now, station.id).run();
   if (claimed.meta.changes !== 1) throw new ApiError(400, 'invalid_code', 'That pairing code has already been used.');
 
   const session = await createSession(c.env, { stationId: station.id, expiresAt: station.expires_at });
   setCookie(c, SESSION_COOKIE, session.token, { httpOnly: true, secure: true, sameSite: 'Strict', path: '/', expires: new Date(session.expiresAt) });
-  await auditStatement(c.env.DB, { actor: { type: 'station', id: station.id }, action: 'station.pair', eventId: station.event_id, targetType: 'station', targetId: station.id }).run();
+  await auditStatement(c.env.DB, {
+    actor: { type: 'station', id: station.id },
+    action: 'station.pair',
+    eventId: station.event_id,
+    targetType: 'station',
+    targetId: station.id,
+  }).run();
   return c.json({ ok: true });
 });
 
@@ -473,7 +448,7 @@ scanRoutes.get('/meals/:mealId/served', async (c) => {
   const { ctx } = await authorisedContext(c, eventId, 'meal', mealId.data);
   const { states } = replay(ctx.rules, await loadTimeline(c.env.DB, eventId, ctx));
   const { results } = await c.env.DB.prepare(
-    `SELECT r.id, p.first_name, p.last_name, r.group_name, r.kind
+    `SELECT r.id, p.first_name, p.last_name, r.kind
        FROM registrations r JOIN people p ON p.id = r.person_id
       WHERE r.event_id = ? AND r.status = 'active'`,
   )
@@ -487,46 +462,9 @@ scanRoutes.get('/meals/:mealId/served', async (c) => {
       return {
         id: r.id,
         name: `${r.first_name} ${r.last_name}`,
-        group: r.group_name,
         kind: r.kind,
         servedAt: state?.present ? state.lastAcceptedAt : null,
       };
     }),
   });
-});
-
-/**
- * A leader's car rego, asked at their first scan (or skipped: rego null).
- * Anyone who can scan at this camp can record it; it's then shown on the
- * person's page to people who can see the roster.
- */
-scanRoutes.post('/registrations/:registrationId/rego', async (c) => {
-  const eventId = c.req.param('eventId')!;
-  const principal = c.get('principal');
-  if (!principal) throw forbidden();
-  const scans =
-    can(principal, 'site.scan', { eventId }) ||
-    can(principal, 'meal.scan', { eventId }) ||
-    can(principal, 'roster.edit', { eventId }) ||
-    activityAccess(principal, 'activity.scan', eventId) === 'all' ||
-    (activityAccess(principal, 'activity.scan', eventId) as Set<string>).size > 0;
-  if (!scans) throw forbidden();
-  const id = z.uuid().safeParse(c.req.param('registrationId'));
-  if (!id.success) throw notFound();
-  const { rego } = await parseBody(c, z.strictObject({ rego: z.string().trim().max(20).nullable() }));
-  const now = nowIso();
-  const res = await c.env.DB.prepare(
-    `UPDATE registrations SET car_rego = COALESCE(?, car_rego), car_rego_asked_at = COALESCE(car_rego_asked_at, ?), updated_at = ? WHERE id = ? AND event_id = ? AND kind = 'adult'`,
-  )
-    .bind(rego ? await seal(c.env, rego.toUpperCase()) : null, now, now, id.data, eventId)
-    .run();
-  if (res.meta.changes !== 1) throw notFound();
-  await auditStatement(c.env.DB, {
-    actor: principal.kind === 'user' ? { type: 'user', id: principal.userId } : { type: 'station', id: principal.stationId },
-    action: rego ? 'registration.car_rego' : 'registration.car_rego_skipped',
-    eventId,
-    targetType: 'registration',
-    targetId: id.data,
-  }).run();
-  return c.json({ ok: true });
 });

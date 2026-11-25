@@ -8,7 +8,26 @@ import { useSession } from '../session';
 import type { EventSummary } from '../types';
 import { useApi } from '../useApi';
 import { FEATURE_COPY } from './featureCopy';
-import { Badge, Banner, Button, ButtonLink, Choice, EmptyState, Field, FilterChips, Icon, LoadError, Loading, PageHeader, SearchField, SkeletonHeader, SkeletonRows, Toolbar, formatDateRange, useToast } from '../ui';
+import {
+  Badge,
+  Banner,
+  Button,
+  ButtonLink,
+  Choice,
+  EmptyState,
+  Field,
+  FilterChips,
+  Icon,
+  LoadError,
+  Loading,
+  PageHeader,
+  SearchField,
+  SkeletonHeader,
+  SkeletonRows,
+  Toolbar,
+  formatDateRange,
+  useToast,
+} from '../ui';
 import type { Tone } from '../ui';
 
 const STATUS: Record<EventStatus, { label: string; tone: Tone }> = {
@@ -71,7 +90,6 @@ export function Events() {
     );
   if (!data) return null;
   const all = data.events;
-
 
   const matching = all.filter((e) => matchesSearch(q, e.name, e.location));
   const byDate = (a: EventSummary, b: EventSummary) => a.startsOn.localeCompare(b.startsOn);
@@ -154,8 +172,6 @@ const DEFAULT_FEATURES: EventFeatures = {
   activities: true,
   meals: true,
   site: true,
-  dietary: true,
-  photo: false,
   selfSignup: false,
   sideQuest: false,
 };

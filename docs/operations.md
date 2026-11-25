@@ -13,41 +13,10 @@ to recover the system. Keep a printed copy at camp HQ.
    team** (meal scanning and "Who's eaten") or another **Event manager**. People can sign themselves up at `/sign-up`
    first, or are created automatically when added by email.
 2. **Turn on only the features you need** (Settings › Event).
-3. **Fill the People list** (People › Import), or add someone with **Add person**:
-   - Choose a spreadsheet (.xlsx or .csv). It's read on your device; the file
-     is never uploaded.
-   - You can choose several files at once (or add more on the next step),
-     for example a registration list and a consent export. They're joined on
-     your device: people are matched by participant ID, or by first and last
-     name when a file has no IDs (only when exactly one person has that name).
-     Where two files have the same column, the first file's value is kept.
-     A workbook with a tab per group is read tab by tab.
-   - CampCount matches the columns by name, on your device (nothing is sent). Check each
-     field: First name (required), Last name, Group, Level, Participant ID,
-     Dietaries and Photo consent. Choose "Don't send" for anything you don't
-     need. First and last names can be sent in full or as initials only, and
-     the last name can be left out.
-   - Nothing is sent until you press **Import**, and then only those fields,
-     encrypted. Every other column (addresses, contacts, medical notes…) stays
-     in your file. Nothing from the file is kept on your device.
-   - For each spreadsheet after the first, open "Columns to add from this
-     file" and tick only what it should bring in (for example photo consent
-     and dietaries). Its ID and name columns are still used to match people.
-   - **Dietaries:** tick every column that holds dietary needs (from every
-     file). Columns like "Medical Conditions", "Health info" or "Special
-     requirements" are included when that's where a file keeps dietaries;
-     they're read on your device only, like the rest. The dietary review shows each column separately for every person,
-     and you choose what to record. The notes are never sent or kept, and
-     neither is anything made from them: CampCount only remembers who has
-     been reviewed. People already reviewed are skipped next time; switch on
-     **Review everyone again** on the Check step if dietary needs may have
-     changed.
-   - **Levels in this file:** choose the level each name in the file goes
-     under. Several names can share one level (for example "Early Bird Youth"
-     and "Full Participant Youth" both under Youth), or pick "Another new
-     level…" to make one. CampCount remembers these links for the next import;
-     they're listed (and can be removed) in Settings › Levels. Names that
-     sound like adults (Leaders, Staff, Helpers…) count as adults.
+3. **Fill the People list** (People, **Add person**), one person at a time:
+   first name, last name (or just an initial), participant ID and role
+   (Participant or Leader). Leave the participant ID blank and CampCount
+   makes a `GUEST-` one. Nothing else about a person is kept.
 4. **Add activities and meals.** Give each meal a day and time (Meals tab)
    so scanners can pick it by day. Activities can run all camp, or on a
    day with a start and end time. For an activity that runs several times,
@@ -61,7 +30,7 @@ to recover the system. Keep a printed copy at camp HQ.
      save as you go. Fix anything under "Ready to print?" first.
    - On the Print tab, choose **Sheets to cut out** (A4, any printer) or
      **One card per page** (card printers and print shops), and Both sides,
-     Front only or Back only. Filter by group, or untick cards you don't need.
+     Front only or Back only. Filter by role, or untick cards you don't need.
    - For double-sided sheets, print double-sided and flip on the long edge.
    - Print at 100% (actual size). Keep spare and unused cards secure: a card is
      enough to be scanned as that person.
@@ -125,14 +94,12 @@ to recover the system. Keep a printed copy at camp HQ.
   Event managers get the same page by tapping any activity.
 
 - **Live tab (where is everyone):** totals for on site, left camp and not
-  arrived, then everyone grouped **by where they are** (each activity with
-  its headcount, on site, left camp, not arrived), **by group** or
-  **by level**. Tap a heading to fold it away, tap a total to filter, or
-  search by name or group. It updates every 30 seconds.
+  arrived, then everyone in one list. Tap a total to filter, choose a role,
+  or search by name. It updates every 30 seconds.
 - **People tab:** search anyone (one letter is enough) and tap them to see
   where they are now, every scan in order, their lanyard (Show card,
   then download or replace it) and their details. Event managers can edit
-  details and dietary needs there.
+  details there.
 
 - **Scan tab:** the Scan button in the bottom bar lists the gate, today's
   meals and the activities. Day buttons show other days. "Carry on scanning"
@@ -177,9 +144,8 @@ Side Quest). Don't announce it: kids find it.
   camera, they **collect** that person: a full-screen "Splash!" with how
   many friends they've collected, out of how many at camp, and their place
   on the Side Quest table. Scanning someone twice shows "Bah bahhhh!".
-- Their page then shows the Side Quest: quests to collect every Mini, Junior,
-  Senior, Explorer, Ranger, and all the leaders and event team, and a short
-  table (top three, plus the people either side of them, first names only).
+- Their page then shows the Side Quest: how many of the other campers
+  they've collected, and a short table (top three, plus the people either side of them, first names only).
 - Staff see the full leaderboard, with full names, under Reports, for prizes.
 - The kiosk and typed codes never collect. A parent's phone with siblings:
   tap "This is my card, not a friend's" to switch whose phone it is.
@@ -267,7 +233,7 @@ open their page.
 
 | What | Deleted |
 |---|---|
-| Dietary requirements, photo consent, card data | 90 days after the event closes |
+| Card data | 90 days after the event closes |
 | Named attendance records and roster | 2 years after close (totals kept for annual reports) |
 | Sign-in codes and expired sessions | Daily |
 | Audit log | Kept 7 years |

@@ -29,7 +29,15 @@ export function useEvent(): EventContextValue {
 /** Can this person do anything here other than scan? */
 export function scanOnly(event: EventSummary): boolean {
   const can = (p: Permission) => event.permissions.includes(p);
-  return !can('reports.view') && !can('roster.view') && !can('activity.view_roster') && !can('event.configure') && !can('staff.manage') && !can('stations.manage') && !can('meals.manage');
+  return (
+    !can('reports.view') &&
+    !can('roster.view') &&
+    !can('activity.view_roster') &&
+    !can('event.configure') &&
+    !can('staff.manage') &&
+    !can('stations.manage') &&
+    !can('meals.manage')
+  );
 }
 
 /**
@@ -61,7 +69,6 @@ export function eventSections(event: EventSummary, onSite = false): NavSection[]
 
   const people = pages([
     { to: 'people', label: 'Everyone' },
-    can('roster.import') && { to: 'people/import', label: 'Import' },
     { to: 'people/leader-roster', label: 'Leader roster' },
     (can('credentials.manage') || can('event.configure')) && {
       to: can('credentials.manage') ? 'people/lanyards/print' : 'people/lanyards',
@@ -85,7 +92,6 @@ export function eventSections(event: EventSummary, onSite = false): NavSection[]
   ]);
   const settings = pages([
     can('event.configure') && { to: 'settings/event', label: 'Event details' },
-    can('event.configure') && { to: 'settings/levels', label: 'Levels' },
     can('event.configure') && { to: 'settings/banner', label: 'Page banner' },
     can('staff.manage') && { to: 'settings/staff', label: 'Staff' },
     can('stations.manage') && { to: 'settings/stations', label: 'Scanning stations' },

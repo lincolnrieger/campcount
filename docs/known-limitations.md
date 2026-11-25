@@ -15,8 +15,6 @@ mitigation or a planned fix.
 - **Passkeys.** Sign-in is by password, or by emailed code for first sign-in
   and forgotten passwords.
 - **Microsoft 365 (Entra ID) sign-in.** This needs the organisation's IT approval.
-- **Editing dietary entries outside an import.** For now, change the note
-  in the spreadsheet and re-import.
 
 ## Offline
 
@@ -30,9 +28,8 @@ mitigation or a planned fix.
 - If a phone is lost or broken before uploading, its waiting scans are lost.
   The paper roll sheet covers this.
 - The offline list on a phone is not encrypted beyond the phone's own
-  device encryption. It holds display names, participant IDs, groups,
-  photo markers and, on meal phones only, dietary alerts. It is wiped on
-  sign-out. Someone holding an unlocked, signed-in phone can see it.
+  device encryption. It holds display names, participant IDs and roles.
+  It is wiped on sign-out. Someone holding an unlocked, signed-in phone can see it.
 
 ## Trust and accuracy
 
@@ -55,8 +52,7 @@ mitigation or a planned fix.
 
 - **Shared people records:** someone who goes to several camps has one
   record (by participant ID). Their name can only be changed by someone
-  who can edit every camp they're on. Otherwise, correct it in the spreadsheet and
-  import again.
+  who can edit every camp they're on.
 - **Printed codes on scanner phones:** a scanner's offline list holds a fast
   hash of each lanyard's printed code. With a scanner phone and technical
   skill, those codes could be recovered and used at the sign-up screen. A

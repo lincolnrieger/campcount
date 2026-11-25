@@ -29,15 +29,14 @@ import {
   useWide,
 } from '../ui';
 import type { Tone } from '../ui';
+import { ROLE_LABEL } from '../../shared/roles';
 import { useEvent } from './EventLayout';
 import { usePolling } from '../usePolling';
 
 interface Person extends Where {
   id: string;
   fullName: string;
-  groupName: string;
-  level: string;
-  kind: string;
+  kind: 'youth' | 'adult';
 }
 interface WhereData {
   generatedAt: string;
@@ -65,7 +64,7 @@ function placeOf(p: Person, tz: string): { label: string; tone: Tone } {
 const ORDER: Record<string, number> = { never: 0, on: 1, off: 2 };
 const PAGE = 50;
 const FILTER_TITLE: Record<Filter, string> = { all: 'Everyone', on: 'On site', off: 'Left camp', never: 'Not arrived', activity: 'At activities' };
-const levelOf = (p: Person) => (p.kind === 'adult' ? 'Leader' : p.level);
+const levelOf = (p: Person) => ROLE_LABEL[p.kind];
 
 /**
  * An event's home. Open: who's here and who's missing, with one-tap
@@ -245,7 +244,7 @@ function WhereEveryoneIs() {
   const reloadLive = live.reload;
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useRemembered<Filter>(`home:${event.id}:filter`, 'all');
-  const [level, setLevel] = useRemembered<string>(`home:${event.id}:level`, '');
+  const [level, setLevel] = useRemembered<string>(`home:${event.id}:role`, '');
   const [limit, setLimit] = useState(PAGE);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -293,7 +292,7 @@ function WhereEveryoneIs() {
   const shown = people
     .filter((p) => active === 'all' || (active === 'activity' ? p.activities.length > 0 : p.site === active))
     .filter((p) => !level || levelOf(p) === level)
-    .filter((p) => matchesSearch(query, p.fullName, p.groupName))
+    .filter((p) => matchesSearch(query, p.fullName))
     .sort(
       (a, b) =>
         (query ? searchRank(query, a.fullName) - searchRank(query, b.fullName) : 0) ||
@@ -350,10 +349,10 @@ function WhereEveryoneIs() {
           <h2 id="people-heading" className="home-list-title">
             {FILTER_TITLE[active]}
           </h2>
-          <SearchField id="find-person" label="Find a person" placeholder="Name or group" value={query} onChange={(v) => (setQuery(v), setLimit(PAGE))} slash />
+          <SearchField id="find-person" label="Find a person" placeholder="Name" value={query} onChange={(v) => (setQuery(v), setLimit(PAGE))} slash />
           {levels.length > 1 && (
-            <select className="select" aria-label="Level" value={level} onChange={(e) => (setLevel(e.target.value), setLimit(PAGE))}>
-              <option value="">All levels</option>
+            <select className="select" aria-label="Role" value={level} onChange={(e) => (setLevel(e.target.value), setLimit(PAGE))}>
+              <option value="">Everyone</option>
               {levels.map((s) => (
                 <option key={s} value={s}>
                   {s}
@@ -384,15 +383,14 @@ function WhereEveryoneIs() {
         </Toolbar>
 
         {shown.length === 0 ? (
-          <EmptyState title={query ? `No one matches "${query}"` : 'No one here'}>{query ? 'Check the spelling, or search by group.' : undefined}</EmptyState>
+          <EmptyState title={query ? `No one matches "${query}"` : 'No one here'}>{query ? 'Check the spelling.' : undefined}</EmptyState>
         ) : wide ? (
           <div className="table-wrap">
             <table className="table">
               <thead>
                 <tr>
                   <th scope="col">Name</th>
-                  <th scope="col">Level</th>
-                  <th scope="col">Group</th>
+                  <th scope="col">Role</th>
                   <th scope="col">Where</th>
                   {canMark && (
                     <th scope="col" className="cell-action">
@@ -412,7 +410,6 @@ function WhereEveryoneIs() {
                         </Link>
                       </td>
                       <td>{levelOf(p)}</td>
-                      <td>{p.groupName}</td>
                       <td>
                         <Badge tone={place.tone}>{place.label}</Badge>
                       </td>
@@ -435,7 +432,7 @@ function WhereEveryoneIs() {
                         {p.fullName}
                       </Link>
                     </span>
-                    <span className="row-meta">{[levelOf(p), p.groupName].filter(Boolean).join(' · ')}</span>
+                    <span className="row-meta">{levelOf(p)}</span>
                     <span>
                       <Badge tone={place.tone}>{place.label}</Badge>
                     </span>

@@ -3,6 +3,22 @@
 This is the short, ordered list. The detailed runbook is
 [`docs/operations.md`](docs/operations.md).
 
+## Before deploying the name, ID and role only release (migration 0039)
+
+The deploy applies `0039_name_id_and_role_only.sql`. It keeps only each
+person's name, participant ID and role (participant or leader), plus their
+bookings, teams, duties, scans and lanyards. It **deletes for good** every
+person's dietary needs and allergies, group, level, photo consent and car
+registration, and the spreadsheet import history. The camp's level, photo
+marker, dietary and photo settings go too.
+
+1. **Bookmark a restore point** before merging, if any of that data might
+   still be needed: D1 › campcount-production › Time Travel, note the
+   current time (or run `npx wrangler d1 time-travel info campcount-production`).
+   Restoring to it is the only way to get the data back.
+2. **Merge to `main`.**
+3. **Check:** `/api/health` shows `{"ok":true}`, and People lists names,
+   participant IDs and roles.
 
 ## Before deploying the encrypted, minimal-data release (migration 0036)
 

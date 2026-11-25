@@ -4,9 +4,7 @@ import { api, createActivity, createEvent, createUser, grant, json, testEnv } fr
 const newEvent = { name: 'Summer Camp', startsOn: '2026-12-05', endsOn: '2026-12-07', features: { meals: true } };
 
 async function auditActions(eventId: string): Promise<string[]> {
-  const { results } = await testEnv.DB.prepare(`SELECT action FROM audit_log WHERE event_id = ? ORDER BY id`)
-    .bind(eventId)
-    .all<{ action: string }>();
+  const { results } = await testEnv.DB.prepare(`SELECT action FROM audit_log WHERE event_id = ? ORDER BY id`).bind(eventId).all<{ action: string }>();
   return results.map((r) => r.action);
 }
 
@@ -17,7 +15,7 @@ describe('events', () => {
     expect(res.status).toBe(201);
     const { event } = await json(res);
     expect(event.status).toBe('draft');
-    expect(event.features).toMatchObject({ activities: true, meals: true, dietary: false });
+    expect(event.features).toEqual({ activities: true, meals: true, site: false, selfSignup: false, sideQuest: false });
     expect(await auditActions(event.id)).toEqual(['event.create']);
 
     const nobody = await createUser();

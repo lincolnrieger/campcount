@@ -28,7 +28,6 @@ export interface TeamEventRow {
 export interface TeamMember {
   registrationId: string;
   name: string;
-  groupName: string;
   level: string;
   source: 'manual' | 'self_signup';
 }
@@ -64,17 +63,14 @@ const TEAM_EVENT_SELECT = `SELECT t.activity_id, a.name, a.description, a.locati
 /** Team events with their teams and members. `only` limits it to some activities (an activity leader's). */
 export async function loadTeamEvents(db: D1Database, eventId: string, only?: Set<string> | 'all'): Promise<TeamEventDto[]> {
   const [events, teams, members] = await Promise.all([
-    db
-      .prepare(`${TEAM_EVENT_SELECT} WHERE t.event_id = ? ORDER BY a.starts_at IS NULL, a.starts_at, a.name COLLATE NOCASE`)
-      .bind(eventId)
-      .all<TeamEventRow>(),
+    db.prepare(`${TEAM_EVENT_SELECT} WHERE t.event_id = ? ORDER BY a.starts_at IS NULL, a.starts_at, a.name COLLATE NOCASE`).bind(eventId).all<TeamEventRow>(),
     db
       .prepare(`SELECT id, activity_id, name, locked, join_code FROM teams WHERE event_id = ? ORDER BY created_at`)
       .bind(eventId)
       .all<{ id: string; activity_id: string; name: string; locked: number; join_code: string | null }>(),
     db
       .prepare(
-        `SELECT m.team_id, m.registration_id, m.source, p.first_name, p.last_name, r.group_name, r.level, r.kind
+        `SELECT m.team_id, m.registration_id, m.source, p.first_name, p.last_name, r.kind
            FROM team_members m JOIN registrations r ON r.id = m.registration_id JOIN people p ON p.id = r.person_id
           WHERE m.event_id = ? ORDER BY m.joined_at`,
       )
@@ -87,8 +83,7 @@ export async function loadTeamEvents(db: D1Database, eventId: string, only?: Set
     list.push({
       registrationId: m.registration_id!,
       name: displayName(m.first_name!, m.last_name!),
-      groupName: m.group_name!,
-      level: m.kind === 'adult' ? 'Leader' : m.level!,
+      level: m.kind === 'adult' ? 'Leader' : 'Participant',
       source: m.source as TeamMember['source'],
     });
     byTeam.set(m.team_id!, list);

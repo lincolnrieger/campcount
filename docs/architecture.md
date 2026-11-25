@@ -7,8 +7,7 @@ Status: **Draft v0.1, 2026-10-23.**
 ```
 Browser (React SPA + service worker)
   ├─ Admin / Director screens ─────── online only
-  ├─ Scan screens ── IndexedDB queue + context cache ── sync when online
-  └─ Import: CSV parsed + filtered in-browser; only allowlisted fields sent
+  └─ Scan screens ── IndexedDB queue + context cache ── sync when online
         │  HTTPS, session cookie
         ▼
 Cloudflare Worker (single deployment)
@@ -48,10 +47,8 @@ Event-scoped (every row carries `event_id`; every query filters on it):
 - `events` (dates, `Australia/Adelaide` timezone, lifecycle status, feature
   flags)
 - `assignments` (user × role × event, optionally × activity)
-- `registrations` (event × person UNIQUE): kind, group and level (encrypted),
-  photo_consent (yes / no), car_rego (encrypted), status
-- `dietary_entries` (registration, category, item and note encrypted,
-  severity) — **sensitive**
+- `registrations` (event × person UNIQUE): kind (youth = participant,
+  adult = leader), status
 - `credentials` (registration, token_hash UNIQUE, short_code encrypted with
   short_code_key UNIQUE per event, revoked_at)
 - `activities`, `activity_bookings`, `meal_services`
@@ -65,7 +62,6 @@ Event-scoped (every row carries `event_id`; every query filters on it):
   - `actor` (user or station)
   - `outcome`
   - `supersedes_id`, `reason` (for corrections)
-- `import_jobs` (counts and summary only, no row data)
 
 Counts and reports are always computed from `scans`. There are no stored
 counters.
@@ -83,15 +79,14 @@ are decrypted in memory; sorting and searching by name happen in the Worker.
 never make participant data unreadable.
 
 What this protects against: a leaked database export, backup or console
-access shows no names, IDs, groups, levels or dietary details. It doesn't
+access shows no names or participant IDs. It doesn't
 protect against someone who controls the running Worker or holds both the
 database and `DATA_KEY`.
 
 ## 3. Offline scanning design
 
 1. **Load the context.** When a scan screen opens online, it downloads that
-   context's roster: `token_hash → {display name, member no., group,
-   photo flag, [dietary alert for meal devices]}`. The data is stored in
+   context's roster: `token_hash → {display name, participant ID, role}`. The data is stored in
    IndexedDB.
 2. **Scan.** The device hashes the scanned token with WebCrypto, looks it up
    locally, and applies the duplicate rules locally. Feedback is instant
@@ -136,12 +131,12 @@ database and `DATA_KEY`.
 |---|---|
 | Cross-event access / IDOR | Every event-scoped service function takes `eventId` from the authorised assignment, not from the client. Isolation tests. |
 | Over-broad data to volunteers | Scan responses use per-role DTOs. Scanners and Meal team never get export endpoints. |
-| Sensitive data in import | Browser-side allowlist; the server rejects unknown fields (strict Zod). |
+| Unneeded personal data | Only name, participant ID and role are kept; the server rejects unknown fields (strict Zod). |
 | Forged or guessed QR | 128-bit random tokens; only hashes stored; revocation; scans need an authenticated scanner. |
 | Public sign-up abuse | Only open while the Director enables it; Turnstile; rate limits; requires a valid lanyard code. |
 | XSS / CSRF / injection | React escaping, strict CSP, SameSite=Strict + Origin check, parameterised queries only. |
 | Brute force on login / codes | Rate limiting per IP and email; codes expire in 10 min; 5 attempts. |
-| Insider misuse | Audit log of exports, corrections, role changes and imports; dietary named list restricted. |
+| Insider misuse | Audit log of exports, corrections and role changes. |
 | Data loss | D1 Time Travel (30-day point-in-time restore) plus a pre-event and post-event export; restore rehearsed before December. |
 | Secrets | Wrangler secrets per environment; no real data in dev or staging (synthetic seed only). |
 
@@ -150,7 +145,7 @@ database and `DATA_KEY`.
 | Week (from) | Deliverable |
 |---|---|
 | 27 Oct | Foundation: repo, CI, schema and migrations, auth, RBAC, design tokens, staging deploy |
-| 3 Nov | Events, browser import plus dietary review, roster, lanyard printing |
+| 3 Nov | Events, roster (Add person), lanyard printing |
 | 10 Nov | Scan engine, offline outbox, activity scanning |
 | 17 Nov | Meal and site scanning, station pairing, live counts |
 | 24 Nov | Close-out, exports, (self-sign-up if confirmed), security and permission test pass |

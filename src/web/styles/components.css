@@ -1232,11 +1232,6 @@ button.tile:hover {
   color: var(--brand-hover);
 }
 
-/* ---------- Dietary needs editor ---------- */
-.dietary-editor {
-  display: grid;
-  gap: var(--space-3);
-}
 .quick-picks {
   display: flex;
   flex-wrap: wrap;

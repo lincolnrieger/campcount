@@ -4,7 +4,6 @@ import { nowIso } from '../lib/time';
 import { auditStatement } from './audit';
 import { issueStatements } from './credentials';
 import { participantKey, seal } from '../lib/vault';
-import { levelSettingsStatement } from './rosterWrites';
 import { eventDays, todayInZone, weekdayName, zonedIso } from '../../shared/time';
 
 /** Demo events use the default event timezone. */
@@ -18,38 +17,75 @@ const DEMO_TZ = 'Australia/Adelaide';
  */
 
 const FIRST = [
-  'Ava', 'Noah', 'Mia', 'Leo', 'Isla', 'Kai', 'Zoe', 'Eli', 'Ruby', 'Max', 'Ivy', 'Sam', 'Ella', 'Finn', 'Lily', 'Jack', 'Nina',
-  'Theo', 'Aria', 'Oscar', 'Maya', 'Hugo', 'Chloe', 'Arlo', 'Willow', 'Harvey', 'Matilda', 'Archie', 'Evie', 'Ned', 'Poppy',
-  'Ollie', 'Frankie', 'Jasper', 'Indie', 'Remy', 'Sienna', 'Banjo', 'Tilly', 'Beau',
+  'Ava',
+  'Noah',
+  'Mia',
+  'Leo',
+  'Isla',
+  'Kai',
+  'Zoe',
+  'Eli',
+  'Ruby',
+  'Max',
+  'Ivy',
+  'Sam',
+  'Ella',
+  'Finn',
+  'Lily',
+  'Jack',
+  'Nina',
+  'Theo',
+  'Aria',
+  'Oscar',
+  'Maya',
+  'Hugo',
+  'Chloe',
+  'Arlo',
+  'Willow',
+  'Harvey',
+  'Matilda',
+  'Archie',
+  'Evie',
+  'Ned',
+  'Poppy',
+  'Ollie',
+  'Frankie',
+  'Jasper',
+  'Indie',
+  'Remy',
+  'Sienna',
+  'Banjo',
+  'Tilly',
+  'Beau',
 ];
 const LAST = [
-  'Nguyen', 'Smith', 'Patel', 'Brown', 'Wilson', 'Taylor', 'Lee', 'Martin', 'Clarke', 'Walker', 'Chen', 'Kelly', 'Rossi',
-  'Murphy', 'Singh', 'Hall', 'Young', 'King', 'Wright', 'Scott', 'Green', 'Baker', 'Adams', 'Hill', 'Campbell', 'Mitchell',
+  'Nguyen',
+  'Smith',
+  'Patel',
+  'Brown',
+  'Wilson',
+  'Taylor',
+  'Lee',
+  'Martin',
+  'Clarke',
+  'Walker',
+  'Chen',
+  'Kelly',
+  'Rossi',
+  'Murphy',
+  'Singh',
+  'Hall',
+  'Young',
+  'King',
+  'Wright',
+  'Scott',
+  'Green',
+  'Baker',
+  'Adams',
+  'Hill',
+  'Campbell',
+  'Mitchell',
 ];
-const DEMO_LEVELS = [
-  { name: 'Juniors', word: 'Junior', colour: '#B5651D', youth: true },
-  { name: 'Intermediates', word: 'Intermediate', colour: '#2E7D32', youth: true },
-  { name: 'Seniors', word: 'Senior', colour: '#7A1F3D', youth: true },
-  { name: 'Leaders', word: 'Leader', colour: '#262661', youth: false },
-];
-const GROUPS: { name: string; level: string }[] = [
-  { name: 'Wattle Creek Club', level: 'Juniors' },
-  { name: 'Wattle Creek Club', level: 'Intermediates' },
-  { name: 'Red Gum Youth Group', level: 'Intermediates' },
-  { name: 'Red Gum Youth Group', level: 'Seniors' },
-  { name: 'Saltbush School', level: 'Seniors' },
-  { name: 'Saltbush School', level: 'Juniors' },
-];
-const DIETARY: [string, string, string][] = [
-  ['preference', 'Vegetarian', 'standard'],
-  ['preference', 'Vegetarian', 'standard'],
-  ['religious_cultural', 'Halal', 'standard'],
-  ['medical_diet', 'Gluten free (coeliac)', 'standard'],
-  ['intolerance', 'Lactose', 'standard'],
-  ['allergy', 'Peanut', 'anaphylactic'],
-  ['allergy', 'Egg', 'standard'],
-];
-
 const pick = <T>(list: readonly T[]): T => list[randomInt(list.length)]!;
 
 export const DEMO_ROLES = [
@@ -72,20 +108,10 @@ export async function createDemoEvent(env: Env, adminUserId: string, participant
     db
       .prepare(
         `INSERT INTO events (id, slug, name, description, location, starts_on, ends_on, status, feature_activities, feature_meals,
-           feature_site, feature_dietary, feature_photo, feature_self_signup, is_demo, created_by, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 'Demo Activity Centre', ?, ?, 'open', 1, 1, 1, 1, 1, 1, 1, ?, ?, ?)`,
+           feature_site, feature_self_signup, is_demo, created_by, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'Demo Activity Centre', ?, ?, 'open', 1, 1, 1, 1, 1, ?, ?, ?)`,
       )
-      .bind(
-        eventId,
-        `demo-${tag.toLowerCase()}-${today}`,
-        `Demo camp ${tag}`,
-        'Demo event with invented people, for testing. Safe to delete.',
-        today,
-        end,
-        adminUserId,
-        now,
-        now,
-      ),
+      .bind(eventId, `demo-${tag.toLowerCase()}-${today}`, `Demo camp ${tag}`, 'Demo event with invented people, for testing. Safe to delete.', today, end, adminUserId, now, now),
   );
 
   // Activities and meals.
@@ -137,19 +163,15 @@ export async function createDemoEvent(env: Env, adminUserId: string, participant
   const mealRows = meals.map(([d, meal, time]) => ({ id: crypto.randomUUID(), name: `${weekdayName(days[d]!)} ${meal}`, startsAt: zonedIso(days[d]!, time, DEMO_TZ) }));
   for (const m of mealRows) {
     statements.push(
-      db
-        .prepare(`INSERT INTO meal_services (id, event_id, name, starts_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`)
-        .bind(m.id, eventId, m.name, m.startsAt, now, now),
+      db.prepare(`INSERT INTO meal_services (id, event_id, name, starts_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`).bind(m.id, eventId, m.name, m.startsAt, now, now),
     );
   }
 
-  // People: youth across groups, plus a leader team.
+  // People: participants, plus a leader team.
   const registrationIds: string[] = [];
   const adults = Math.max(4, Math.round(participants / 8));
-  statements.push(levelSettingsStatement(db, eventId, DEMO_LEVELS));
   for (let i = 0; i < participants + adults; i++) {
     const adult = i >= participants;
-    const group = pick(GROUPS);
     const personId = crypto.randomUUID();
     const registrationId = crypto.randomUUID();
     const member = `DEMO${tag}-${String(i + 1).padStart(3, '0')}`;
@@ -159,32 +181,9 @@ export async function createDemoEvent(env: Env, adminUserId: string, participant
         .prepare(`INSERT INTO people (id, participant_id, participant_key, first_name, last_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
         .bind(personId, await seal(env, member), await participantKey(env, member), await seal(env, pick(FIRST)), await seal(env, pick(LAST)), now, now),
       db
-        .prepare(
-          `INSERT INTO registrations (id, event_id, person_id, kind, level, group_name, photo_consent, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(
-          registrationId,
-          eventId,
-          personId,
-          adult ? 'adult' : 'youth',
-          await seal(env, adult ? 'Leaders' : group.level),
-          await seal(env, group.name),
-          randomInt(10) < 8 ? 'yes' : 'no',
-          now,
-          now,
-        ),
+        .prepare(`INSERT INTO registrations (id, event_id, person_id, kind, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`)
+        .bind(registrationId, eventId, personId, adult ? 'adult' : 'youth', now, now),
     );
-    if (randomInt(100) < 18) {
-      const [category, item, severity] = pick(DIETARY);
-      statements.push(
-        db
-          .prepare(
-            `INSERT INTO dietary_entries (id, event_id, registration_id, category, item, severity, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          )
-          .bind(crypto.randomUUID(), eventId, registrationId, category, await seal(env, item), severity, adminUserId, now),
-      );
-    }
   }
 
   // Demo staff accounts (cannot receive email: the .invalid domain is reserved).
@@ -197,7 +196,15 @@ export async function createDemoEvent(env: Env, adminUserId: string, participant
       db
         .prepare(`INSERT INTO assignments (id, user_id, role_id, event_id, activity_id, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
         // The demo activity leader runs Kayaking.
-        .bind(crypto.randomUUID(), userId, `role_${role.key}`, eventId, role.key === 'activity_leader' ? activities.find((a) => a.name === 'Kayaking')!.id : null, adminUserId, now),
+        .bind(
+          crypto.randomUUID(),
+          userId,
+          `role_${role.key}`,
+          eventId,
+          role.key === 'activity_leader' ? activities.find((a) => a.name === 'Kayaking')!.id : null,
+          adminUserId,
+          now,
+        ),
     );
   }
   // The admin manages their own demo camp, so they can try every screen.
@@ -320,9 +327,7 @@ export async function deleteDemoEvent(env: Env, adminUserId: string, eventId: st
         .bind(...chunk),
     );
   }
-  statements.push(
-    auditStatement(db, { actor: { type: 'user', id: adminUserId }, action: 'demo.delete', eventId, targetType: 'event', targetId: eventId }),
-  );
+  statements.push(auditStatement(db, { actor: { type: 'user', id: adminUserId }, action: 'demo.delete', eventId, targetType: 'event', targetId: eventId }));
   await db.batch(statements);
   return true;
 }
