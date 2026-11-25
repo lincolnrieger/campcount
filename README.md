@@ -16,14 +16,14 @@ meal scanning that keeps working with patchy signal, and close-out reports.
   privilege escalation, append-only audit log
 - Events with per-event features and a draft → open → completed → archived
   lifecycle
-- Spreadsheet import (.xlsx/CSV) read on the device: choose the fields to send (names can be initials), with dietary review; everything else stays on the device
-- Participant names, IDs, groups, levels and dietary details encrypted in the database (AES-256-GCM)
+- People added one at a time with Add person; only first name, last name (or initial), participant ID and role (participant or leader) are kept
+- Participant names and IDs encrypted in the database (AES-256-GCM)
 - QR lanyards with typed backup codes, designed in the app (People › Design
   lanyards): front and back, text in six fonts, per-person details, colours,
   shapes, images and backgrounds, on a standard CR80 card (portrait or
   landscape) or a large 90 × 120 mm lanyard. Print as A4 sheets to cut out or
   as a card-sized PDF for card printers; both sides, fronts only or backs only.
-  How no-photo consent is marked is chosen there too
+  Each card shows the role word (Participant / Leader) in the role's colour
 - Team events (Soccer, Basketball…): people make and join teams from their
   lanyard link or the sign-up kiosk, within team size limits
 - Scanning for activities, meals and on-site, working offline, on personal
@@ -70,8 +70,8 @@ npm run build
 - Every API route must call `requirePermission` before touching data.
   Permissions are listed in `src/shared/permissions.ts`; the approved matrix
   is enforced by `test/roles.test.ts`.
-- Audit `detail` must hold identifiers and counts only, never names, dietary
-  information or contact details.
+- Audit `detail` must hold identifiers and counts only, never names or
+  contact details.
 - Don't log request bodies.
 
 ## Deploying
@@ -88,8 +88,7 @@ Settings:
 - **Variables and Secrets:** add two **secrets**, each 64 random hex
   characters, and keep a copy of both somewhere safe (a password manager):
   - `AUTH_SECRET` signs sign-in codes and encrypts card tokens.
-  - `DATA_KEY` encrypts participant data (names, participant IDs, groups,
-    levels, dietary details). **If it's lost, that data can't be read
+  - `DATA_KEY` encrypts participant data (names and participant IDs). **If it's lost, that data can't be read
     again.** Never change it casually.
 - **Email Service:** enable sending for the domain the `EMAIL_FROM` address
   uses, so sign-in codes can be emailed.
