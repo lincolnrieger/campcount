@@ -36,13 +36,11 @@ import { usePolling } from '../usePolling';
 interface RosterPerson {
   id: string;
   name: string;
-  groupName: string;
   level: string;
   booked: boolean;
   present: boolean;
   visits: number;
   lastAt: string | null;
-  noPhotos?: boolean;
 }
 
 interface Attendance {
@@ -65,7 +63,7 @@ interface Attendance {
   canBook: boolean;
   canCheckIn: boolean;
   people: RosterPerson[];
-  everyone: { id: string; name: string; groupName: string }[];
+  everyone: { id: string; name: string }[];
 }
 
 type Show = 'tocome' | 'here' | 'all';
@@ -194,11 +192,11 @@ export function ActivityRoster() {
   const toCome = booked.filter((p) => p.visits === 0);
   const shown = data.people
     .filter((p) => (show === 'tocome' ? p.booked && p.visits === 0 : show === 'here' ? (a.trackSignOut ? p.present : p.visits > 0) : p.booked || p.visits > 0))
-    .filter((p) => matchesSearch(q, p.name, p.groupName))
+    .filter((p) => matchesSearch(q, p.name))
     .sort((x, y) => Number(x.visits > 0) - Number(y.visits > 0) || x.name.localeCompare(y.name));
   const walkIns = find.trim()
     ? data.everyone
-        .filter((p) => !involved.has(p.id) && matchesSearch(find, p.name, p.groupName))
+        .filter((p) => !involved.has(p.id) && matchesSearch(find, p.name))
         .sort((x, y) => searchRank(find, x.name) - searchRank(find, y.name))
         .slice(0, 12)
     : [];
@@ -209,39 +207,39 @@ export function ActivityRoster() {
   const menu: MenuItem[] = teams
     ? [{ label: 'Teams', to: teams }, ...(manage ? [{ label: 'Edit settings', to: teams }] : []), { label: 'Print this list', onSelect: () => window.print() }]
     : manage
-    ? [
-        { label: 'Edit activity', to: `${list}/${a.id}/edit` },
-        { label: 'Add another session', to: `${list}/new?from=${a.id}` },
-        { label: 'Print this list', onSelect: () => window.print() },
-        a.status === 'active'
-          ? {
-              label: 'Cancel activity',
-              onSelect: async () => {
-                const ok = await confirm({
-                  title: `Cancel ${a.name}?`,
-                  body: <p>It stops showing on scanners and the sign-up kiosk. Scans and bookings are kept, and you can restore it.</p>,
-                  confirm: 'Cancel activity',
-                });
-                if (ok) await changeStatus('cancelled');
-              },
-            }
-          : { label: 'Restore activity', onSelect: () => void changeStatus('active') },
-        {
-          label: 'Delete activity…',
-          danger: true,
-          onSelect: async () => {
-            try {
-              if (await deleteContext(confirm, event.id, 'activities', a.id, a.name)) {
-                toast(`Deleted ${a.name}`);
-                navigate(list, { replace: true });
+      ? [
+          { label: 'Edit activity', to: `${list}/${a.id}/edit` },
+          { label: 'Add another session', to: `${list}/new?from=${a.id}` },
+          { label: 'Print this list', onSelect: () => window.print() },
+          a.status === 'active'
+            ? {
+                label: 'Cancel activity',
+                onSelect: async () => {
+                  const ok = await confirm({
+                    title: `Cancel ${a.name}?`,
+                    body: <p>It stops showing on scanners and the sign-up kiosk. Scans and bookings are kept, and you can restore it.</p>,
+                    confirm: 'Cancel activity',
+                  });
+                  if (ok) await changeStatus('cancelled');
+                },
               }
-            } catch (err) {
-              fail(err);
-            }
+            : { label: 'Restore activity', onSelect: () => void changeStatus('active') },
+          {
+            label: 'Delete activity…',
+            danger: true,
+            onSelect: async () => {
+              try {
+                if (await deleteContext(confirm, event.id, 'activities', a.id, a.name)) {
+                  toast(`Deleted ${a.name}`);
+                  navigate(list, { replace: true });
+                }
+              } catch (err) {
+                fail(err);
+              }
+            },
           },
-        },
-      ]
-    : [{ label: 'Print this list', onSelect: () => window.print() }];
+        ]
+      : [{ label: 'Print this list', onSelect: () => window.print() }];
 
   const status = (p: RosterPerson) =>
     p.present ? (
@@ -328,7 +326,12 @@ export function ActivityRoster() {
             { label: a.trackSignOut ? 'Here now' : 'Checked in', value: hereCount, tone: 'success', pressed: show === 'here', onPress: () => setShow('here') },
             { label: 'Everyone', value: involved.size, pressed: show === 'all', onPress: () => setShow('all'), hint: 'Booked, or checked in at some point' },
             a.capacity !== null
-              ? { label: placesLeft === 0 ? 'Booked, full' : `Booked, ${plural(placesLeft!, 'place')} left`, value: `${booked.length}/${a.capacity}`, tone: placesLeft === 0 ? 'warning' : undefined, hint: capacityHelp }
+              ? {
+                  label: placesLeft === 0 ? 'Booked, full' : `Booked, ${plural(placesLeft!, 'place')} left`,
+                  value: `${booked.length}/${a.capacity}`,
+                  tone: placesLeft === 0 ? 'warning' : undefined,
+                  hint: capacityHelp,
+                }
               : { label: 'Booked', value: booked.length },
           ]}
         />
@@ -359,11 +362,8 @@ export function ActivityRoster() {
                 <li key={p.id} className="row pg-person">
                   <span className="row-main">
                     <span className="row-title">{p.name}</span>
-                    <span className="row-meta">{[p.level, p.groupName].filter(Boolean).join(' · ')}</span>
-                    <span className="activity-badges">
-                      {status(p)}
-                      {p.noPhotos && <Badge tone="error">No photos</Badge>}
-                    </span>
+                    <span className="row-meta">{p.level}</span>
+                    <span className="activity-badges">{status(p)}</span>
                   </span>
                   <span className="row-side">
                     {data.canCheckIn && !done && (
@@ -376,7 +376,9 @@ export function ActivityRoster() {
                       <Menu
                         label={`More for ${p.name}`}
                         items={[
-                          data.canCheckIn && p.visits > 0 && event.status === 'open' && { label: p.booked ? 'Move back to To come' : 'Undo check-in', onSelect: () => void moveBack(p) },
+                          data.canCheckIn &&
+                            p.visits > 0 &&
+                            event.status === 'open' && { label: p.booked ? 'Move back to To come' : 'Undo check-in', onSelect: () => void moveBack(p) },
                           canMove && p.booked && event.status !== 'completed' && { label: 'Move to another activity…', onSelect: () => setMoving(p) },
                           data.canBook && p.booked && !p.present && { label: 'Remove booking', danger: true, onSelect: () => void booking(p, false) },
                         ]}
@@ -426,7 +428,6 @@ export function ActivityRoster() {
               <li key={p.id} className="row">
                 <span className="row-main">
                   <span className="row-title">{p.name}</span>
-                  <span className="row-meta">{p.groupName}</span>
                 </span>
                 <span className="row-side">
                   {data.canBook && (
@@ -494,7 +495,11 @@ function MoveSheet({
       </span>
       <span className="row-side">
         <Button small kind="primary" busy={busy === x.id} busyLabel="Moving…" disabled={busy !== null} onClick={() => void move(x)}>
-          Move here<span className="visually-hidden"> to {x.name}, {when(x)}</span>
+          Move here
+          <span className="visually-hidden">
+            {' '}
+            to {x.name}, {when(x)}
+          </span>
         </Button>
       </span>
     </li>

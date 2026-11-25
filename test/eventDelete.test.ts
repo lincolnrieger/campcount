@@ -17,9 +17,13 @@ async function campWithRecords() {
       now,
       now,
     ),
-    testEnv.DB.prepare(
-      `INSERT INTO registrations (id, event_id, person_id, kind, level, group_name, created_at, updated_at) VALUES (?, ?, ?, 'youth', 'Juniors', 'Test Club', ?, ?)`,
-    ).bind(regId, eventId, personId, now, now),
+    testEnv.DB.prepare(`INSERT INTO registrations (id, event_id, person_id, kind, created_at, updated_at) VALUES (?, ?, ?, 'youth', ?, ?)`).bind(
+      regId,
+      eventId,
+      personId,
+      now,
+      now,
+    ),
     testEnv.DB.prepare(
       `INSERT INTO scans (id, event_id, context_type, registration_id, direction, method, device_time, server_time, device_id, actor_user_id, outcome)
        VALUES (?, ?, 'site', ?, 'in', 'manual', ?, ?, 'test', ?, 'accepted')`,
@@ -47,7 +51,9 @@ describe('deleting a camp', () => {
   it('only platform admins can, and never from a camp address', async () => {
     const { admin, manager, eventId } = await campWithRecords();
     expect((await api(`/admin/events/${eventId}`, { method: 'DELETE', cookie: manager.cookie })).status).toBe(403);
-    await testEnv.DB.prepare(`UPDATE events SET subdomain = ? WHERE id = ?`).bind(`del-${eventId.slice(0, 8)}`, eventId).run();
+    await testEnv.DB.prepare(`UPDATE events SET subdomain = ? WHERE id = ?`)
+      .bind(`del-${eventId.slice(0, 8)}`, eventId)
+      .run();
     expect((await api(`/admin/events/${eventId}`, { method: 'DELETE', cookie: admin.cookie, host: `del-${eventId.slice(0, 8)}.campcount.test` })).status).toBe(404);
     expect((await api(`/admin/events/${crypto.randomUUID()}`, { method: 'DELETE', cookie: admin.cookie })).status).toBe(404);
     expect((await api(`/admin/events/${eventId}`, { method: 'DELETE', cookie: admin.cookie })).status).toBe(200);

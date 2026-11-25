@@ -190,7 +190,7 @@ export function SignupKiosk() {
 
   if (person.view) {
     return (
-      <Frame title={`Hi ${person.view.person.name}`} subtitle={person.view.person.groupName || subtitle} kiosk>
+      <Frame title={`Hi ${person.view.person.name}`} subtitle={subtitle} kiosk>
         <SignupStatus error={error} done={person.done} />
         {person.view.teamEvents?.length ? (
           <Segmented

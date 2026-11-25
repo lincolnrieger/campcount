@@ -16,8 +16,8 @@ export interface Env {
   /** Secret used to HMAC login codes and tokens. Set with `wrangler secret put AUTH_SECRET`. */
   AUTH_SECRET: string;
   /**
-   * Secret that encrypts participant data (names, IDs, groups, levels,
-   * dietary details). At least 32 characters. Separate from AUTH_SECRET, and
+   * Secret that encrypts participant data (names, participant IDs and
+   * lanyard codes). At least 32 characters. Separate from AUTH_SECRET, and
    * never rotated casually: data sealed under it can't be read without it.
    */
   DATA_KEY: string;

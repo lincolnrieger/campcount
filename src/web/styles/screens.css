@@ -295,47 +295,6 @@
 .scan-result-stop {
   background: var(--error-solid);
 }
-.scan-flag {
-  display: flex;
-  align-items: center;
-  justify-self: start;
-  gap: var(--space-2);
-  margin-top: var(--space-2);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius);
-  background: #fff;
-  color: var(--ink);
-  font-weight: var(--weight-bold);
-}
-/* Dietary needs at a meal: solid red, white border so it stands apart from a green answer. */
-.diet-alert {
-  display: grid;
-  gap: var(--space-1);
-  margin-top: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border: 3px solid #fff;
-  border-radius: var(--radius);
-  background: var(--error-solid);
-  color: #fff;
-}
-.diet-alert-word {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-xl);
-  font-weight: var(--weight-bold);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.diet-alert-text {
-  font-size: var(--text-display);
-  font-weight: var(--weight-bold);
-  line-height: var(--leading-tight);
-  overflow-wrap: anywhere;
-}
-.diet-alert-note {
-  font-weight: var(--weight-bold);
-}
 
 /* Who's missing / who's here: big names, a big button on each. */
 .scanner-people {
@@ -601,37 +560,3 @@
   margin-top: var(--section-gap);
 }
 
-/* A leader's first scan: their car's rego */
-.rego-prompt {
-  display: grid;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
-  padding: var(--space-4);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--ink);
-  box-shadow: inset 0 0 0 2px var(--brand);
-}
-.rego-label {
-  font-size: 1.125rem;
-  font-weight: var(--weight-heavy);
-}
-.rego-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-.rego-input {
-  flex: 1 1 10rem;
-  font-size: 1.25rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.rego-failed {
-  color: var(--error-fg, #B3261E);
-  font-weight: var(--weight-bold);
-}
-.rego-done {
-  margin-top: var(--space-2);
-  font-weight: var(--weight-bold);
-}

@@ -1,14 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { api, createEvent, createUser, grant, json, testEnv } from './helpers';
+import { api, createEvent, createUser, grant, json, testEnv, addPeople } from './helpers';
 
 const person = (participantId: string) => ({
   participantId,
   firstName: `First${participantId}`,
   lastName: 'Person',
   kind: 'youth',
-  level: 'Seniors',
-  groupName: 'Example Club',
-  photoConsent: 'yes',
 });
 
 async function camp() {
@@ -17,7 +14,7 @@ async function camp() {
   await testEnv.DB.prepare(`UPDATE events SET feature_self_signup = 1 WHERE id = ?`).bind(eventId).run();
   const manager = await createUser();
   await grant(manager.id, 'event_manager', eventId);
-  await api(`/events/${eventId}/import/commit`, { cookie: manager.cookie, body: { rows: [person('100'), person('200'), person('300')] } });
+  await addPeople(eventId, manager.cookie, [person('100'), person('200'), person('300')]);
   await api(`/events/${eventId}/credentials/issue`, { cookie: manager.cookie, body: { mode: 'missing' } });
   const { cards } = await json(await api(`/events/${eventId}/credentials/print`, { cookie: manager.cookie, body: {} }));
   const card = (m: string) => {
@@ -54,7 +51,7 @@ describe('booking links and typed numbers', () => {
     const body = await json(res);
     expect(body.linkResult).toEqual({ booked: true, already: false, activity: 'Kayaking', problem: null });
     // Then their own page, reduced: their bookings (to cancel), first name only.
-    expect(body.person).toMatchObject({ firstName: 'First100', lastName: '', groupName: '' });
+    expect(body.person).toMatchObject({ firstName: 'First100', lastName: '' });
     expect(body.bookings.map((b: { name: string; canCancel: boolean }) => [b.name, b.canCancel])).toEqual([['Kayaking', true]]);
     const cancelled = await json(await api('/public/signup/cancel', { body: { pass: body.pass, activityId: c.kayak9 } }));
     expect(cancelled.bookings).toEqual([]);
@@ -74,12 +71,12 @@ describe('booking links and typed numbers', () => {
   it('shows a reduced page for a typed number, and keeps it reduced after booking', async () => {
     const c = await camp();
     const typed = await json(await api('/public/signup/identify', { body: { shortCode: c.card('100').shortCode, code: c.code } }));
-    expect(typed.person).toMatchObject({ firstName: 'First100', lastName: '', groupName: '' });
+    expect(typed.person).toMatchObject({ firstName: 'First100', lastName: '' });
     const after = await json(await api('/public/signup/book', { body: { pass: typed.pass, activityId: c.kayak9 } }));
-    expect(after.person).toMatchObject({ lastName: '', groupName: '' });
+    expect(after.person).toMatchObject({ lastName: '' });
     // Their own lanyard link shows everything.
     const own = await json(await api('/public/signup/identify', { body: { token: c.card('100').token } }));
-    expect(own.person).toMatchObject({ lastName: 'Person', groupName: 'Example Club' });
+    expect(own.person).toMatchObject({ lastName: 'Person' });
   });
 });
 
@@ -95,7 +92,7 @@ describe('activity sign-up', () => {
   it('books by scanned lanyard or typed card code, enforcing places and clashes', async () => {
     const c = await camp();
     const me = await json(await api('/public/signup/identify', { body: { token: c.card('100').token, code: c.code } }));
-    expect(me.person).toMatchObject({ name: 'First100 P.', firstName: 'First100', groupName: 'Example Club', levelWord: 'Senior' });
+    expect(me.person).toMatchObject({ name: 'First100 P.', firstName: 'First100', levelWord: 'Participant' });
 
     let res = await json(await api('/public/signup/book', { body: { pass: me.pass, activityId: c.kayak9 } }));
     expect(res.bookings.map((b: { activityId: string }) => b.activityId)).toEqual([c.kayak9]);
@@ -165,7 +162,11 @@ describe('stations', () => {
     const c = await camp();
     await api(`/events/${c.eventId}/transition`, { cookie: c.manager.cookie, body: { to: 'open' } });
     const st = await json(await api(`/events/${c.eventId}/stations`, { cookie: c.manager.cookie, body: { name: 'Lake tablet', contextType: 'activity', contextId: c.kayak9 } }));
-    await api(`/events/${c.eventId}/stations/${st.id}`, { cookie: c.manager.cookie, method: 'PATCH', body: { name: 'Range tablet', contextType: 'activity', contextId: c.archery10 } });
+    await api(`/events/${c.eventId}/stations/${st.id}`, {
+      cookie: c.manager.cookie,
+      method: 'PATCH',
+      body: { name: 'Range tablet', contextType: 'activity', contextId: c.archery10 },
+    });
     await api(`/events/${c.eventId}/stations/${st.id}`, { cookie: c.manager.cookie, method: 'DELETE' });
     let list = (await json(await api(`/events/${c.eventId}/stations`, { cookie: c.manager.cookie }))).stations;
     expect(list[0]).toMatchObject({ name: 'Range tablet', contextName: 'Archery', state: 'revoked' });
@@ -196,7 +197,17 @@ describe('activity leaders', () => {
         cookie: leader.cookie,
         body: {
           deviceId: 'web-roster-test1',
-          scans: [{ id: crypto.randomUUID(), contextType: 'activity', contextId: c.kayak9, direction: 'in', deviceTime: new Date().toISOString(), method: 'manual', registrationId: c.card('200').registrationId }],
+          scans: [
+            {
+              id: crypto.randomUUID(),
+              contextType: 'activity',
+              contextId: c.kayak9,
+              direction: 'in',
+              deviceTime: new Date().toISOString(),
+              method: 'manual',
+              registrationId: c.card('200').registrationId,
+            },
+          ],
         },
       }),
     );
@@ -214,12 +225,18 @@ describe('activity leaders', () => {
     expect(reset).toEqual({ undone: 1 });
     const after = await json(await api(`/events/${c.eventId}/activities/${c.kayak9}/attendance`, { cookie: leader.cookie }));
     expect(after.people.find((p: { id: string }) => p.id === c.card('200').registrationId)).toBeUndefined();
-    expect(await json(await api(`/events/${c.eventId}/activities/${c.kayak9}/attendance/${c.card('200').registrationId}/reset`, { cookie: leader.cookie, method: 'POST' }))).toEqual({ undone: 0 });
-    expect((await api(`/events/${c.eventId}/activities/${c.archery10}/attendance/${c.card('200').registrationId}/reset`, { cookie: leader.cookie, method: 'POST' })).status).toBe(403);
+    expect(
+      await json(await api(`/events/${c.eventId}/activities/${c.kayak9}/attendance/${c.card('200').registrationId}/reset`, { cookie: leader.cookie, method: 'POST' })),
+    ).toEqual({ undone: 0 });
+    expect((await api(`/events/${c.eventId}/activities/${c.archery10}/attendance/${c.card('200').registrationId}/reset`, { cookie: leader.cookie, method: 'POST' })).status).toBe(
+      403,
+    );
 
     // Nothing for other activities, people pages or reports.
     expect((await api(`/events/${c.eventId}/activities/${c.archery10}/attendance`, { cookie: leader.cookie })).status).toBe(403);
-    expect((await api(`/events/${c.eventId}/activities/${c.archery10}/bookings`, { cookie: leader.cookie, body: { registrationId: c.card('100').registrationId } })).status).toBe(403);
+    expect((await api(`/events/${c.eventId}/activities/${c.archery10}/bookings`, { cookie: leader.cookie, body: { registrationId: c.card('100').registrationId } })).status).toBe(
+      403,
+    );
     expect((await api(`/events/${c.eventId}/registrations`, { cookie: leader.cookie })).status).toBe(403);
     expect((await api(`/events/${c.eventId}/whereabouts`, { cookie: leader.cookie })).status).toBe(403);
   });
@@ -237,7 +254,9 @@ describe("someone's own lanyard page", () => {
     const { meals } = await json(await api(`/events/${c.eventId}/meals`, { cookie: c.manager.cookie }));
     expect(meals[0]).toMatchObject({ menu: 'Spaghetti bolognese', ingredients: 'Wheat pasta, beef, tomato, onion' });
 
-    await api(`/public/signup/identify`, { body: { token: c.card('200').token } }).then(json).then((v) => api('/public/signup/book', { body: { pass: v.pass, activityId: c.kayak9 } }));
+    await api(`/public/signup/identify`, { body: { token: c.card('200').token } })
+      .then(json)
+      .then((v) => api('/public/signup/book', { body: { pass: v.pass, activityId: c.kayak9 } }));
     const view = await json(await api(`/public/signup/identify`, { body: { token: c.card('100').token } }));
     const items = view.programme as { name: string; kind: string; capacity: number | null; booked: number; menu?: string; ingredients?: string }[];
     expect(items.find((i) => i.kind === 'meal')).toMatchObject({ name: 'Saturday dinner', menu: 'Spaghetti bolognese', ingredients: 'Wheat pasta, beef, tomato, onion' });
@@ -299,7 +318,7 @@ describe('links for everyone', () => {
     expect(view.features).toEqual(['book']);
     expect(view.sessions.length).toBe(3);
     expect(view.programme).toEqual([]);
-    expect(view.person).toMatchObject({ firstName: 'First100', lastName: '', groupName: '' });
+    expect(view.person).toMatchObject({ firstName: 'First100', lastName: '' });
     const booked = await api('/public/signup/book', { body: { pass: view.pass, activityId: c.kayak9 } });
     expect(booked.status).toBe(200);
     expect((await json(booked)).bookings[0]).toMatchObject({ name: 'Kayaking', canCancel: true });

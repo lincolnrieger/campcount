@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ROLE_LABEL } from '../../shared/roles';
 import type { Registration } from '../model';
 import { useApi } from '../useApi';
 import { Button, Icon, LoadError, Loading, PageHeader, Segmented, SkeletonRows, plural } from '../ui';
@@ -13,15 +14,11 @@ export function RollSheet() {
   const { data, error, loading, reload } = useApi<{ registrations: Registration[] }>(`/events/${event.id}/registrations`);
   const [title, setTitle] = useState('');
   const [who, setWho] = useState<'all' | 'youth' | 'adult'>('all');
-  const [group, setGroup] = useState('');
   const [columns, setColumns] = useState('In, Out');
   const back = { to: `${eventBase}/people`, label: 'People' };
 
   const active = (data?.registrations ?? []).filter((r) => r.status === 'active');
-  const people = active
-    .filter((r) => (who === 'all' || r.kind === who) && (!group || r.groupName === group))
-    .sort((a, b) => a.groupName.localeCompare(b.groupName) || a.lastName.localeCompare(b.lastName));
-  const groups = [...new Set(active.map((r) => r.groupName).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const people = active.filter((r) => who === 'all' || r.kind === who).sort((a, b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName));
 
   const header = (
     <div className="no-print">
@@ -77,21 +74,10 @@ export function RollSheet() {
               onChange={setWho}
               options={[
                 { value: 'all', label: 'Everyone' },
-                { value: 'youth', label: 'Youth' },
+                { value: 'youth', label: 'Participants' },
                 { value: 'adult', label: 'Leaders' },
               ]}
             />
-          </div>
-          <div className="field">
-            <label className="field-label" htmlFor="rs-group">
-              Group
-            </label>
-            <select id="rs-group" className="select" value={group} onChange={(e) => setGroup(e.target.value)}>
-              <option value="">All groups</option>
-              {groups.map((g) => (
-                <option key={g}>{g}</option>
-              ))}
-            </select>
           </div>
           <div className="field">
             <label className="field-label" htmlFor="rs-title">
@@ -112,15 +98,15 @@ export function RollSheet() {
 
         <div className="roll-sheet">
           <p className="roll-title">
-            <strong>{title || 'Roll sheet'}</strong>
-            {group && ` · ${group}`} · {event.name} · printed {new Date().toLocaleDateString('en-AU')}. Contains personal information: keep it secure and shred after use.
+            <strong>{title || 'Roll sheet'}</strong>· {event.name} · printed {new Date().toLocaleDateString('en-AU')}. Contains personal information: keep it secure and shred after
+            use.
           </p>
           <div className="table-wrap">
             <table className="table roll">
               <thead>
                 <tr>
                   <th scope="col">Name</th>
-                  <th scope="col">Group</th>
+                  <th scope="col">Role</th>
                   {cols.map((c) => (
                     <th scope="col" key={c} className="tick">
                       {c}
@@ -134,7 +120,7 @@ export function RollSheet() {
                     <td>
                       {p.firstName} {p.lastName}
                     </td>
-                    <td>{p.groupName}</td>
+                    <td>{ROLE_LABEL[p.kind]}</td>
                     {cols.map((c) => (
                       <td key={c} className="tick" />
                     ))}

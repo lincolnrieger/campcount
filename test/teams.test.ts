@@ -1,14 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { api, createEvent, createUser, grant, json, testEnv } from './helpers';
+import { api, createEvent, createUser, grant, json, testEnv, addPeople } from './helpers';
 
-const person = (participantId: string, photoConsent = 'yes') => ({
+const person = (participantId: string) => ({
   participantId,
   firstName: `First${participantId}`,
   lastName: 'Person',
-  kind: 'youth',
-  level: 'Explorers',
-  groupName: 'Example Unit',
-  photoConsent,
+  kind: 'youth' as const,
 });
 
 async function camp(status = 'open') {
@@ -16,15 +13,12 @@ async function camp(status = 'open') {
   const eventId = await createEvent(admin.id, { status });
   const manager = await createUser();
   await grant(manager.id, 'event_manager', eventId);
-  await api(`/events/${eventId}/import/commit`, {
-    cookie: manager.cookie,
-    body: { rows: [person('100'), person('200'), person('300', 'no'), person('400', 'no')] },
-  });
+  await addPeople(eventId, manager.cookie, [person('100'), person('200'), person('300'), person('400')]);
   await api(`/events/${eventId}/credentials/issue`, { cookie: manager.cookie, body: { mode: 'missing' } });
   const { cards } = await json(await api(`/events/${eventId}/credentials/print`, { cookie: manager.cookie, body: {} }));
   const card = (m: string) => {
     const c = cards.find((x: { name: string }) => x.name.startsWith(`First${m}`));
-    return { token: c.qr.split('#')[1] as string, registrationId: c.registrationId as string, noPhotos: c.noPhotos as boolean };
+    return { token: c.qr.split('#')[1] as string, registrationId: c.registrationId as string, card: c as Record<string, unknown> };
   };
   return { admin, eventId, manager, card };
 }
@@ -70,9 +64,7 @@ describe('team events', () => {
 
   it('lets participants make, join and leave teams only while registration is open', async () => {
     const c = await camp();
-    const { id: soccer } = await json(
-      await api(`/events/${c.eventId}/team-events`, { cookie: c.manager.cookie, body: { name: 'Soccer', minSize: 1, maxSize: 2 } }),
-    );
+    const { id: soccer } = await json(await api(`/events/${c.eventId}/team-events`, { cookie: c.manager.cookie, body: { name: 'Soccer', minSize: 1, maxSize: 2 } }));
     const a = await passFor(c.card('100').token);
     const closed = await api('/public/signup/team/create', { body: { pass: a, activityId: soccer, name: 'Dolphins' } });
     expect(closed.status).toBe(409);
@@ -108,7 +100,7 @@ describe('team events', () => {
       await api(`/events/${c.eventId}/team-events`, { cookie: c.manager.cookie, body: { name: 'Soccer', minSize: 1, maxSize: 4, registrationOpen: true } }),
     );
     // A leader on the camp.
-    await api(`/events/${c.eventId}/import/commit`, { cookie: c.manager.cookie, body: { rows: [{ ...person('900'), kind: 'adult', level: 'Leaders' }] } });
+    await addPeople(c.eventId, c.manager.cookie, [{ ...person('900'), kind: 'adult' }]);
     await api(`/events/${c.eventId}/credentials/issue`, { cookie: c.manager.cookie, body: { mode: 'missing' } });
     const { cards } = await json(await api(`/events/${c.eventId}/credentials/print`, { cookie: c.manager.cookie, body: {} }));
     const leader = cards.find((x: { name: string }) => x.name.startsWith('First900'));
@@ -170,19 +162,14 @@ describe('team events', () => {
 });
 
 describe('lanyards', () => {
-  it('marks cards for anyone without photo consent, in the style the event chose', async () => {
+  it('prints only name, role and codes on cards: no photo consent marker', async () => {
     const c = await camp();
-    expect(c.card('100').noPhotos).toBe(false);
-    expect(c.card('300').noPhotos).toBe(true);
-    expect(c.card('400').noPhotos).toBe(true);
+    expect(Object.keys(c.card('100').card)).not.toContain('noPhotos');
+    expect(c.card('100').card).toMatchObject({ kind: 'youth', style: { word: 'Participant' } });
 
     const { event } = await json(await api(`/events/${c.eventId}`, { cookie: c.manager.cookie }));
-    expect(event.lanyard).toEqual({ photoMarker: 'black_border', photoMarkerColour: '#B3261E', photoMarkerLabel: true, printBand: true });
-    const saved = await json(
-      await api(`/events/${c.eventId}`, { cookie: c.manager.cookie, method: 'PATCH', body: { lanyard: { photoMarker: 'red_dot', photoMarkerLabel: false } } }),
-    );
-    expect(saved.event.lanyard).toMatchObject({ photoMarker: 'red_dot', photoMarkerLabel: false });
-    expect((await api(`/events/${c.eventId}`, { cookie: c.manager.cookie, method: 'PATCH', body: { lanyard: { photoMarker: 'glitter' } } })).status).toBe(400);
+    expect(event.lanyard).toEqual({ printBand: true });
+    expect((await api(`/events/${c.eventId}`, { cookie: c.manager.cookie, method: 'PATCH', body: { lanyard: { photoMarker: 'red_dot' } } })).status).toBe(400);
   });
 });
 

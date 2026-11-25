@@ -1,5 +1,4 @@
 import { sortByName } from '../lib/sort';
-import { loadLevels } from './levels';
 import { getCookie, setCookie } from 'hono/cookie';
 import type { AppContext } from '../context';
 import { hmacHex, timingSafeEqualHex } from '../lib/crypto';
@@ -100,11 +99,11 @@ export async function standing(db: D1Database, eventId: string, registrationId: 
   const [people, mine, counts] = await Promise.all([
     db
       .prepare(
-        `SELECT r.id, r.kind, r.level, p.first_name, p.last_name FROM registrations r JOIN people p ON p.id = r.person_id
+        `SELECT r.id, r.kind, p.first_name, p.last_name FROM registrations r JOIN people p ON p.id = r.person_id
           WHERE r.event_id = ? AND r.status = 'active' AND r.kind = 'youth'`,
       )
       .bind(eventId)
-      .all<{ id: string; kind: string; level: string; first_name: string; last_name: string }>(),
+      .all<{ id: string; kind: string; first_name: string; last_name: string }>(),
     db.prepare(`SELECT collected_id FROM side_quest_collections WHERE collector_id = ?`).bind(registrationId).all<{ collected_id: string }>(),
     db
       .prepare(
@@ -119,16 +118,11 @@ export async function standing(db: D1Database, eventId: string, registrationId: 
   const got = new Set(mine.results.map((r) => r.collected_id).filter((id) => byId.has(id)));
   const others = people.results.filter((p) => p.id !== registrationId);
 
-  // Quests: everyone in each youth level. Only young people play.
-  const levels = await loadLevels(db, eventId);
-  const groupOf = (p: { kind: string; level: string }) => p.level.toLowerCase();
+  // One quest: every other participant. Only young people play.
   const quests: Quest[] = [];
-  const keys = levels.filter((s) => s.youth).map((s) => ({ key: s.name.toLowerCase(), label: s.name }));
-  for (const { key, label } of keys) {
-    const inGroup = others.filter((p) => groupOf(p) === key);
-    if (inGroup.length === 0) continue;
-    const n = inGroup.filter((p) => got.has(p.id)).length;
-    quests.push({ key, label, collected: n, total: inGroup.length, done: n === inGroup.length });
+  if (others.length > 0) {
+    const n = others.filter((p) => got.has(p.id)).length;
+    quests.push({ key: 'everyone', label: 'Everyone', collected: n, total: others.length, done: n === others.length });
   }
 
   // Rank by how many each player has collected; ties share a place.
@@ -175,12 +169,12 @@ export async function activitiesDone(db: D1Database, eventId: string, registrati
 export async function leaderboard(db: D1Database, eventId: string) {
   const { results } = await db
     .prepare(
-      `SELECT c.collector_id AS id, count(*) AS n, p.first_name, p.last_name, r.group_name, r.level
+      `SELECT c.collector_id AS id, count(*) AS n, p.first_name, p.last_name
          FROM side_quest_collections c JOIN registrations r ON r.id = c.collector_id JOIN people p ON p.id = r.person_id
         WHERE c.event_id = ? GROUP BY c.collector_id ORDER BY n DESC LIMIT 100`,
     )
     .bind(eventId)
-    .all<{ id: string; n: number; first_name: string; last_name: string; group_name: string; level: string }>();
+    .all<{ id: string; n: number; first_name: string; last_name: string }>();
   // Ties by name, sorted here: names are encrypted in the database.
   sortByName(results).sort((a, b) => b.n - a.n);
   const total = await db.prepare(`SELECT count(*) AS n FROM side_quest_collections WHERE event_id = ?`).bind(eventId).first<{ n: number }>();
@@ -190,8 +184,6 @@ export async function leaderboard(db: D1Database, eventId: string) {
       registrationId: r.id,
       place: 1 + all.filter((x) => x.n > r.n).length,
       name: `${r.first_name} ${r.last_name}`,
-      groupName: r.group_name,
-      level: r.level,
       collected: r.n,
       rank: i,
     })),

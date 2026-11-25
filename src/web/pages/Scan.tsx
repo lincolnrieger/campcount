@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import type { ContextType, Direction, PersonState } from '../../shared/scanRules';
+import { ROLE_LABEL } from '../../shared/roles';
 import { matchesSearch, searchRank } from '../../shared/search';
 import { contextEntries } from '../offline/db';
 import { syncNow, useSyncStatus } from '../offline/sync';
@@ -12,7 +13,7 @@ import type { Feedback, ScanInput, Snapshot, SnapshotPerson } from '../scan/useS
 import { useScanSession } from '../scan/useScanSession';
 import { useSession } from '../session';
 import { useTitle } from '../shell';
-import { Badge, Button, ButtonLink, Choice, Icon, IconButton, Loading, Notice, SearchField, Segmented, Sheet, Skeleton, SkeletonRows, useConfirm, useToast } from '../ui';
+import { Button, ButtonLink, Choice, Icon, IconButton, Loading, Notice, SearchField, Segmented, Sheet, Skeleton, SkeletonRows, useConfirm, useToast } from '../ui';
 import { scanOnly } from './EventLayout';
 import { ScanSwitcher } from './ScanHub';
 
@@ -75,83 +76,8 @@ function SyncProblem() {
 
 const RESULT_ICON = { ok: 'check', warn: 'warning', stop: 'cross' } as const;
 
-const isAllergy = (alert: string) => /allergy|anaphyla/i.test(alert);
-
-/**
- * Dietary needs, impossible to miss: a solid red block across the result,
- * so the person serving sees it before they hand over a plate.
- */
-function DietaryAlert({ alert }: { alert: string }) {
-  const allergy = isAllergy(alert);
-  return (
-    <div className="diet-alert" role="alert">
-      <p className="diet-alert-word">
-        <Icon name="warning" size={24} />
-        {allergy ? 'Allergy' : 'Dietary needs'}
-      </p>
-      <p className="diet-alert-text">{alert.replace(/^allergy:\s*/i, '')}</p>
-      <p className="diet-alert-note">Check their food before serving.</p>
-    </div>
-  );
-}
-
-/**
- * The first time a leader is scanned (usually when they collect their
- * lanyard): ask whether they have a car on site, and its rego, so the camp
- * knows who to contact. One tap to skip. Asked once.
- */
-const regoAsked = new Set<string>();
-function RegoPrompt({ eventId, person }: { eventId: string; person: SnapshotPerson }) {
-  const [rego, setRego] = useState('');
-  const [state, setState] = useState<'ask' | 'saving' | 'done' | 'failed'>('ask');
-  async function send(value: string | null) {
-    setState('saving');
-    try {
-      await api(`/events/${eventId}/registrations/${person.id}/rego`, { body: { rego: value } });
-      // Don't ask again on this device (the next list download won't ask either).
-      regoAsked.add(person.id);
-      setState('done');
-    } catch {
-      setState('failed');
-    }
-  }
-  if (state === 'done') return <p className="rego-done">Saved. Thanks.</p>;
-  return (
-    <form
-      className="rego-prompt"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (rego.trim()) void send(rego.trim());
-      }}
-    >
-      <label htmlFor="rego-input" className="rego-label">
-        Car on site? Ask for its rego.
-      </label>
-      <div className="rego-row">
-        <input
-          id="rego-input"
-          className="input rego-input"
-          value={rego}
-          maxLength={20}
-          autoComplete="off"
-          autoCapitalize="characters"
-          placeholder="e.g. S123ABC"
-          onChange={(e) => setRego(e.target.value.toUpperCase())}
-        />
-        <Button type="submit" kind="primary" disabled={!rego.trim() || state === 'saving'}>
-          Save
-        </Button>
-        <Button kind="ghost" disabled={state === 'saving'} onClick={() => void send(null)}>
-          Skip
-        </Button>
-      </div>
-      {state === 'failed' && <p className="rego-failed">Couldn’t save (no signal?). It’ll be asked again next time.</p>}
-    </form>
-  );
-}
-
 /** The big answer after each scan: icon, word and name. Announced to screen readers. */
-function ScanResult({ feedback, contextType }: { feedback: Feedback | null; contextType: ContextType }) {
+function ScanResult({ feedback }: { feedback: Feedback | null }) {
   if (!feedback) {
     return (
       <div className="scan-result scan-result-idle" role="status">
@@ -161,7 +87,6 @@ function ScanResult({ feedback, contextType }: { feedback: Feedback | null; cont
     );
   }
   const p = feedback.person;
-  const alert = contextType === 'meal' ? p?.dietaryAlert : null;
   return (
     <div className={`scan-result scan-result-${feedback.tone}`} role={feedback.tone === 'stop' ? 'alert' : 'status'} aria-atomic="true">
       <p className="scan-result-word">
@@ -169,16 +94,9 @@ function ScanResult({ feedback, contextType }: { feedback: Feedback | null; cont
         {feedback.title}
       </p>
       {p && <p className="scan-result-name">{p.fullName ?? p.name}</p>}
-      {p && <p className="scan-result-meta">{[p.group, p.level].filter(Boolean).join(' · ')}</p>}
+      {p && <p className="scan-result-meta">{ROLE_LABEL[p.kind]}</p>}
       {feedback.message && <p>{feedback.message}</p>}
       {feedback.warning && <p>{feedback.warning}</p>}
-      {alert && <DietaryAlert alert={alert} />}
-      {p?.noPhotos && (
-        <p className="scan-flag">
-          <Icon name="eye" size={16} />
-          No photos
-        </p>
-      )}
     </div>
   );
 }
@@ -224,13 +142,12 @@ export function Scan() {
       try {
         const result = await session.record(input, direction);
         setFeedback(result);
-        // A dietary alert at a meal always gets the long buzz, even when the scan went through.
-        signal(type === 'meal' && result.person?.dietaryAlert ? 'stop' : result.tone, sound);
+        signal(result.tone, sound);
       } catch {
         // A scan is already being processed, or the list is still loading.
       }
     },
-    [session, direction, sound, type],
+    [session, direction, sound],
   );
   useEffect(() => {
     recordRef.current = record;
@@ -405,21 +322,20 @@ export function Scan() {
   const done = ctx.type === 'activity' ? counts.people : counts.present;
   const backToCamera = () => setView('camera');
 
-  /** Check someone in from the list (no lanyard). Big results — and every dietary alert — show on the camera screen. */
+  /** Check someone in from the list (no lanyard). Big results show on the camera screen. */
   const checkIn = async (p: SnapshotPerson) => {
     const name = p.fullName ?? p.name;
     const ok = await confirm({
       title: words.ask(name),
-      body: <p>{[p.group, 'For someone without their lanyard.'].filter(Boolean).join('. ')}</p>,
+      body: <p>For someone without their lanyard.</p>,
       confirm: words.action,
     });
     if (!ok) return;
     try {
       const result = await session.record({ kind: 'manual', registrationId: p.id }, 'in');
-      const alert = type === 'meal' && result.person?.dietaryAlert;
-      signal(alert ? 'stop' : result.tone, sound);
+      signal(result.tone, sound);
       setFeedback(result);
-      if (alert || result.tone !== 'ok') backToCamera();
+      if (result.tone !== 'ok') backToCamera();
       else toast(`${name}: ${result.title}`);
     } catch {
       // The list is still loading.
@@ -481,8 +397,7 @@ export function Scan() {
             )}
             {camera === 'on' && <span className="viewfinder-guide" aria-hidden="true" />}
           </div>
-          <ScanResult feedback={feedback} contextType={ctx.type} />
-          {feedback?.person?.askRego && !regoAsked.has(feedback.person.id) && feedback.tone !== 'stop' && <RegoPrompt key={feedback.key} eventId={eventId} person={feedback.person} />}
+          <ScanResult feedback={feedback} />
           <Button className="scanner-big scanner-people-btn" block onClick={() => setView('people')}>
             <Icon name="search" size={24} />
             <span>{words.not}</span>
@@ -717,12 +632,7 @@ function PeopleList({
               <li key={p.id} className={here ? 'scanner-person is-done' : 'scanner-person'}>
                 <span className="scanner-person-main">
                   <span className="scanner-person-name">{name(p)}</span>
-                  <span className="scanner-person-meta">{[p.group, st].filter(Boolean).join(' · ')}</span>
-                  {ctx.type === 'meal' && p.dietaryAlert && (
-                    <span>
-                      <Badge tone="error">{isAllergy(p.dietaryAlert) ? 'Allergy' : 'Dietary needs'}</Badge>
-                    </span>
-                  )}
+                  <span className="scanner-person-meta">{[ROLE_LABEL[p.kind], st].filter(Boolean).join(' · ')}</span>
                 </span>
                 {!here ? (
                   <Button kind="primary" className="scanner-person-btn" onClick={() => onCheckIn(p)} aria-label={`${words.action}: ${name(p)}`}>

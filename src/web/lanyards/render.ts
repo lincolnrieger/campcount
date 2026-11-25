@@ -1,15 +1,5 @@
 import qrcode from 'qrcode-generator';
-import type {
-  CardPerson,
-  DesignElement,
-  DesignSide,
-  FontId,
-  FontWeight,
-  ImageElement,
-  LanyardDesign,
-  SideKey,
-  TextElement,
-} from '../../shared/lanyardDesign';
+import type { CardPerson, DesignElement, DesignSide, FontId, FontWeight, ImageElement, LanyardDesign, SideKey, TextElement } from '../../shared/lanyardDesign';
 import { FIELDS, cardSize, fillFields, resolveColour } from '../../shared/lanyardDesign';
 import { canvasFont } from './fonts';
 
@@ -29,15 +19,8 @@ export interface Box {
   h: number;
 }
 
-export interface PhotoMarkerStyle {
-  photoMarker: 'black_border' | 'colour_border' | 'red_dot' | 'camera_icon' | 'none';
-  photoMarkerColour: string;
-  photoMarkerLabel: boolean;
-}
-
 export interface RenderContext {
   campName: string;
-  marker: PhotoMarkerStyle;
 }
 
 export interface Painter {
@@ -50,16 +33,12 @@ export interface Painter {
   measure(text: string, font: FontId, weight: FontWeight, sizePt: number): number;
   text(line: string, x: number, baseline: number, font: FontId, weight: FontWeight, sizePt: number, colour: string): void;
   qr(value: string, box: Box): void;
-  /** The red circle or crossed-out camera, inside the box. */
-  photoSymbol(kind: 'red_dot' | 'camera_icon', box: Box): void;
 }
 
 /** A person to preview the design with, when no real one is chosen. */
 export const SAMPLE_PERSON: CardPerson = {
   name: FIELDS.name.sample,
   kind: 'youth',
-  level: 'Participants',
-  groupName: 'Example Group',
   shortCode: '1234567',
   qr: 'https://campcount.com/c#sample-card-preview-only',
 };
@@ -140,10 +119,6 @@ export function elementText(el: TextElement, person: CardPerson, campName: strin
 
 // ---------------------------------------------------------------- the card
 
-export function frameWidth(design: LanyardDesign): number {
-  return design.format === 'large' ? 3.5 : 2.5;
-}
-
 /** Draw one side of one person's card. */
 export function drawSide(p: Painter, design: LanyardDesign, side: SideKey, person: CardPerson, ctx: RenderContext, only?: (el: DesignElement) => boolean): void {
   const { w, h } = cardSize(design.format, design.orientation);
@@ -153,12 +128,6 @@ export function drawSide(p: Painter, design: LanyardDesign, side: SideKey, perso
   for (const el of s.elements) {
     if (only && !only(el)) continue;
     drawElement(p, el, person, ctx);
-  }
-  // No photo consent: a frame inside the edge, on both sides, over everything.
-  const m = ctx.marker;
-  if (person.noPhotos && (m.photoMarker === 'black_border' || m.photoMarker === 'colour_border')) {
-    const t = frameWidth(design);
-    p.rect({ x: t / 2, y: t / 2, w: w - t, h: h - t }, { fill: null, stroke: m.photoMarker === 'black_border' ? '#000000' : m.photoMarkerColour, strokeWidth: t, radius: 0, ellipse: false, opacity: 1 });
   }
   p.end();
 }
@@ -185,25 +154,9 @@ export function drawElement(p: Painter, el: DesignElement, person: CardPerson, c
     case 'qr':
       p.qr(person.qr, el);
       return;
-    case 'marker': {
-      if (!person.noPhotos) return;
-      const m = ctx.marker;
-      if (m.photoMarker === 'red_dot' || m.photoMarker === 'camera_icon') {
-        p.photoSymbol(m.photoMarker, el);
-      } else if (m.photoMarkerLabel) {
-        // A small black tag with the words, readable on any background. It's as
-        // wide as its words, lined up with the right edge of the marker's box.
-        const tagH = Math.min(el.h, 6);
-        const size = Math.max(4, (tagH * 0.5) / PT_TO_MM);
-        const words = 'No photos';
-        const pad = tagH * 0.35;
-        const tagW = p.measure(words, 'nunito-sans', 800, size) + 2 * pad;
-        const tag = { x: el.x + el.w - tagW, y: el.y + (el.h - tagH) / 2, w: tagW, h: tagH };
-        p.rect(tag, { fill: '#000000', stroke: null, strokeWidth: 0, radius: tagH / 2, ellipse: false, opacity: 1 });
-        p.text(words, tag.x + pad, tag.y + tagH / 2 + size * PT_TO_MM * 0.34, 'nunito-sans', 800, size, '#FFFFFF');
-      }
+    case 'marker':
+      // Photo consent isn't kept any more: older designs' marks print nothing.
       return;
-    }
   }
 }
 
@@ -335,24 +288,6 @@ export class CanvasPainter implements Painter {
       }),
     );
   }
-
-  photoSymbol(kind: 'red_dot' | 'camera_icon', box: Box) {
-    drawPhotoSymbol(this, kind, box);
-  }
-
-  /** Low-level helpers for the shared symbol drawing. */
-  line(x1: number, y1: number, x2: number, y2: number, width: number, colour: string) {
-    const g = this.g;
-    g.save();
-    g.strokeStyle = colour;
-    g.lineWidth = this.L(width);
-    g.lineCap = 'round';
-    g.beginPath();
-    g.moveTo(this.X(x1), this.Y(y1));
-    g.lineTo(this.X(x2), this.Y(y2));
-    g.stroke();
-    g.restore();
-  }
 }
 
 /** Source and destination rectangles for cover/contain (destination in mm). */
@@ -374,36 +309,6 @@ export function fitImage(img: CanvasImageSource | { width: number; height: numbe
   if (imgRatio > boxRatio) dh = el.w / imgRatio;
   else dw = el.h * imgRatio;
   return { sx: 0, sy: 0, sw: iw, sh: ih, dx: el.x + (el.w - dw) / 2, dy: el.y + (el.h - dh) / 2, dw, dh };
-}
-
-interface SymbolPainter {
-  rect: Painter['rect'];
-  line(x1: number, y1: number, x2: number, y2: number, width: number, colour: string): void;
-}
-
-/** The no-photo symbols, built from circles, rectangles and lines so both painters draw them the same. */
-export function drawPhotoSymbol(p: SymbolPainter, kind: 'red_dot' | 'camera_icon', box: Box) {
-  const d = Math.min(box.w, box.h);
-  const cx = box.x + box.w / 2;
-  const cy = box.y + box.h / 2;
-  const disc = { x: cx - d / 2, y: cy - d / 2, w: d, h: d };
-  if (kind === 'red_dot') {
-    p.rect(disc, { fill: '#FFFFFF', stroke: null, strokeWidth: 0, radius: 0, ellipse: true, opacity: 1 });
-    const r = d * 0.84;
-    p.rect({ x: cx - r / 2, y: cy - r / 2, w: r, h: r }, { fill: '#D0021B', stroke: null, strokeWidth: 0, radius: 0, ellipse: true, opacity: 1 });
-    return;
-  }
-  p.rect(disc, { fill: '#FFFFFF', stroke: null, strokeWidth: 0, radius: 0, ellipse: true, opacity: 1 });
-  const bw = d * 0.56;
-  const bh = d * 0.38;
-  const by = cy - bh / 2 + d * 0.04;
-  p.rect({ x: cx - bw / 2, y: by, w: bw, h: bh }, { fill: '#000000', stroke: null, strokeWidth: 0, radius: d * 0.05, ellipse: false, opacity: 1 });
-  p.rect({ x: cx - bw * 0.2, y: by - d * 0.08, w: bw * 0.4, h: d * 0.1 }, { fill: '#000000', stroke: null, strokeWidth: 0, radius: d * 0.02, ellipse: false, opacity: 1 });
-  const lens = bh * 0.55;
-  p.rect({ x: cx - lens / 2, y: by + (bh - lens) / 2, w: lens, h: lens }, { fill: '#FFFFFF', stroke: null, strokeWidth: 0, radius: 0, ellipse: true, opacity: 1 });
-  const k = d * 0.34;
-  p.line(cx - k, cy + k, cx + k, cy - k, d * 0.14, '#FFFFFF');
-  p.line(cx - k, cy + k, cx + k, cy - k, d * 0.07, '#000000');
 }
 
 // ---------------------------------------------------------------- images
@@ -453,7 +358,7 @@ export class ImageCache implements CanvasImages {
   }
 }
 
-/** Every font and weight a design's text uses (plus the no-photo tag's). */
+/** Every font and weight a design's text uses. */
 export function designFonts(design: LanyardDesign): { font: FontId; weight: FontWeight }[] {
   const seen = new Map<string, { font: FontId; weight: FontWeight }>();
   seen.set('nunito-sans:800', { font: 'nunito-sans', weight: 800 });

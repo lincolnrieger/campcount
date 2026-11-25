@@ -33,9 +33,7 @@ export async function createUser(opts: { platformAdmin?: boolean; name?: string 
 }
 
 export async function grant(userId: string, roleKey: string, eventId: string | null, activityId: string | null = null) {
-  await testEnv.DB.prepare(
-    `INSERT INTO assignments (id, user_id, role_id, event_id, activity_id, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
-  )
+  await testEnv.DB.prepare(`INSERT INTO assignments (id, user_id, role_id, event_id, activity_id, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
     .bind(crypto.randomUUID(), userId, `role_${roleKey}`, eventId, activityId, new Date().toISOString())
     .run();
 }
@@ -55,11 +53,7 @@ export async function createEvent(createdBy: string, overrides: Partial<{ status
 export async function createActivity(eventId: string, name = 'Kayaking') {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  await testEnv.DB.prepare(
-    `INSERT INTO activities (id, event_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
-  )
-    .bind(id, eventId, name, now, now)
-    .run();
+  await testEnv.DB.prepare(`INSERT INTO activities (id, event_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`).bind(id, eventId, name, now, now).run();
   return id;
 }
 
@@ -106,3 +100,30 @@ export async function createRole(key: string, permissions: string[], scope: 'eve
 export const vaultDb = () => withVault(testEnv.DB, testEnv);
 /** The keyed hash the app uses to find someone by participant ID. */
 export const keyFor = (participantId: string) => participantKey(testEnv, participantId);
+
+export interface PersonRow {
+  participantId?: string | null;
+  firstName: string;
+  lastName?: string;
+  /** youth or adult. */
+  kind?: string;
+  /** Anything else on a test's row is ignored: only the above is kept. */
+  [other: string]: unknown;
+}
+
+/**
+ * Put people on an event the way Add person does (name, participant ID and
+ * role, nothing else). Returns the first failed response, or the last one.
+ */
+export async function addPeople(eventId: string, cookie: string, rows: PersonRow[]): Promise<Response> {
+  let last: Response | null = null;
+  for (const r of rows) {
+    const res = await api(`/events/${eventId}/registrations`, {
+      cookie,
+      body: { firstName: r.firstName, lastName: r.lastName ?? '', participantId: r.participantId ?? null, kind: r.kind ?? 'youth' },
+    });
+    if (res.status !== 201) return res;
+    last = res;
+  }
+  return last ?? new Response(null, { status: 201 });
+}

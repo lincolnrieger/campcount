@@ -7,20 +7,18 @@ read it.
 
 ## About participants and leaders
 
+Only three things are kept about a person: their name, their participant ID
+and their role.
+
 | Data | Why it's kept | Stored | Deleted after |
 |---|---|---|---|
 | First name (or initial) | Rosters, lanyards, scanning | Encrypted | 2 years |
 | Last name, initial, or nothing | Rosters, lanyards | Encrypted | 2 years |
-| Participant ID (made up if the file has none) | Matching people across imports; typed code on the lanyard | Encrypted, plus a keyed hash for lookups | 2 years |
-| Group | Rosters and reports | Encrypted | 2 years |
-| Level, and whether that counts as youth or adult | Lanyard colour, youth totals | Level encrypted | 2 years |
+| Participant ID (made up if they have none) | Telling people apart; typed code on the lanyard | Encrypted, plus a keyed hash for lookups | 2 years |
+| Role: participant or leader | Lanyard word and colour, totals | Plain | 2 years |
 | Status (active or withdrawn) | Running the camp | Plain | 2 years |
-| Photo consent (Yes or No) | Marking lanyards so photographers know | Plain | **90 days** |
-| Dietary needs and allergies (type, item, anaphylactic yes/no, short note) | Meals | Item and note encrypted | **90 days** |
-| Whether their dietary needs have been reviewed (yes or no) | Not asking again on the next import | Plain | **90 days** |
-| Leader's car registration (if they give one at the gate) | Contacting the owner about their car | Encrypted | **90 days** |
 | Lanyard QR code and typed code | Scanning | Encrypted | Code disabled at 90 days, deleted at 2 years |
-| Scans: who, where, when, in or out, which phone or staff member | Attendance and whereabouts | Personal | 2 years |
+| Scans: who, where, when, in or out, which phone or staff member | Check-in and check-out | Personal | 2 years |
 | Activity bookings, team members, duty rosters | Running the camp | Personal | 2 years |
 | Side Quest: who scanned whom (optional game) | The game | Personal | **90 days** |
 
@@ -37,26 +35,25 @@ After 2 years, only anonymous totals are kept (for example "312 attended").
 
 ## About the camp (no personal information)
 
-Camp name, dates, location and contact email, activities, meals and menus,
-scanning devices, lanyard designs and images, and import counts (numbers
-only, never the file).
+Camp name, dates, location and contact email, activities, meals and menus
+(with each food item's allergens), scanning devices, and lanyard designs and
+images.
 
 ## Audit log
 
-What was done, by whom and when: imports, exports, changes, sign-ins and
-deletions. It holds IDs and counts only, never names, dietary details or
-contact details. It can't be changed and is kept for 7 years.
+What was done, by whom and when: exports, changes, sign-ins and deletions.
+It holds IDs and counts only, never names or contact details. It can't be
+changed and is kept for 7 years.
 
 ## Never stored
 
+- Group, level or section
+- Dietary needs, allergies, medical conditions or medication
+- Photo consent
+- Car registrations
 - Home addresses, phone numbers or emails of participants
 - Dates of birth, Medicare numbers, guardian or emergency contacts
-- Medical conditions, medication or swimming ability
-- Free-text medical or dietary notes, or any hash or fingerprint made from them
-- Preferred names, positions or any other spreadsheet column
-- The imported spreadsheet (it's read on the importing device and never uploaded)
+- Spreadsheets or exports from other systems (there's no import: people are
+  added one at a time)
 - Device locations
 - IP addresses (Cloudflare's own request logs see them, but CampCount doesn't store them)
-
-Nothing from an import is kept on the importing device either: columns that
-aren't sent are left in the spreadsheet.

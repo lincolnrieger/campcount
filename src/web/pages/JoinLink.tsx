@@ -17,8 +17,8 @@ interface LinkInfo {
 /**
  * A link for everyone, emailed before camp (/p/<code>). Type a participant
  * number and your camp page opens, with only the parts the link switches on.
- * Anyone could type a number, so the page leaves out surnames, groups,
- * team-mates and dietary details. The page is kept for this browser tab
+ * Anyone could type a number, so the page leaves out surnames and
+ * team-mates. The page is kept for this browser tab
  * only, so a refresh doesn't ask again but a shared computer forgets.
  */
 export function JoinLink() {

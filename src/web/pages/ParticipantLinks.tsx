@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ApiFailure, api } from '../api';
 import { Banner, Button, EmptyState, Icon, LoadError, Loading, PageHeader, SearchField, SkeletonRows, Toolbar, useToast } from '../ui';
 import { matchesSearch } from '../../shared/search';
+import { ROLE_LABEL } from '../../shared/roles';
 import { useEvent } from './EventLayout';
 import { csvCell } from '../../shared/csv';
 
@@ -9,8 +10,6 @@ interface ParticipantLink {
   registrationId: string;
   name: string;
   kind: 'youth' | 'adult';
-  level: string;
-  groupName: string;
   shortCode: string;
   link: string;
 }
@@ -37,8 +36,7 @@ export function ParticipantLinks() {
   const [missing, setMissing] = useState(0);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [query, setQuery] = useState('');
-  const [group, setGroup] = useState('');
-  const [level, setLevel] = useState('');
+  const [role, setRole] = useState('');
   const back = { to: `${base}/links`, label: 'Links' };
 
   const load = useCallback(async () => {
@@ -59,9 +57,8 @@ export function ParticipantLinks() {
     void load();
   }, [load]);
 
-  const groups = useMemo(() => [...new Set((links ?? []).map((l) => l.groupName))].filter(Boolean).sort(), [links]);
-  const levels = useMemo(() => [...new Set((links ?? []).map((l) => l.level))].filter(Boolean).sort(), [links]);
-  const shown = (links ?? []).filter((l) => (!group || l.groupName === group) && (!level || l.level === level) && matchesSearch(query, l.name, l.groupName, l.shortCode));
+  const roles = useMemo(() => [...new Set((links ?? []).map((l) => l.kind))].sort(), [links]);
+  const shown = (links ?? []).filter((l) => (!role || l.kind === role) && matchesSearch(query, l.name, l.shortCode));
 
   async function copy(text: string, what: string) {
     try {
@@ -83,11 +80,11 @@ export function ParticipantLinks() {
   }
 
   function download() {
-    const slug = event.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    downloadCsv(`${slug}-participant-links.csv`, [
-      ['Name', 'Group', 'Level', 'Youth or adult', 'Lanyard code', 'Link'],
-      ...shown.map((l) => [l.name, l.groupName, l.level, l.kind === 'adult' ? 'Adult' : 'Youth', l.shortCode, l.link]),
-    ]);
+    const slug = event.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+    downloadCsv(`${slug}-participant-links.csv`, [['Name', 'Role', 'Lanyard code', 'Link'], ...shown.map((l) => [l.name, ROLE_LABEL[l.kind], l.shortCode, l.link])]);
   }
 
   const header = (
@@ -107,7 +104,7 @@ export function ParticipantLinks() {
       }
       menu={
         links && links.length > 0
-          ? [{ label: `Copy all ${shown.length} as text`, onSelect: () => void copy(shown.map((l) => `${l.name}${l.groupName ? ` (${l.groupName})` : ''}: ${l.link}`).join('\n'), 'Links') }]
+          ? [{ label: `Copy all ${shown.length} as text`, onSelect: () => void copy(shown.map((l) => `${l.name}: ${l.link}`).join('\n'), 'Links') }]
           : undefined
       }
       menuLabel="More link actions"
@@ -131,18 +128,23 @@ export function ParticipantLinks() {
       </>
     );
 
-  const filtered = Boolean(query || group || level);
+  const filtered = Boolean(query || role);
   return (
     <>
       {header}
       <div className="sections plinks">
         <div className="banners">
           <Banner tone="warning">
-            Send each link only to that person or their family{' '}
-            <span className="meta">· anyone with it can book and cancel for them. A new lanyard makes a new link.</span>
+            Send each link only to that person or their family <span className="meta">· anyone with it can book and cancel for them. A new lanyard makes a new link.</span>
           </Banner>
           {missing > 0 && (
-            <Banner action={<Button small onAction={issueMissing}>Make {missing} missing link{missing === 1 ? '' : 's'}</Button>}>
+            <Banner
+              action={
+                <Button small onAction={issueMissing}>
+                  Make {missing} missing link{missing === 1 ? '' : 's'}
+                </Button>
+              }
+            >
               {missing} {missing === 1 ? 'person has' : 'people have'} no link yet <span className="meta">· links come with lanyards; print those later</span>
             </Banner>
           )}
@@ -152,23 +154,13 @@ export function ParticipantLinks() {
         ) : (
           <section className="section" aria-label="Links">
             <Toolbar sticky label="Find links">
-              <SearchField id="links-q" label="Search" placeholder="Name, group or code" value={query} onChange={setQuery} slash />
-              {groups.length > 1 && (
-                <select className="select" aria-label="Group" value={group} onChange={(e) => setGroup(e.target.value)}>
-                  <option value="">All groups</option>
-                  {groups.map((g) => (
-                    <option key={g} value={g}>
-                      {g}
-                    </option>
-                  ))}
-                </select>
-              )}
-              {levels.length > 1 && (
-                <select className="select" aria-label="Level" value={level} onChange={(e) => setLevel(e.target.value)}>
-                  <option value="">All levels</option>
-                  {levels.map((g) => (
-                    <option key={g} value={g}>
-                      {g}
+              <SearchField id="links-q" label="Search" placeholder="Name or code" value={query} onChange={setQuery} slash />
+              {roles.length > 1 && (
+                <select className="select" aria-label="Role" value={role} onChange={(e) => setRole(e.target.value)}>
+                  <option value="">Everyone</option>
+                  {roles.map((r) => (
+                    <option key={r} value={r}>
+                      {ROLE_LABEL[r]}
                     </option>
                   ))}
                 </select>
@@ -179,8 +171,7 @@ export function ParticipantLinks() {
                   kind="ghost"
                   onClick={() => {
                     setQuery('');
-                    setGroup('');
-                    setLevel('');
+                    setRole('');
                   }}
                 >
                   Clear
@@ -193,14 +184,14 @@ export function ParticipantLinks() {
               </div>
             </Toolbar>
             {shown.length === 0 ? (
-              <EmptyState title="No one matches">Try another name or group.</EmptyState>
+              <EmptyState title="No one matches">Try another name.</EmptyState>
             ) : (
               <div className="table-wrap">
                 <table className="table links-table">
                   <thead>
                     <tr>
                       <th scope="col">Name</th>
-                      <th scope="col">Group</th>
+                      <th scope="col">Role</th>
                       <th scope="col">Link</th>
                       <th scope="col">
                         <span className="visually-hidden">Copy</span>
@@ -212,12 +203,9 @@ export function ParticipantLinks() {
                       <tr key={l.registrationId}>
                         <td>
                           <strong>{l.name}</strong>
-                          <div className="meta num">
-                            {l.shortCode}
-                            {l.level ? ` · ${l.level}` : ''}
-                          </div>
+                          <div className="meta num">{l.shortCode}</div>
                         </td>
-                        <td>{l.groupName}</td>
+                        <td>{ROLE_LABEL[l.kind]}</td>
                         <td className="link-cell">
                           <input className="input input-link" readOnly value={l.link} aria-label={`Link for ${l.name}`} onFocus={(e) => e.target.select()} />
                         </td>

@@ -44,12 +44,12 @@ export function fontWeight(font: FontId, wanted: FontWeight): FontWeight {
   return ws.reduce((best, w) => (Math.abs(w - wanted) < Math.abs(best - wanted) ? w : best), ws[0]!) as FontWeight;
 }
 
-/** Fields that fill in per person. Typed into text as {name}, {level}… */
+/** Fields that fill in per person. Typed into text as {name}, {level}… ({level} is their role.) */
 export const FIELDS = {
   name: { label: 'Name', sample: 'Sam Taylor' },
   first: { label: 'First name', sample: 'Sam' },
   last: { label: 'Last name', sample: 'Taylor' },
-  level: { label: 'Level', sample: 'Participant' },
+  level: { label: 'Role', sample: 'Participant' },
   code: { label: 'Lanyard code', sample: '1234567' },
   camp: { label: 'Camp name', sample: 'Summer Camp' },
 } as const;
@@ -57,9 +57,8 @@ export type FieldId = keyof typeof FIELDS;
 export const FIELD_IDS = Object.keys(FIELDS) as FieldId[];
 
 /**
- * A colour: a hex value, or one that follows the person's level (the
- * camp's colour for it in Settings › Levels), or the text colour that reads
- * on it.
+ * A colour: a hex value, or one that follows the person's role
+ * (participant or leader), or the text colour that reads on it.
  */
 export const LEVEL_COLOUR = 'level';
 export const LEVEL_TEXT_COLOUR = 'level-text';
@@ -121,7 +120,7 @@ export const imageElement = z.strictObject({
 /** The person's QR code. Always black on a white quiet zone, so every scanner reads it. */
 export const qrElement = z.strictObject({ ...base, type: z.literal('qr') });
 
-/** Where the no-photo mark (red circle, crossed-out camera or words) goes, for people without photo consent. */
+/** No longer drawn (photo consent isn't kept). Older designs may still have one; it prints nothing. */
 export const markerElement = z.strictObject({ ...base, type: z.literal('marker') });
 
 export const designElement = z.discriminatedUnion('type', [textElement, shapeElement, imageElement, qrElement, markerElement]);
@@ -162,26 +161,25 @@ export function designAssetIds(d: LanyardDesign): string[] {
 // ---------------------------------------------------------------- per-person values
 
 /**
- * Fallback card colours, for when a card has no camp style (each camp sets
- * its own per level in Settings › Levels). The level word is always printed
- * too, so colour is never the only signal.
+ * Card colours for each role. The role word is always printed too, so
+ * colour is never the only signal.
  */
 export const LEVEL_COLOURS: Record<string, { bg: string; fg: string }> = {
   Participant: { bg: '#1F6F8B', fg: '#FFFFFF' },
   // Navy, RGB 38 38 97.
   Leader: { bg: '#262661', fg: '#FFFFFF' },
 };
-/** Anyone not in a level: no word on the card, and a neutral band. */
+/** Anything else: a neutral band. */
 const NO_LEVEL = { bg: '#5A6770', fg: '#FFFFFF' };
 
 export type LevelWord = 'Participant' | 'Leader' | '';
 
-/** The fallback word for someone's level on a card, when the camp's own word isn't known: Leader for adults, Participant otherwise. */
-export function levelWord(kind: 'youth' | 'adult', _level: string): LevelWord {
+/** The word for someone's role on a card: Leader for adults, Participant otherwise. */
+export function levelWord(kind: 'youth' | 'adult'): LevelWord {
   return kind === 'adult' ? 'Leader' : 'Participant';
 }
 
-/** A level's card colours (the neutral band for anyone without a level). */
+/** A role's card colours. */
 export function levelColours(word: string): { bg: string; fg: string } {
   return LEVEL_COLOURS[word] ?? NO_LEVEL;
 }
@@ -192,12 +190,9 @@ export interface CardPerson {
   firstName?: string;
   lastName?: string;
   kind: 'youth' | 'adult';
-  level: string;
-  groupName: string;
   shortCode: string;
   qr: string;
-  noPhotos?: boolean;
-  /** The camp's word and colours for their level (Settings › Levels). */
+  /** The word and colours for their role. */
   style?: { word: string; bg: string; fg: string };
 }
 
@@ -210,7 +205,7 @@ export function fillFields(text: string, person: CardPerson, campName: string): 
     last: person.lastName ?? (parts.length > 1 ? parts.slice(1).join(' ') : ''),
     // Cards no longer show the group: {group} on an older design prints nothing.
     group: '',
-    level: person.style ? person.style.word : levelWord(person.kind, person.level),
+    level: person.style ? person.style.word : levelWord(person.kind),
     code: person.shortCode,
     camp: campName,
   };
@@ -219,7 +214,7 @@ export function fillFields(text: string, person: CardPerson, campName: string): 
 
 export function resolveColour(c: Colour, person: CardPerson | null): string {
   if (c !== LEVEL_COLOUR && c !== LEVEL_TEXT_COLOUR) return c;
-  const s = person?.style ?? (person ? levelColours(levelWord(person.kind, person.level)) : LEVEL_COLOURS.Participant!);
+  const s = person?.style ?? (person ? levelColours(levelWord(person.kind)) : LEVEL_COLOURS.Participant!);
   return c === LEVEL_COLOUR ? s.bg : s.fg;
 }
 
@@ -232,7 +227,7 @@ export function newId(prefix = 'el'): string {
 }
 
 /**
- * The design every camp starts from: the level band, full name, QR code
+ * The design every camp starts from: the role band, full name, QR code
  * and typed code on the front; "if found" on the back. Laid out for the
  * chosen size and orientation.
  */
@@ -243,31 +238,150 @@ export function starterDesign(format: CardFormat = 'cr80', orientation: Orientat
   const id = (n: string) => `${n}-${format}-${orientation}`;
   const front: DesignElement[] = [];
   const bandH = portrait ? h * 0.15 : h * 0.2;
-  front.push({ id: id('band'), name: 'Level band', type: 'shape', shape: 'rect', x: 0, y: 0, w, h: bandH, fill: LEVEL_COLOUR, stroke: 'none', strokeWidth: 0, radius: 0, opacity: 1 });
-  front.push({ id: id('level'), name: 'Level', type: 'text', text: '{level}', x: m, y: 0, w: w - 2 * m - bandH, h: bandH, font: 'nunito-sans', size: portrait ? (format === 'large' ? 22 : 13) : 12, weight: 800, colour: LEVEL_TEXT_COLOUR, align: 'left', wrap: false, uppercase: true });
-  front.push({ id: id('marker'), name: 'No-photo mark', type: 'marker', x: w - m - bandH * 0.7, y: bandH * 0.15, w: bandH * 0.7, h: bandH * 0.7 });
+  front.push({
+    id: id('band'),
+    name: 'Role band',
+    type: 'shape',
+    shape: 'rect',
+    x: 0,
+    y: 0,
+    w,
+    h: bandH,
+    fill: LEVEL_COLOUR,
+    stroke: 'none',
+    strokeWidth: 0,
+    radius: 0,
+    opacity: 1,
+  });
+  front.push({
+    id: id('level'),
+    name: 'Role',
+    type: 'text',
+    text: '{level}',
+    x: m,
+    y: 0,
+    w: w - 2 * m,
+    h: bandH,
+    font: 'nunito-sans',
+    size: portrait ? (format === 'large' ? 22 : 13) : 12,
+    weight: 800,
+    colour: LEVEL_TEXT_COLOUR,
+    align: 'left',
+    wrap: false,
+    uppercase: true,
+  });
   if (portrait) {
     const nameY = bandH + (format === 'large' ? 6 : 3.5);
     // Two lines' room, so a long preferred name and surname wrap rather than shrink.
     const nameH = format === 'large' ? 20 : 12;
-    front.push({ id: id('name'), name: 'Name', type: 'text', text: '{name}', x: m, y: nameY, w: w - 2 * m, h: nameH, font: 'nunito-sans', size: format === 'large' ? 26 : 15, weight: 800, colour: '#16201B', align: 'center', wrap: true });
+    front.push({
+      id: id('name'),
+      name: 'Name',
+      type: 'text',
+      text: '{name}',
+      x: m,
+      y: nameY,
+      w: w - 2 * m,
+      h: nameH,
+      font: 'nunito-sans',
+      size: format === 'large' ? 26 : 15,
+      weight: 800,
+      colour: '#16201B',
+      align: 'center',
+      wrap: true,
+    });
     const qrSide = Math.min(w - 2 * m - 6, h * 0.45);
     const codeH = format === 'large' ? 7 : 5;
     const qrY = h - m - codeH - qrSide - 1;
     front.push({ id: id('qr'), name: 'QR code', type: 'qr', x: (w - qrSide) / 2, y: qrY, w: qrSide, h: qrSide });
-    front.push({ id: id('code'), name: 'Lanyard code', type: 'text', text: '{code}', x: m, y: h - m - codeH, w: w - 2 * m, h: codeH, font: 'nunito-sans', size: format === 'large' ? 13 : 9, weight: 700, colour: '#16201B', align: 'center', wrap: false });
+    front.push({
+      id: id('code'),
+      name: 'Lanyard code',
+      type: 'text',
+      text: '{code}',
+      x: m,
+      y: h - m - codeH,
+      w: w - 2 * m,
+      h: codeH,
+      font: 'nunito-sans',
+      size: format === 'large' ? 13 : 9,
+      weight: 700,
+      colour: '#16201B',
+      align: 'center',
+      wrap: false,
+    });
   } else {
     const qrSide = h - bandH - 2 * m - 1;
     const qrX = w - m - qrSide;
     const top = bandH + m;
     const textW = qrX - 2 * m;
-    front.push({ id: id('name'), name: 'Name', type: 'text', text: '{name}', x: m, y: top, w: textW, h: 18, font: 'nunito-sans', size: 15, weight: 800, colour: '#16201B', align: 'left', wrap: true });
-    front.push({ id: id('code'), name: 'Lanyard code', type: 'text', text: '{code}', x: m, y: h - m - 5, w: textW, h: 5, font: 'nunito-sans', size: 9, weight: 700, colour: '#16201B', align: 'left', wrap: false });
+    front.push({
+      id: id('name'),
+      name: 'Name',
+      type: 'text',
+      text: '{name}',
+      x: m,
+      y: top,
+      w: textW,
+      h: 18,
+      font: 'nunito-sans',
+      size: 15,
+      weight: 800,
+      colour: '#16201B',
+      align: 'left',
+      wrap: true,
+    });
+    front.push({
+      id: id('code'),
+      name: 'Lanyard code',
+      type: 'text',
+      text: '{code}',
+      x: m,
+      y: h - m - 5,
+      w: textW,
+      h: 5,
+      font: 'nunito-sans',
+      size: 9,
+      weight: 700,
+      colour: '#16201B',
+      align: 'left',
+      wrap: false,
+    });
     front.push({ id: id('qr'), name: 'QR code', type: 'qr', x: qrX, y: top, w: qrSide, h: qrSide });
   }
   const back: DesignElement[] = [
-    { id: id('back-camp'), name: 'Camp name', type: 'text', text: '{camp}', x: m, y: h * 0.32, w: w - 2 * m, h: portrait ? 14 : 10, font: 'nunito-sans', size: format === 'large' ? 20 : 13, weight: 800, colour: '#16201B', align: 'center', wrap: true },
-    { id: id('back-note'), name: 'If found', type: 'text', text: 'If found, please hand this to a camp leader.', x: m, y: h - m - (portrait ? 12 : 8), w: w - 2 * m, h: portrait ? 10 : 6, font: 'nunito-sans', size: format === 'large' ? 10 : 7, weight: 400, colour: '#45514C', align: 'center', wrap: true },
+    {
+      id: id('back-camp'),
+      name: 'Camp name',
+      type: 'text',
+      text: '{camp}',
+      x: m,
+      y: h * 0.32,
+      w: w - 2 * m,
+      h: portrait ? 14 : 10,
+      font: 'nunito-sans',
+      size: format === 'large' ? 20 : 13,
+      weight: 800,
+      colour: '#16201B',
+      align: 'center',
+      wrap: true,
+    },
+    {
+      id: id('back-note'),
+      name: 'If found',
+      type: 'text',
+      text: 'If found, please hand this to a camp leader.',
+      x: m,
+      y: h - m - (portrait ? 12 : 8),
+      w: w - 2 * m,
+      h: portrait ? 10 : 6,
+      font: 'nunito-sans',
+      size: format === 'large' ? 10 : 7,
+      weight: 400,
+      colour: '#45514C',
+      align: 'center',
+      wrap: true,
+    },
   ];
   return { version: 1, format, orientation, front: { background: '#FFFFFF', elements: front }, back: { background: '#FFFFFF', elements: back } };
 }
@@ -284,7 +398,8 @@ export function designWarnings(d: LanyardDesign): { level: 'error' | 'warning'; 
   if (qrs.length === 0) out.push({ level: 'error', message: 'Add a QR code. Scanners need it to know who this is.' });
   for (const { side, e } of qrs) {
     const s = Math.min(e.w, e.h);
-    if (s < 15) out.push({ level: 'warning', message: `The QR code on the ${side} is ${s.toFixed(0)} mm. Make it at least 15 mm so phones read it quickly.`, side, elementId: e.id });
+    if (s < 15)
+      out.push({ level: 'warning', message: `The QR code on the ${side} is ${s.toFixed(0)} mm. Make it at least 15 mm so phones read it quickly.`, side, elementId: e.id });
   }
   // Anything stacked on top of a QR code that overlaps it stops phones reading it.
   for (const side of ['front', 'back'] as const) {
@@ -293,7 +408,13 @@ export function designWarnings(d: LanyardDesign): { level: 'error' | 'warning'; 
       if (qr.type !== 'qr') return;
       for (const e of list.slice(i + 1)) {
         const overlap = e.x < qr.x + qr.w && e.x + e.w > qr.x && e.y < qr.y + qr.h && e.y + e.h > qr.y;
-        if (overlap) out.push({ level: 'error', message: `${e.name ?? 'Something'} covers part of the QR code on the ${side}. Move it, or send it behind the QR code.`, side, elementId: e.id });
+        if (overlap)
+          out.push({
+            level: 'error',
+            message: `${e.name ?? 'Something'} covers part of the QR code on the ${side}. Move it, or send it behind the QR code.`,
+            side,
+            elementId: e.id,
+          });
       }
     });
   }

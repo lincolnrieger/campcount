@@ -149,7 +149,16 @@ export function Camps() {
         }
       />
       {events.length === 0 ? (
-        <EmptyState title="No camps yet" actions={canCreate && <ButtonLink to="/camps/new" kind="primary">Create camp</ButtonLink>}>
+        <EmptyState
+          title="No camps yet"
+          actions={
+            canCreate && (
+              <ButtonLink to="/camps/new" kind="primary">
+                Create camp
+              </ButtonLink>
+            )
+          }
+        >
           Create a camp, then add its staff.
         </EmptyState>
       ) : (
@@ -345,7 +354,11 @@ function BrandingFields({
               PNG, JPEG or WebP, up to 300 KB. Square is best.
             </span>
             <div className="logo-input">
-              {preview ? <img src={preview} alt="Logo preview" width={56} height={56} className="camp-mark" /> : <CampMark event={{ name: value.name || 'C', logoUrl: null, brandColor: value.brandColor }} size={56} />}
+              {preview ? (
+                <img src={preview} alt="Logo preview" width={56} height={56} className="camp-mark" />
+              ) : (
+                <CampMark event={{ name: value.name || 'C', logoUrl: null, brandColor: value.brandColor }} size={56} />
+              )}
               <input
                 id="camp-logo"
                 type="file"
@@ -405,7 +418,7 @@ export function NewCamp() {
   const [startsOn, setStartsOn] = useState('');
   const [endsOn, setEndsOn] = useState('');
   const [location, setLocation] = useState('');
-  const [features, setFeatures] = useState<EventFeatures>({ activities: true, meals: true, site: true, dietary: true, photo: false, selfSignup: false, sideQuest: false });
+  const [features, setFeatures] = useState<EventFeatures>({ activities: true, meals: true, site: true, selfSignup: false, sideQuest: false });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
 
@@ -444,7 +457,12 @@ export function NewCamp() {
     <>
       <PageHeader title="Create camp" back={{ to: '/', label: 'Camps' }} />
       <form className="pf-form" onSubmit={submit} noValidate>
-        <ErrorSummary errors={Object.entries(errors).map(([k, m]) => ({ id: k === 'form' ? 'camp-name' : k === 'subdomain' ? 'camp-address' : k === 'brandColor' ? 'camp-colour' : k === 'name' ? 'camp-name' : `camp-${k}`, message: k === 'form' ? m : `${LABELS[k] ?? k}: ${m}` }))} />
+        <ErrorSummary
+          errors={Object.entries(errors).map(([k, m]) => ({
+            id: k === 'form' ? 'camp-name' : k === 'subdomain' ? 'camp-address' : k === 'brandColor' ? 'camp-colour' : k === 'name' ? 'camp-name' : `camp-${k}`,
+            message: k === 'form' ? m : `${LABELS[k] ?? k}: ${m}`,
+          }))}
+        />
         <div className="pf-split">
           <div className="pf-stack">
             <fieldset className="pf-panel">
@@ -547,8 +565,8 @@ export function CampPage() {
       title: `Delete ${e.name}?`,
       body: (
         <p>
-          Everything in this camp is deleted for good: its people, lanyards, scans, dietary records, activities, meals, stations, logo and address. Staff accounts
-          are kept but lose access. Download anything you need from Reports first. This can't be undone.
+          Everything in this camp is deleted for good: its people, lanyards, scans, activities, meals, stations, logo and address. Staff accounts are kept but lose access. Download
+          anything you need from Reports first. This can't be undone.
         </p>
       ),
       confirm: 'Delete camp',
@@ -567,7 +585,7 @@ export function CampPage() {
 
   const steps = [
     { label: 'Add staff', hint: 'Managers, scanners, leaders, meal team', path: 'settings/staff', icon: 'team' as const },
-    { label: 'Add people', hint: 'Import a spreadsheet or add one by one', path: 'people', icon: 'user' as const },
+    { label: 'Add people', hint: 'Add each person: name, participant ID and role', path: 'people', icon: 'user' as const },
     { label: 'Details and features', hint: 'Dates, location, notes, features', path: 'settings/event', icon: 'clipboard' as const },
   ];
 
@@ -600,7 +618,12 @@ export function CampPage() {
       />
       <div className="pf-split pf-split-wide">
         <form className="pf-form" onSubmit={save} noValidate aria-labelledby="branding-heading">
-          <ErrorSummary errors={Object.entries(errors).map(([k, m]) => ({ id: k === 'subdomain' ? 'camp-address' : k === 'brandColor' ? 'camp-colour' : 'camp-name', message: k === 'form' ? m : `${LABELS[k] ?? k}: ${m}` }))} />
+          <ErrorSummary
+            errors={Object.entries(errors).map(([k, m]) => ({
+              id: k === 'subdomain' ? 'camp-address' : k === 'brandColor' ? 'camp-colour' : 'camp-name',
+              message: k === 'form' ? m : `${LABELS[k] ?? k}: ${m}`,
+            }))}
+          />
           <section className="pf-panel">
             <h2 className="pf-panel-title" id="branding-heading">
               Address and branding
@@ -641,7 +664,9 @@ export function CampPage() {
               <li key={s.path} className="row row-link">
                 <Icon name={s.icon} />
                 <span className="row-main">
-                  <span className="row-title">{url ? <a href={eventSiteUrl(site.rootDomain, e.subdomain, `/${s.path}`)!}>{s.label}</a> : <Link to={`${fallback}/${s.path}`}>{s.label}</Link>}</span>
+                  <span className="row-title">
+                    {url ? <a href={eventSiteUrl(site.rootDomain, e.subdomain, `/${s.path}`)!}>{s.label}</a> : <Link to={`${fallback}/${s.path}`}>{s.label}</Link>}
+                  </span>
                   <span className="row-meta">{s.hint}</span>
                 </span>
                 <span className="row-chevron">

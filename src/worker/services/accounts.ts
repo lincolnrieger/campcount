@@ -5,7 +5,7 @@ import type { AuditActor } from './audit';
 
 /**
  * Delete an account completely. First every record that merely points at it
- * is let go: "created by" on camps, stations, dietary entries and imports
+ * is let go: "created by" on camps and stations
  * passes to the admin doing the deleting, and "added by"/"removed by" on
  * staff assignments is cleared. Only scans can't be changed (they are the
  * camp's attendance record and are append-only), so an account that
@@ -22,7 +22,7 @@ export async function deleteAccount(env: Env, userId: string, actor: AuditActor)
     db.prepare(`UPDATE assignments SET revoked_by = NULL WHERE revoked_by = ?`).bind(userId),
   ];
   if (heir) {
-    for (const table of ['events', 'stations', 'dietary_entries', 'import_jobs']) {
+    for (const table of ['events', 'stations']) {
       // Table names come from this fixed list, never from input.
       release.push(db.prepare(`UPDATE ${table} SET created_by = ? WHERE created_by = ?`).bind(heir, userId));
     }
@@ -46,10 +46,12 @@ export async function deleteAccount(env: Env, userId: string, actor: AuditActor)
     db.prepare(`DELETE FROM login_challenges WHERE user_id = ?`).bind(userId),
     db.prepare(`DELETE FROM password_links WHERE user_id = ?`).bind(userId),
     db.prepare(`UPDATE assignments SET revoked_at = COALESCE(revoked_at, ?) WHERE user_id = ?`).bind(now, userId),
-    db.prepare(
-      `UPDATE users SET email = ?, display_name = 'Deleted account', status = 'disabled', password_hash = NULL,
+    db
+      .prepare(
+        `UPDATE users SET email = ?, display_name = 'Deleted account', status = 'disabled', password_hash = NULL,
               email_verified_at = NULL, updated_at = ? WHERE id = ?`,
-    ).bind(`deleted-${userId}@deleted.invalid`, now, userId),
+      )
+      .bind(`deleted-${userId}@deleted.invalid`, now, userId),
     auditStatement(db, { actor, action: 'user.anonymise', targetType: 'user', targetId: userId }),
   ]);
   return 'anonymised';

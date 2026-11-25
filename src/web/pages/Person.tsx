@@ -1,17 +1,15 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
-import type { DietaryEntryInput } from '../../shared/schemas';
-import { kindForLevel, levelStyle } from '../../shared/levels';
+import { ROLE_LABEL, roleStyle } from '../../shared/roles';
 import { dayInZone, dayLabel, timeInZone, timeRange } from '../../shared/time';
 import { ApiFailure, api } from '../api';
-import { DietaryEditor, describeEntry } from '../components/DietaryEditor';
 import type { CardPerson } from '../../shared/lanyardDesign';
 import type { Where } from '../model';
 import { scanVerb } from '../model';
 import { recordByHand } from '../scan/manual';
 import { useApi } from '../useApi';
-import { Badge, Banner, Button, ButtonLink, Field, Icon, InfoTip, LoadError, Loading, Menu, PageHeader, Section, Sheet, SkeletonHeader, SkeletonRows, useConfirm, useToast } from '../ui';
+import { Badge, Banner, Button, ButtonLink, Field, Icon, LoadError, Loading, Menu, PageHeader, Section, SkeletonHeader, SkeletonRows, useConfirm, useToast } from '../ui';
 import type { MenuItem, Tone } from '../ui';
 import { useEvent } from './EventLayout';
 
@@ -23,15 +21,10 @@ interface PersonData {
     lastName: string;
     displayName: string;
     kind: 'youth' | 'adult';
-    carRego?: string | null;
-    level: string;
-    groupName: string;
     status: 'active' | 'withdrawn';
     shortCode: string | null;
-    photoConsent?: 'yes' | 'no';
-    dietary?: DietaryEntryInput[];
   };
-  can: { edit: boolean; editDietary: boolean; cards: boolean };
+  can: { edit: boolean; cards: boolean };
   where: Where | null;
   bookings: { activityId: string; name: string; startsAt: string | null; endsAt: string | null; selfBooked: boolean }[];
   history: { id: string; at: string; type: 'activity' | 'meal' | 'site'; place: string; direction: 'in' | 'out'; method: string; outcome: string; message: string; by: string }[];
@@ -78,7 +71,7 @@ function RightNow({ where, tz }: { where: Where; tz: string }) {
   );
 }
 
-/** One person on the event: where they are now, their needs, their activities and their history. */
+/** One person on the event: where they are now, their activities and their history. */
 export function Person() {
   const { event, can, base } = useEvent();
   const { registrationId } = useParams();
@@ -88,7 +81,6 @@ export function Person() {
   const confirm = useConfirm();
   const path = `/events/${event.id}/registrations/${registrationId}`;
   const { data, error, loading, reload } = useApi<PersonData>(path);
-  const [editingDiet, setEditingDiet] = useState<DietaryEntryInput[] | null>(null);
   const fromHome = (location.state as { from?: string } | null)?.from === 'home';
   const back = fromHome ? { to: base || '/', label: 'Home' } : { to: `${base}/people`, label: 'People' };
 
@@ -113,7 +105,6 @@ export function Person() {
   const r = data.registration;
   const fullName = `${r.firstName} ${r.lastName}`.trim();
   const tz = event.timezone;
-  const allergy = r.dietary?.some((d) => d.category === 'allergy');
   const canMark = event.status === 'open' && event.features.site && can('site.scan') && data.where?.site && r.status === 'active';
   const leaving = data.where?.site === 'on';
 
@@ -134,9 +125,13 @@ export function Person() {
       const card = res.cards[0];
       if (!card) return;
       // The camp's own design, both sides, one card per page.
-      const [{ fetchDesign }, { buildPrintPdf }, { ImageCache }] = await Promise.all([import('../lanyards/useDesign'), import('../lanyards/printPdf'), import('../lanyards/render')]);
+      const [{ fetchDesign }, { buildPrintPdf }, { ImageCache }] = await Promise.all([
+        import('../lanyards/useDesign'),
+        import('../lanyards/printPdf'),
+        import('../lanyards/render'),
+      ]);
       const { design } = await fetchDesign(event.id);
-      const bytes = await buildPrintPdf(design, [card], new ImageCache(event.id), { campName: event.name, marker: event.lanyard, layout: 'cards', sides: 'both', cutLines: false });
+      const bytes = await buildPrintPdf(design, [card], new ImageCache(event.id), { campName: event.name, layout: 'cards', sides: 'both', cutLines: false });
       const url = URL.createObjectURL(new Blob([bytes.slice()], { type: 'application/pdf' }));
       const a = document.createElement('a');
       a.href = url;
@@ -220,12 +215,7 @@ export function Person() {
         const scans = data.history.length;
         const ok = await confirm({
           title: `Delete ${fullName}?`,
-          body: (
-            <p>
-              Their lanyard, dietary needs{scans ? ` and ${scans} scan${scans === 1 ? '' : 's'}` : ''} are deleted too. This can't be undone. To keep the records, withdraw them
-              instead.
-            </p>
-          ),
+          body: <p>Their lanyard{scans ? ` and ${scans} scan${scans === 1 ? '' : 's'}` : ''} are deleted too. This can't be undone. To keep the records, withdraw them instead.</p>,
           confirm: 'Delete person',
           danger: true,
         });
@@ -247,7 +237,6 @@ export function Person() {
     const day = new Date(h.at).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: tz });
     days.set(day, [...(days.get(day) ?? []), h]);
   }
-  const anaphylactic = r.dietary?.some((d) => d.category === 'allergy' && d.severity === 'anaphylactic');
 
   return (
     <>
@@ -256,10 +245,8 @@ export function Person() {
         back={back}
         summary={
           <>
-            <span>{[r.level, r.groupName].filter(Boolean).join(' · ')}</span>
+            <span>{ROLE_LABEL[r.kind]}</span>
             {r.status === 'withdrawn' && <Badge tone="error">Withdrawn</Badge>}
-            {r.photoConsent === 'no' && <Badge tone="error">No photos</Badge>}
-            {allergy && <Badge tone="error">{anaphylactic ? 'Anaphylactic' : 'Allergy'}</Badge>}
           </>
         }
         primary={
@@ -296,33 +283,6 @@ export function Person() {
             <section className="panel person-now" aria-label="Right now">
               <RightNow where={data.where} tz={tz} />
             </section>
-          )}
-
-          {r.dietary && (
-            <Section
-              title="Dietary needs"
-              id="diet"
-              actions={
-                data.can.editDietary && (
-                  <Button small kind="ghost" onClick={() => setEditingDiet(r.dietary ?? [])}>
-                    Edit
-                  </Button>
-                )
-              }
-            >
-              {r.dietary.length === 0 ? (
-                <p className="meta">None recorded.</p>
-              ) : (
-                <ul className="list">
-                  {r.dietary.map((d, i) => (
-                    <li key={i} className="row person-row">
-                      {d.category === 'allergy' ? <Badge tone="error">{d.severity === 'anaphylactic' ? 'Anaphylactic' : 'Allergy'}</Badge> : null}
-                      <span className="row-main">{describeEntry(d)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Section>
           )}
 
           <Section title={data.bookings.length ? `Activities (${data.bookings.length})` : 'Activities'} id="acts">
@@ -421,7 +381,7 @@ export function Person() {
           <LanyardPanel
             eventId={event.id}
             registrationId={r.id}
-            level={r.level}
+            kind={r.kind}
             shortCode={r.shortCode}
             canShowQr={!!data.can.cards}
             actions={
@@ -464,25 +424,9 @@ export function Person() {
                 <dd>{r.participantId}</dd>
               </div>
               <div>
-                <dt>Level</dt>
-                <dd>{r.level}</dd>
+                <dt>Role</dt>
+                <dd>{ROLE_LABEL[r.kind]}</dd>
               </div>
-              {r.kind === 'adult' && (
-                <div>
-                  <dt>Car rego</dt>
-                  <dd>{r.carRego || <span className="meta">None given</span>}</dd>
-                </div>
-              )}
-              <div>
-                <dt>Group</dt>
-                <dd>{r.groupName || 'Not recorded'}</dd>
-              </div>
-              {r.photoConsent && (
-                <div>
-                  <dt>Photo consent</dt>
-                  <dd>{r.photoConsent === 'yes' ? 'Yes' : 'No'}</dd>
-                </div>
-              )}
               {data.can.cards && (
                 <div>
                   <dt>Lanyard</dt>
@@ -493,33 +437,6 @@ export function Person() {
           </Section>
         </div>
       </div>
-
-      <Sheet open={editingDiet !== null} title="Dietary needs" onClose={() => setEditingDiet(null)}>
-        {editingDiet !== null && (
-          <>
-            <DietaryEditor value={editingDiet} onChange={setEditingDiet} labelPrefix={fullName} />
-            <div className="btn-row sheet-actions">
-              <Button
-                kind="primary"
-                busyLabel="Saving…"
-                onAction={async () => {
-                  try {
-                    await api(`${path}/dietary`, { method: 'PUT', body: { entries: editingDiet } });
-                    setEditingDiet(null);
-                    toast('Dietary needs saved');
-                    await reload();
-                  } catch (err) {
-                    fail(err);
-                  }
-                }}
-              >
-                Save changes
-              </Button>
-              <Button onClick={() => setEditingDiet(null)}>Cancel</Button>
-            </div>
-          </>
-        )}
-      </Sheet>
     </>
   );
 }
@@ -563,15 +480,11 @@ export function PersonEdit() {
 
 function DetailsForm({ r, back, path, onSaved }: { r: PersonData['registration']; back: { to: string; label: string }; path: string; onSaved: () => void }) {
   const navigate = useNavigate();
-  const { event } = useEvent();
   const [f, setF] = useState({
     firstName: r.firstName,
     lastName: r.lastName,
     participantId: r.participantId,
-    level: r.level,
-    groupName: r.groupName,
-    photoConsent: r.photoConsent,
-    carRego: r.carRego ?? '',
+    kind: r.kind,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -602,7 +515,6 @@ function DetailsForm({ r, back, path, onSaved }: { r: PersonData['registration']
     }
   }
 
-  const adultLevel = kindForLevel(f.level, event.levels) === 'adult';
   return (
     <>
       <PageHeader title="Edit details" back={back} summary={name} />
@@ -625,38 +537,12 @@ function DetailsForm({ r, back, path, onSaved }: { r: PersonData['registration']
         <fieldset className="person-form-group">
           <legend className="person-form-legend">At camp</legend>
           <div className="person-form-grid">
-            <Field
-              id="p-level"
-              label="Level"
-              hint={
-                <>
-                  Counts as {adultLevel ? 'an adult' : 'youth'}{' '}
-                  <InfoTip label="Which levels count as youth">Set which levels count as youth in Settings › Levels.</InfoTip>
-                </>
-              }
-            >
-              <select className="select" value={f.level} onChange={set('level')}>
-                {(event.levels.some((x) => x.name === f.level) ? event.levels.map((x) => x.name) : [f.level, ...event.levels.map((x) => x.name)]).map((s) => (
-                  <option key={s}>{s}</option>
-                ))}
+            <Field id="p-role" label="Role">
+              <select className="select" value={f.kind} onChange={set('kind')}>
+                <option value="youth">{ROLE_LABEL.youth}</option>
+                <option value="adult">{ROLE_LABEL.adult}</option>
               </select>
             </Field>
-            <Field id="p-group" label="Group" optional>
-              <input className="input" value={f.groupName} onChange={set('groupName')} autoComplete="off" />
-            </Field>
-            {r.kind === 'adult' && (
-              <Field id="p-rego" label="Car rego" optional hint="Their car on site">
-                <input className="input" value={f.carRego} maxLength={20} onChange={set('carRego')} autoComplete="off" />
-              </Field>
-            )}
-            {f.photoConsent !== undefined && (
-              <Field id="p-photo" label="Photo consent">
-                <select className="select" value={f.photoConsent} onChange={set('photoConsent')}>
-                  <option value="yes">Yes</option>
-                  <option value="no">No</option>
-                </select>
-              </Field>
-            )}
           </div>
         </fieldset>
         <div className="btn-row form-actions">
@@ -671,27 +557,26 @@ function DetailsForm({ r, back, path, onSaved }: { r: PersonData['registration']
 }
 
 /**
- * Their level, as on their lanyard, and their lanyard's QR code on screen
+ * Their role, as on their lanyard, and their lanyard's QR code on screen
  * (to scan straight off this page). The QR is a live lanyard, so only people
  * who can print lanyards see it.
  */
 function LanyardPanel({
   eventId,
   registrationId,
-  level,
+  kind,
   shortCode,
   canShowQr,
   actions,
 }: {
   eventId: string;
   registrationId: string;
-  level: string;
+  kind: 'youth' | 'adult';
   shortCode: string | null;
   canShowQr: boolean;
   actions?: ReactNode;
 }) {
-  const { event } = useEvent();
-  const style = levelStyle(event.levels, level);
+  const style = roleStyle(kind);
   const [qr, setQr] = useState<boolean[][] | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -712,7 +597,7 @@ function LanyardPanel({
       live = false;
     };
   }, [eventId, registrationId, shortCode, canShowQr]);
-  const word = style.word || level;
+  const word = style.word;
   return (
     <Section title="Lanyard" id="lanyard" actions={actions}>
       <div className="panel person-lanyard">
@@ -720,7 +605,6 @@ function LanyardPanel({
           <span className="person-section" style={{ background: style.bg, color: style.fg }}>
             {word}
           </span>
-          {word.toLowerCase() !== level.toLowerCase() && <p className="meta">Level: {level}</p>}
           {shortCode ? <p className="code person-code">{shortCode}</p> : <p className="meta">No lanyard issued yet.</p>}
         </div>
         {shortCode && canShowQr ? (

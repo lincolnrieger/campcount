@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MealItem } from '../src/shared/mealItems';
 import { dietProfile, mealSummary, participantItems, prepareMealImport } from '../src/shared/mealItems';
-import { api, createEvent, createUser, grant, json, testEnv } from './helpers';
+import { api, createEvent, createUser, grant, json, testEnv, addPeople } from './helpers';
 
 // The example from the brief (made-up products).
 const sample = [
@@ -58,13 +58,32 @@ describe('meal import validation', () => {
   it('explains what is wrong, and where', () => {
     const bad = prepareMealImport(
       [
-        { ...sample[0], day: '2027-01-01', items: [{ name: 'A', category: 'Pizza' }, { name: 'B', category: 'Main', replaces: 'Nope', status: 'maybe' }] },
+        {
+          ...sample[0],
+          day: '2027-01-01',
+          items: [
+            { name: 'A', category: 'Pizza' },
+            { name: 'B', category: 'Main', replaces: 'Nope', status: 'maybe' },
+          ],
+        },
         { name: 'Lunch', day: '2026-12-05', start: '7pm', items: [] },
       ],
       DAYS,
     );
     expect(bad.errors.join('\n')).toMatch(/Meal 2 \(start\): Use a time like 07:30/);
-    const bad2 = prepareMealImport([{ ...sample[0], day: '2027-01-01', items: [{ name: 'A', category: 'Pizza' }, { name: 'B', category: 'Main', replaces: 'Nope', status: 'maybe' }] }], DAYS);
+    const bad2 = prepareMealImport(
+      [
+        {
+          ...sample[0],
+          day: '2027-01-01',
+          items: [
+            { name: 'A', category: 'Pizza' },
+            { name: 'B', category: 'Main', replaces: 'Nope', status: 'maybe' },
+          ],
+        },
+      ],
+      DAYS,
+    );
     expect(bad2.errors).toEqual([
       'Meal 1 (Saturday breakfast): 2027-01-01 isn’t one of the camp’s days (2026-12-05 to 2026-12-07).',
       expect.stringMatching(/item 1 \(A\): “Pizza” isn’t a category/),
@@ -103,7 +122,10 @@ describe('participant conflicts', () => {
   ];
 
   it('marks what conflicts and their alternative, and never shows staff notes', () => {
-    const p = dietProfile([{ category: 'medical_diet', item: 'Gluten free (coeliac)' }, { category: 'allergy', item: 'Peanut' }]);
+    const p = dietProfile([
+      { category: 'medical_diet', item: 'Gluten free (coeliac)' },
+      { category: 'allergy', item: 'Peanut' },
+    ]);
     const out = participantItems(items, p);
     const by = (n: string) => out.find((i) => i.name === n)!;
     expect(by('White roll')).toMatchObject({ conflict: 'contains', yourAlternative: 'GF roll' });
@@ -134,7 +156,7 @@ describe('meal items API', () => {
   it('imports the sample, links alternatives, replaces on re-import, and hides staff notes from participants', async () => {
     const admin = await createUser({ platformAdmin: true });
     const eventId = await createEvent(admin.id, { status: 'open' });
-    await testEnv.DB.prepare(`UPDATE events SET feature_meals = 1, feature_dietary = 1 WHERE id = ?`).bind(eventId).run();
+    await testEnv.DB.prepare(`UPDATE events SET feature_meals = 1 WHERE id = ?`).bind(eventId).run();
     const manager = await createUser();
     await grant(manager.id, 'event_manager', eventId);
 
@@ -165,34 +187,18 @@ describe('meal items API', () => {
     expect(copied).toHaveLength(2);
     expect(copied.find((i) => i.isAlternative)!.replacesItemId).toBe(copied.find((i) => !i.isAlternative)!.id);
 
-    // A coeliac participant: their meals page flags the roll and offers the GF one; no staff notes.
-    await api(`/events/${eventId}/import/commit`, {
-      cookie: manager.cookie,
-      body: {
-        rows: [
-          {
-            participantId: '100',
-            firstName: 'Ava',
-            lastName: 'Example',
-            kind: 'youth',
-            level: 'Seniors',
-            groupName: '',
-            photoConsent: 'yes',
-            dietary: [{ category: 'medical_diet', item: 'Gluten free (coeliac)', severity: 'standard', note: '' }],
-          },
-        ],
-      },
-    });
-    await api(`/events/${eventId}/credentials/issue`, { cookie: manager.cookie, body: { mode: 'missing' } });
+    // A participant's meals page: every item with its allergens, the same for everyone (no one's
+    // dietary needs are kept), and no staff notes.
+    await addPeople(eventId, manager.cookie, [{ participantId: '100', firstName: 'Ava', lastName: 'Example', kind: 'youth' }]);
     const { cards } = await json(await api(`/events/${eventId}/credentials/print`, { cookie: manager.cookie, body: {} }));
     const view = await json(await api('/public/signup/identify', { body: { token: cards[0].qr.split('#')[1] } }));
     const res = await api('/public/signup/meals', { body: { pass: view.pass } });
     const text = await res.clone().text();
     expect(text).not.toContain('Drakes Torrensville');
     const mine = await json(res);
-    expect(mine.hasNeeds).toBe(true);
-    const sat = mine.meals[meals[0].id] as { name: string; conflict: string | null; yourAlternative: string | null }[];
-    expect(sat.find((i) => i.name.startsWith('Drakes'))).toMatchObject({ conflict: 'contains', yourAlternative: 'Woolies Always gluten free soft white rolls 2pk' });
+    expect(mine.hasNeeds).toBe(false);
+    const sat = mine.meals[meals[0].id] as { name: string; conflict: string | null; contains: string[] }[];
+    expect(sat.find((i) => i.name.startsWith('Drakes'))).toMatchObject({ conflict: null });
 
     // Scanners can't change items.
     const scanner = await createUser();

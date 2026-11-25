@@ -1,8 +1,8 @@
 /**
  * Participant data is encrypted before it reaches the database.
  *
- * - Names, participant IDs, groups, levels, car registrations and dietary
- *   details are sealed with AES-256-GCM (a fresh random IV each time) under a
+ * - Names, participant IDs and typed lanyard codes are sealed with
+ *   AES-256-GCM (a fresh random IV each time) under a
  *   key derived from the DATA_KEY secret. The database only ever holds
  *   `enc1.<base64url>` values for these.
  * - Participant IDs also get a keyed hash (HMAC-SHA-256) so people can be
@@ -155,7 +155,11 @@ export async function openRows<T>(env: VaultEnv, rows: T): Promise<T> {
 }
 
 /** Participant IDs compared without spaces, case or leading zeros (spreadsheets drop them). */
-export const normaliseParticipantId = (id: string) => id.replace(/\s+/g, '').toUpperCase().replace(/^0+(?=.)/, '');
+export const normaliseParticipantId = (id: string) =>
+  id
+    .replace(/\s+/g, '')
+    .toUpperCase()
+    .replace(/^0+(?=.)/, '');
 
 /** A keyed hash for finding an encrypted value: the same text always gives the same hash, which reveals nothing without DATA_KEY. */
 export async function lookupKey(env: VaultEnv, purpose: string, text: string): Promise<string> {

@@ -26,7 +26,7 @@ const PRESETS: { name: string; features: LinkFeature[]; about: string }[] = [
 ];
 
 const HELP =
-  'One link for all participants. They type their participant ID and see their own camp page, with only the parts you switch on. Surnames, groups, team-mates and dietary details are never shown. Changes apply the next time someone opens the link. Each person’s own lanyard QR still opens their full page. Typing numbers is limited per device, so nobody can try lots of numbers.';
+  'One link for all participants. They type their participant ID and see their own camp page, with only the parts you switch on. Surnames and team-mates are never shown. Changes apply the next time someone opens the link. Each person’s own lanyard QR still opens their full page. Typing numbers is limited per device, so nobody can try lots of numbers.';
 
 /**
  * People › Links for everyone: one link to send to every participant. They
@@ -65,8 +65,20 @@ export function ShareLinks() {
       }
     />
   );
-  if (loading && !data) return (<>{header}<Loading what="the links" rows={3} /></>);
-  if (error || !data) return (<>{header}<LoadError error={error!} onRetry={reload} what="the links" /></>);
+  if (loading && !data)
+    return (
+      <>
+        {header}
+        <Loading what="the links" rows={3} />
+      </>
+    );
+  if (error || !data)
+    return (
+      <>
+        {header}
+        <LoadError error={error!} onRetry={reload} what="the links" />
+      </>
+    );
 
   const copy = async (url: string) => {
     await navigator.clipboard.writeText(url);
@@ -165,7 +177,12 @@ export function ShareLinks() {
                     checked={l.active}
                     disabled={busy === l.id}
                     onChange={(on) => void patch(l, { active: on }, on ? 'Link switched on' : 'Link switched off')}
-                    label={<span className="share-onoff">{l.active ? 'On' : 'Off'}<span className="visually-hidden">: {l.name}</span></span>}
+                    label={
+                      <span className="share-onoff">
+                        {l.active ? 'On' : 'Off'}
+                        <span className="visually-hidden">: {l.name}</span>
+                      </span>
+                    }
                   />
                   <Menu
                     label={`More actions for ${l.name}`}
@@ -179,7 +196,15 @@ export function ShareLinks() {
                       {
                         label: 'Make a new address…',
                         onSelect: async () => {
-                          if (!(await confirm({ title: 'Make a new address?', body: <p>The address you’ve already sent stops working.</p>, confirm: 'Make new address', danger: true }))) return;
+                          if (
+                            !(await confirm({
+                              title: 'Make a new address?',
+                              body: <p>The address you’ve already sent stops working.</p>,
+                              confirm: 'Make new address',
+                              danger: true,
+                            }))
+                          )
+                            return;
                           void run(l.id, () => api(`/events/${event.id}/participant-links/${l.id}/new-code`, { body: {} }), 'New address made');
                         },
                       },
@@ -187,7 +212,10 @@ export function ShareLinks() {
                         label: 'Delete link…',
                         danger: true,
                         onSelect: async () => {
-                          if (!(await confirm({ title: `Delete ${l.name}?`, body: <p>The link stops working for everyone you sent it to.</p>, confirm: 'Delete link', danger: true }))) return;
+                          if (
+                            !(await confirm({ title: `Delete ${l.name}?`, body: <p>The link stops working for everyone you sent it to.</p>, confirm: 'Delete link', danger: true }))
+                          )
+                            return;
                           void run(l.id, () => api(`/events/${event.id}/participant-links/${l.id}`, { method: 'DELETE' }), 'Link deleted');
                         },
                       },

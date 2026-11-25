@@ -1,12 +1,22 @@
-import type { LevelSetting } from '../../shared/levels';
-import { levelStyle } from '../../shared/levels';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Navigate } from 'react-router';
-import type { CardFormat, CardPerson, DesignElement, FieldId, FontId, FontWeight, ImageElement, LanyardDesign, Orientation, ShapeElement, SideKey, TextElement } from '../../shared/lanyardDesign';
+import type {
+  CardFormat,
+  CardPerson,
+  DesignElement,
+  FieldId,
+  FontId,
+  FontWeight,
+  ImageElement,
+  LanyardDesign,
+  Orientation,
+  ShapeElement,
+  SideKey,
+  TextElement,
+} from '../../shared/lanyardDesign';
 import { CARD_FORMATS, CARD_FORMAT_KEYS, FIELDS, FIELD_IDS, FONTS, FONT_IDS, cardSize, designWarnings, fontWeight, starterDesign } from '../../shared/lanyardDesign';
-import type { PhotoMarker } from '../../shared/schemas';
-import { PHOTO_MARKERS } from '../../shared/schemas';
+import { roleStyle } from '../../shared/roles';
 import { ApiFailure, api } from '../api';
 import { CardStage } from '../lanyards/CardStage';
 import { ColourField } from '../lanyards/ColourField';
@@ -20,14 +30,6 @@ import type { IconName } from '../ui';
 import { useEvent } from './EventLayout';
 import { LanyardTabs } from './LanyardPrint';
 
-export const PHOTO_MARKER_WORDS: Record<PhotoMarker, string> = {
-  black_border: 'Black border',
-  colour_border: 'Coloured border',
-  red_dot: 'Red circle',
-  camera_icon: 'Crossed-out camera',
-  none: 'No mark',
-};
-
 const TYPE_ICON: Record<DesignElement['type'], IconName> = { text: 'text', shape: 'square', image: 'image', qr: 'qr', marker: 'noPhoto' };
 
 /** Is focus somewhere typing happens (so keyboard shortcuts stay out of the way)? */
@@ -35,7 +37,7 @@ const typing = (t: EventTarget | null) => t instanceof HTMLElement && (t.isConte
 
 /** People › Lanyards › Design: design the card on the page. */
 export function LanyardDesigner() {
-  const { event, can, base, reload } = useEvent();
+  const { event, can, base } = useEvent();
   const toast = useToast();
   const confirm = useConfirm();
   const canConfigure = can('event.configure');
@@ -46,15 +48,14 @@ export function LanyardDesigner() {
   const [zoom, setZoom] = useState(1);
   const [redraw, setRedraw] = useState(0);
   const [preview, setPreview] = useState<CardPerson>(SAMPLE_PERSON);
-  const [noPhotos, setNoPhotos] = useState(false);
   const images = useMemo(() => new ImageCache(event.id), [event.id]);
   const fileInput = useRef<HTMLInputElement>(null);
   const propsPanel = useRef<HTMLElement>(null);
   const uploadAs = useRef<'image' | 'background'>('image');
   const design = ed.design;
 
-  const ctx: RenderContext = useMemo(() => ({ campName: event.name, marker: event.lanyard }), [event.name, event.lanyard]);
-  const person = useMemo(() => ({ ...preview, noPhotos }), [preview, noPhotos]);
+  const ctx: RenderContext = useMemo(() => ({ campName: event.name }), [event.name]);
+  const person = preview;
 
   // Fonts and images: load what the design uses, then redraw.
   const fontKey = design ? JSON.stringify(designFonts(design)) : '';
@@ -189,7 +190,13 @@ export function LanyardDesigner() {
     <div className="studio-page">
       {header}
       <div className="banners studio-banners">
-        {!editable && <Banner tone="info">{event.status === 'draft' || event.status === 'open' ? 'View only: you can look at the design but not change it.' : 'This camp is closed, so its design can’t be changed. You can still print.'}</Banner>}
+        {!editable && (
+          <Banner tone="info">
+            {event.status === 'draft' || event.status === 'open'
+              ? 'View only: you can look at the design but not change it.'
+              : 'This camp is closed, so its design can’t be changed. You can still print.'}
+          </Banner>
+        )}
         {firstProblem && (
           <Banner
             tone={firstProblem.level === 'error' ? 'error' : 'warning'}
@@ -222,12 +229,19 @@ export function LanyardDesigner() {
                 <AddButton icon="layers" label="Background" onClick={() => pick('background')} />
                 <AddButton icon="square" label="Rectangle" onClick={() => add(makeElement(design, 'rect'))} />
                 <AddButton icon="circle" label="Circle" onClick={() => add(makeElement(design, 'ellipse'))} />
-                <AddButton icon="band" label="Level band" onClick={() => add(makeElement(design, 'band'))} />
-                <AddButton icon="noPhoto" label="No-photo mark" onClick={() => add(makeElement(design, 'marker'))} />
+                <AddButton icon="band" label="Role band" onClick={() => add(makeElement(design, 'band'))} />
               </div>
-              <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp" className="visually-hidden" tabIndex={-1} aria-hidden="true" onChange={(e) => void onFile(e.target.files?.[0])} />
+              <input
+                ref={fileInput}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="visually-hidden"
+                tabIndex={-1}
+                aria-hidden="true"
+                onChange={(e) => void onFile(e.target.files?.[0])}
+              />
               <h3 className="studio-label studio-label-tip">
-                Person details <InfoTip label="About person details">Fills in for each person: their name, level, code and so on.</InfoTip>
+                Person details <InfoTip label="About person details">Fills in for each person: their name, role, code and so on.</InfoTip>
               </h3>
               <div className="studio-chips">
                 {FIELD_IDS.map((f) => (
@@ -252,7 +266,11 @@ export function LanyardDesigner() {
                       <span>{layerName(x)}</span>
                     </button>
                     {editable && (
-                      <IconButton label={x.locked ? `Unlock ${layerName(x)}` : `Lock ${layerName(x)}`} className="layer-lock" onClick={() => change((d) => updateElement(d, side, x.id, { locked: !x.locked }))}>
+                      <IconButton
+                        label={x.locked ? `Unlock ${layerName(x)}` : `Lock ${layerName(x)}`}
+                        className="layer-lock"
+                        onClick={() => change((d) => updateElement(d, side, x.id, { locked: !x.locked }))}
+                      >
                         <Icon name={x.locked ? 'lock' : 'unlock'} size={16} />
                       </IconButton>
                     )}
@@ -316,8 +334,7 @@ export function LanyardDesigner() {
             label={`The ${side} of the card, as it will print for ${person.name}`}
           />
           <div className="studio-footer">
-            <PreviewPicker eventId={event.id} levels={event.levels} canList={can('roster.view')} value={preview} onChange={setPreview} />
-            {event.features.photo && <Toggle checked={noPhotos} onChange={setNoPhotos} label="No photo consent" />}
+            <PreviewPicker eventId={event.id} canList={can('roster.view')} value={preview} onChange={setPreview} />
             <span className="meta studio-hint">
               {CARD_FORMATS[design.format].label}, {design.orientation}
             </span>
@@ -364,18 +381,12 @@ export function LanyardDesigner() {
               onWarning={goToWarning}
               onChange={(d) => change(d)}
               onReset={async () => {
-                const ok = await confirm({ title: 'Start the design again?', body: <p>The card goes back to CampCount’s starting design. You can undo this.</p>, confirm: 'Start again' });
+                const ok = await confirm({
+                  title: 'Start the design again?',
+                  body: <p>The card goes back to CampCount’s starting design. You can undo this.</p>,
+                  confirm: 'Start again',
+                });
                 if (ok) change(starterDesign(design.format, design.orientation));
-              }}
-              photo={event.features.photo}
-              marker={event.lanyard}
-              onMarker={async (m) => {
-                try {
-                  await api(`/events/${event.id}`, { method: 'PATCH', body: { lanyard: m } });
-                  await reload();
-                } catch (err) {
-                  toast(err instanceof ApiFailure ? err.message : 'No connection. Try again.', { tone: 'error' });
-                }
               }}
             />
           )}
@@ -404,7 +415,8 @@ function AddButton({ icon, label, onClick }: { icon: IconName; label: string; on
 function DesignerHelp() {
   return (
     <>
-      Design the front and back of every lanyard. Drag to move, use the corners to resize. Hold Shift to keep the shape, Alt to stop snapping. Keys: arrows nudge (Shift for 5 mm), Delete removes, Ctrl+D duplicates, Ctrl+Z undoes, Esc deselects.
+      Design the front and back of every lanyard. Drag to move, use the corners to resize. Hold Shift to keep the shape, Alt to stop snapping. Keys: arrows nudge (Shift for 5 mm),
+      Delete removes, Ctrl+D duplicates, Ctrl+Z undoes, Esc deselects.
     </>
   );
 }
@@ -438,11 +450,13 @@ function SaveStatus({ state, message, onRetry, editable }: { state: string; mess
 }
 
 /** Preview the card with a real person from the camp, or the sample. */
-function PreviewPicker({ eventId, levels, canList, value, onChange }: { eventId: string; levels: LevelSetting[]; canList: boolean; value: CardPerson; onChange: (p: CardPerson) => void }) {
+function PreviewPicker({ eventId, canList, value, onChange }: { eventId: string; canList: boolean; value: CardPerson; onChange: (p: CardPerson) => void }) {
   const [people, setPeople] = useState<(CardPerson & { id: string })[] | null>(null);
   useEffect(() => {
     if (!canList) return;
-    api<{ registrations: { id: string; displayName?: string; firstName: string; preferredName: string; lastName: string; kind: 'youth' | 'adult'; level: string; groupName: string; shortCode: string | null; status: string; photoConsent?: string }[] }>(`/events/${eventId}/registrations`)
+    api<{ registrations: { id: string; firstName: string; lastName: string; kind: 'youth' | 'adult'; shortCode: string | null; status: string }[] }>(
+      `/events/${eventId}/registrations`,
+    )
       .then((r) =>
         setPeople(
           r.registrations
@@ -450,21 +464,19 @@ function PreviewPicker({ eventId, levels, canList, value, onChange }: { eventId:
             .slice(0, 500)
             .map((x) => ({
               id: x.id,
-              name: `${x.preferredName || x.firstName} ${x.lastName}`.trim(),
-              firstName: x.preferredName || x.firstName,
+              name: `${x.firstName} ${x.lastName}`.trim(),
+              firstName: x.firstName,
               lastName: x.lastName,
               kind: x.kind,
-              level: x.level,
-              groupName: x.groupName,
-              style: levelStyle(levels, x.level),
+              style: roleStyle(x.kind),
               shortCode: x.shortCode ?? SAMPLE_PERSON.shortCode,
               qr: SAMPLE_PERSON.qr,
             })),
         ),
       )
       .catch(() => setPeople([]));
-  }, [eventId, canList, levels]);
-  const current = people?.find((p) => p.name === value.name && p.groupName === value.groupName)?.id ?? '';
+  }, [eventId, canList]);
+  const current = people?.find((p) => p.name === value.name && p.shortCode === value.shortCode)?.id ?? '';
   return (
     <div className="studio-preview-pick">
       <label htmlFor="ly-preview" className="studio-label">
@@ -492,7 +504,27 @@ function PreviewPicker({ eventId, levels, canList, value, onChange }: { eventId:
 
 // ---------------------------------------------------------------- panels
 
-function Num({ id, label, value, onChange, step = 0.5, min, max, unit = 'mm', disabled }: { id: string; label: string; value: number; onChange: (v: number) => void; step?: number; min?: number; max?: number; unit?: string; disabled?: boolean }) {
+function Num({
+  id,
+  label,
+  value,
+  onChange,
+  step = 0.5,
+  min,
+  max,
+  unit = 'mm',
+  disabled,
+}: {
+  id: string;
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  step?: number;
+  min?: number;
+  max?: number;
+  unit?: string;
+  disabled?: boolean;
+}) {
   return (
     <div className="num-field">
       <label htmlFor={id} className="studio-label">
@@ -619,7 +651,16 @@ function ElementPanel({
             <label htmlFor="prop-text" className="studio-label">
               Words
             </label>
-            <textarea id="prop-text" ref={textRef} className="textarea" rows={2} value={el.text} disabled={!editable} onChange={(e) => onSet({ text: e.target.value } as Partial<TextElement>)} maxLength={400} />
+            <textarea
+              id="prop-text"
+              ref={textRef}
+              className="textarea"
+              rows={2}
+              value={el.text}
+              disabled={!editable}
+              onChange={(e) => onSet({ text: e.target.value } as Partial<TextElement>)}
+              maxLength={400}
+            />
             <span className="studio-label">Insert a person detail</span>
             <div className="studio-chips">
               {FIELD_IDS.map((f) => (
@@ -633,13 +674,29 @@ function ElementPanel({
             <div className="font-list" role="radiogroup" aria-label="Font">
               {FONT_IDS.map((f) => (
                 <label key={f} className="font-option" data-font={f}>
-                  <input type="radio" name="font" checked={el.font === f} disabled={!editable} onChange={() => onSet({ font: f, weight: fontWeight(f, el.weight) } as Partial<TextElement>)} />
+                  <input
+                    type="radio"
+                    name="font"
+                    checked={el.font === f}
+                    disabled={!editable}
+                    onChange={() => onSet({ font: f, weight: fontWeight(f, el.weight) } as Partial<TextElement>)}
+                  />
                   <span>{FONTS[f].label}</span>
                 </label>
               ))}
             </div>
             <div className="studio-row">
-              <Num id="prop-size" label="Size" unit="pt" step={0.5} min={4} max={120} value={el.size} disabled={!editable} onChange={(v) => onSet({ size: v } as Partial<TextElement>)} />
+              <Num
+                id="prop-size"
+                label="Size"
+                unit="pt"
+                step={0.5}
+                min={4}
+                max={120}
+                value={el.size}
+                disabled={!editable}
+                onChange={(v) => onSet({ size: v } as Partial<TextElement>)}
+              />
               <WeightPicker font={el.font} value={el.weight} disabled={!editable} onChange={(w) => onSet({ weight: w } as Partial<TextElement>)} />
             </div>
             <input
@@ -658,13 +715,27 @@ function ElementPanel({
             <div className="studio-row">
               <div className="icon-toggle-group" role="radiogroup" aria-label="Alignment">
                 {(['left', 'center', 'right'] as const).map((a) => (
-                  <button key={a} type="button" role="radio" aria-checked={el.align === a} className="icon-toggle" disabled={!editable} onClick={() => onSet({ align: a } as Partial<TextElement>)}>
+                  <button
+                    key={a}
+                    type="button"
+                    role="radio"
+                    aria-checked={el.align === a}
+                    className="icon-toggle"
+                    disabled={!editable}
+                    onClick={() => onSet({ align: a } as Partial<TextElement>)}
+                  >
                     <Icon name={a === 'left' ? 'alignLeft' : a === 'center' ? 'alignCenter' : 'alignRight'} />
                     <span className="visually-hidden">Align {a === 'center' ? 'centre' : a}</span>
                   </button>
                 ))}
               </div>
-              <button type="button" className="icon-toggle text-toggle" aria-pressed={!!el.uppercase} disabled={!editable} onClick={() => onSet({ uppercase: !el.uppercase } as Partial<TextElement>)}>
+              <button
+                type="button"
+                className="icon-toggle text-toggle"
+                aria-pressed={!!el.uppercase}
+                disabled={!editable}
+                onClick={() => onSet({ uppercase: !el.uppercase } as Partial<TextElement>)}
+              >
                 AA<span className="visually-hidden"> Capital letters</span>
               </button>
             </div>
@@ -696,10 +767,37 @@ function ElementPanel({
             <ColourField label="Fill" value={el.fill} allowNone level="fill" extra={brand} onChange={(v) => editable && onSet({ fill: v } as Partial<ShapeElement>)} />
           </PanelGroup>
           <PanelGroup title="Border">
-            <ColourField label="Border colour" value={el.stroke} allowNone level="fill" extra={brand} onChange={(v) => editable && onSet({ stroke: v, strokeWidth: v !== 'none' && el.strokeWidth === 0 ? 0.5 : el.strokeWidth } as Partial<ShapeElement>)} />
+            <ColourField
+              label="Border colour"
+              value={el.stroke}
+              allowNone
+              level="fill"
+              extra={brand}
+              onChange={(v) => editable && onSet({ stroke: v, strokeWidth: v !== 'none' && el.strokeWidth === 0 ? 0.5 : el.strokeWidth } as Partial<ShapeElement>)}
+            />
             <div className="studio-row">
-              <Num id="prop-stroke" label="Border width" value={el.strokeWidth} min={0} max={10} step={0.25} disabled={!editable} onChange={(v) => onSet({ strokeWidth: v } as Partial<ShapeElement>)} />
-              {el.shape === 'rect' && <Num id="prop-radius" label="Corners" value={el.radius} min={0} max={60} step={0.5} disabled={!editable} onChange={(v) => onSet({ radius: v } as Partial<ShapeElement>)} />}
+              <Num
+                id="prop-stroke"
+                label="Border width"
+                value={el.strokeWidth}
+                min={0}
+                max={10}
+                step={0.25}
+                disabled={!editable}
+                onChange={(v) => onSet({ strokeWidth: v } as Partial<ShapeElement>)}
+              />
+              {el.shape === 'rect' && (
+                <Num
+                  id="prop-radius"
+                  label="Corners"
+                  value={el.radius}
+                  min={0}
+                  max={60}
+                  step={0.5}
+                  disabled={!editable}
+                  onChange={(v) => onSet({ radius: v } as Partial<ShapeElement>)}
+                />
+              )}
             </div>
           </PanelGroup>
           <PanelGroup>
@@ -723,7 +821,16 @@ function ElementPanel({
           </PanelGroup>
           <PanelGroup>
             <div className="studio-row">
-              <Num id="prop-radius" label="Corners" value={el.radius} min={0} max={60} step={0.5} disabled={!editable} onChange={(v) => onSet({ radius: v } as Partial<ImageElement>)} />
+              <Num
+                id="prop-radius"
+                label="Corners"
+                value={el.radius}
+                min={0}
+                max={60}
+                step={0.5}
+                disabled={!editable}
+                onChange={(v) => onSet({ radius: v } as Partial<ImageElement>)}
+              />
             </div>
             <Opacity value={el.opacity} disabled={!editable} onChange={(v, live) => onSet({ opacity: v } as Partial<ImageElement>, live)} onCommit={onCommit} />
             {editable && (
@@ -745,10 +852,7 @@ function ElementPanel({
       )}
       {el.type === 'marker' && (
         <PanelGroup>
-          <p className="meta studio-tip-row">
-            Shows the no-photo mark for people without consent.
-            <InfoTip label="About the no-photo mark">Choose the mark under Card settings (click an empty part of the card). Everyone else’s card shows nothing in this spot.</InfoTip>
-          </p>
+          <p className="meta studio-tip-row">This old no-photo mark no longer prints anything. You can delete it.</p>
         </PanelGroup>
       )}
 
@@ -770,7 +874,6 @@ function ElementPanel({
           </div>
         )}
       </PanelGroup>
-
     </div>
   );
 }
@@ -783,7 +886,13 @@ function WeightPicker({ font, value, onChange, disabled }: { font: FontId; value
       <label htmlFor="prop-weight" className="studio-label">
         Weight
       </label>
-      <select id="prop-weight" className="select select-small" value={fontWeight(font, value)} disabled={disabled || weights.length < 2} onChange={(e) => onChange(Number(e.target.value) as FontWeight)}>
+      <select
+        id="prop-weight"
+        className="select select-small"
+        value={fontWeight(font, value)}
+        disabled={disabled || weights.length < 2}
+        onChange={(e) => onChange(Number(e.target.value) as FontWeight)}
+      >
         {weights.map((w) => (
           <option key={w} value={w}>
             {names[w]}
@@ -826,9 +935,6 @@ function CardPanel({
   onWarning,
   onChange,
   onReset,
-  photo,
-  marker,
-  onMarker,
 }: {
   design: LanyardDesign;
   side: SideKey;
@@ -838,9 +944,6 @@ function CardPanel({
   onWarning: (w: ReturnType<typeof designWarnings>[number]) => void;
   onChange: (d: LanyardDesign) => void;
   onReset: () => void;
-  photo: boolean;
-  marker: { photoMarker: PhotoMarker; photoMarkerColour: string; photoMarkerLabel: boolean; printBand: boolean };
-  onMarker: (m: Partial<{ photoMarker: PhotoMarker; photoMarkerColour: string; photoMarkerLabel: boolean }>) => Promise<void>;
 }) {
   const setFormat = (format: CardFormat, orientation: Orientation) => onChange(resizeDesign(design, format, format === 'large' ? 'portrait' : orientation));
   return (
@@ -903,33 +1006,6 @@ function CardPanel({
           onChange={(v) => editable && v.startsWith('#') && onChange({ ...design, [side]: { ...design[side], background: v } })}
         />
       </PanelGroup>
-      {photo && (
-        <PanelGroup title="No photo consent">
-          <span className="studio-label studio-label-tip">
-            <label htmlFor="marker">How their card is marked</label>
-            <InfoTip label="About the mark">
-              {marker.photoMarker === 'black_border' || marker.photoMarker === 'colour_border'
-                ? 'A thick frame around the edge of both sides.'
-                : marker.photoMarker === 'none'
-                  ? 'Nothing extra. Photographers check the list instead.'
-                  : 'Shown where you put the No-photo mark.'}
-            </InfoTip>
-          </span>
-          <select id="marker" className="select select-small" value={marker.photoMarker} disabled={!editable} onChange={(e) => void onMarker({ photoMarker: e.target.value as PhotoMarker })}>
-            {PHOTO_MARKERS.map((m) => (
-              <option key={m} value={m}>
-                {PHOTO_MARKER_WORDS[m]}
-              </option>
-            ))}
-          </select>
-          {marker.photoMarker === 'colour_border' && (
-            <ColourField label="Border colour" value={marker.photoMarkerColour} onChange={(v) => editable && v.startsWith('#') && void onMarker({ photoMarkerColour: v })} />
-          )}
-          {(marker.photoMarker === 'black_border' || marker.photoMarker === 'colour_border' || marker.photoMarker === 'none') && (
-            <Toggle checked={marker.photoMarkerLabel} disabled={!editable} onChange={(v) => void onMarker({ photoMarkerLabel: v })} label="Print “No photos” at the mark" />
-          )}
-        </PanelGroup>
-      )}
       {editable && (
         <PanelGroup>
           <Button small kind="ghost" onClick={onReset}>
@@ -942,7 +1018,23 @@ function CardPanel({
 }
 
 /** A small, non-interactive rendering of one side (used on phones and in Print). */
-export function CardThumb({ design, side, person, ctx, images, redraw, width }: { design: LanyardDesign; side: SideKey; person: CardPerson; ctx: RenderContext; images: ImageCache; redraw: number; width: number }) {
+export function CardThumb({
+  design,
+  side,
+  person,
+  ctx,
+  images,
+  redraw,
+  width,
+}: {
+  design: LanyardDesign;
+  side: SideKey;
+  person: CardPerson;
+  ctx: RenderContext;
+  images: ImageCache;
+  redraw: number;
+  width: number;
+}) {
   const ref = useRef<HTMLCanvasElement>(null);
   const { w, h } = cardSize(design.format, design.orientation);
   useEffect(() => {

@@ -1,5 +1,4 @@
 import { Hono } from 'hono';
-import { compareText, sortByName } from '../lib/sort';
 import { z } from 'zod';
 import type { Permission } from '../../shared/permissions';
 import type { AppContext, AppEnv } from '../context';
@@ -65,21 +64,20 @@ reportRoutes.get('/side-quest/collections', async (c) => {
       .bind(eventId)
       .all<{ collector_id: string; collected_id: string; created_at: string }>(),
     c.env.DB.prepare(
-      `SELECT r.id, p.first_name, p.last_name, r.level, r.group_name, r.kind, r.status FROM registrations r JOIN people p ON p.id = r.person_id
+      `SELECT r.id, p.first_name, p.last_name, r.kind, r.status FROM registrations r JOIN people p ON p.id = r.person_id
         WHERE r.event_id = ? AND r.id IN (SELECT collector_id FROM side_quest_collections WHERE event_id = ?1 UNION SELECT collected_id FROM side_quest_collections WHERE event_id = ?1)`,
     )
       .bind(eventId)
-      .all<{ id: string; first_name: string; last_name: string; level: string; group_name: string; kind: string; status: string }>(),
+      .all<{ id: string; first_name: string; last_name: string; kind: string; status: string }>(),
   ]);
   return c.json({
     enabled: ev.feature_side_quest === 1,
     canRemove: can(principal, 'event.configure', { eventId }),
-    players: (await c.env.DB.prepare(`SELECT count(*) AS n FROM registrations WHERE event_id = ? AND status = 'active' AND kind = 'youth'`).bind(eventId).first<{ n: number }>())?.n ?? 0,
+    players:
+      (await c.env.DB.prepare(`SELECT count(*) AS n FROM registrations WHERE event_id = ? AND status = 'active' AND kind = 'youth'`).bind(eventId).first<{ n: number }>())?.n ?? 0,
     people: people.results.map((p) => ({
       id: p.id,
       name: `${p.first_name} ${p.last_name}`.trim(),
-      level: p.level,
-      groupName: p.group_name,
       kind: p.kind,
       active: p.status === 'active',
     })),
@@ -87,7 +85,10 @@ reportRoutes.get('/side-quest/collections', async (c) => {
   });
 });
 
-const collectionPairs = z.array(z.strictObject({ collectorId: z.uuid(), collectedId: z.uuid() })).min(1).max(500);
+const collectionPairs = z
+  .array(z.strictObject({ collectorId: z.uuid(), collectedId: z.uuid() }))
+  .min(1)
+  .max(500);
 
 /** Take away collections that shouldn't count (a photo of a lanyard, a stack of spare cards). */
 reportRoutes.post('/side-quest/collections/remove', async (c) => {
@@ -97,7 +98,11 @@ reportRoutes.post('/side-quest/collections/remove', async (c) => {
   const { pairs } = await parseBody(c, z.strictObject({ pairs: collectionPairs }));
   const removed = await c.env.DB.batch(
     pairs.map((p) =>
-      c.env.DB.prepare(`DELETE FROM side_quest_collections WHERE event_id = ? AND collector_id = ? AND collected_id = ? RETURNING created_at`).bind(eventId, p.collectorId, p.collectedId),
+      c.env.DB.prepare(`DELETE FROM side_quest_collections WHERE event_id = ? AND collector_id = ? AND collected_id = ? RETURNING created_at`).bind(
+        eventId,
+        p.collectorId,
+        p.collectedId,
+      ),
     ),
   );
   const gone = pairs
@@ -121,7 +126,12 @@ reportRoutes.post('/side-quest/collections/restore', async (c) => {
   const user = requireUser(c);
   const { items } = await parseBody(
     c,
-    z.strictObject({ items: z.array(z.strictObject({ collectorId: z.uuid(), collectedId: z.uuid(), at: z.iso.datetime() })).min(1).max(500) }),
+    z.strictObject({
+      items: z
+        .array(z.strictObject({ collectorId: z.uuid(), collectedId: z.uuid(), at: z.iso.datetime() }))
+        .min(1)
+        .max(500),
+    }),
   );
   await c.env.DB.batch(
     items.map((p) =>
@@ -158,8 +168,6 @@ reportRoutes.get('/whereabouts', async (c) => {
     .map((p) => ({
       id: p.id,
       fullName: `${p.firstName} ${p.lastName}`,
-      groupName: p.groupName,
-      level: p.level,
       kind: p.kind,
       ...where.get(p.id)!,
     }))
@@ -181,12 +189,7 @@ reportRoutes.get('/reconciliation', async (c) => {
   requirePermission(c, 'reports.view', { eventId });
   const ev = await event(c, eventId);
   const model = await loadEventModel(c.env.DB, eventId, ev.feature_site === 1);
-  const pendingDietary = ev.feature_dietary
-    ? await c.env.DB.prepare(`SELECT count(*) AS n FROM registrations WHERE event_id = ? AND status = 'active' AND dietary_review_pending = 1`)
-        .bind(eventId)
-        .first<{ n: number }>()
-    : null;
-  return c.json({ generatedAt: nowIso(), timezone: ev.timezone, items: openItems(model), devices: devices(model), pendingDietary: pendingDietary?.n ?? 0 });
+  return c.json({ generatedAt: nowIso(), timezone: ev.timezone, items: openItems(model), devices: devices(model) });
 });
 
 /**
@@ -237,8 +240,6 @@ const EXPORTS: Record<string, { permission: Permission; label: string }> = {
   'activity-summary': { permission: 'reports.export', label: 'Activity summary' },
   'meal-counts': { permission: 'reports.export', label: 'Meal counts' },
   site: { permission: 'reports.export', label: 'Arrivals and departures' },
-  catering: { permission: 'dietary.view_detail', label: 'Catering dietary totals' },
-  'dietary-list': { permission: 'reports.export_sensitive', label: 'Named dietary list' },
 };
 
 reportRoutes.get('/exports', (c) => {
@@ -268,34 +269,7 @@ reportRoutes.get('/exports/:name{[a-z-]+\\.csv}', async (c) => {
   ];
 
   let csv: string;
-  if (name === 'catering' || name === 'dietary-list') {
-    const { results } = await c.env.DB.prepare(
-      `SELECT d.category, d.item, d.severity, d.note, p.first_name, p.last_name, p.participant_id, r.group_name
-         FROM dietary_entries d JOIN registrations r ON r.id = d.registration_id JOIN people p ON p.id = r.person_id
-        WHERE d.event_id = ? AND r.status = 'active'`,
-    )
-      .bind(eventId)
-      .all<Record<string, string>>();
-    // Sorted here: items and names are encrypted in the database.
-    sortByName(results).sort((a, b) => compareText(a.category, b.category) || compareText(a.item, b.item));
-    if (name === 'catering') {
-      const counts = new Map<string, { category: string; item: string; count: number; anaphylactic: number }>();
-      for (const r of results) {
-        const key = `${r.category}|${r.item!.toLowerCase()}`;
-        const entry = counts.get(key) ?? { category: r.category!, item: r.item!, count: 0, anaphylactic: 0 };
-        entry.count++;
-        if (r.severity === 'anaphylactic') entry.anaphylactic++;
-        counts.set(key, entry);
-      }
-      csv = toCsv(preamble, ['Type', 'Requirement', 'People', 'Of which anaphylactic'], [...counts.values()].map((e) => [e.category, e.item, e.count, e.anaphylactic]));
-    } else {
-      csv = toCsv(
-        preamble,
-        ['Name', 'Participant ID', 'Group', 'Type', 'Requirement', 'Severity', 'Note'],
-        results.map((r) => [`${r.first_name} ${r.last_name}`, r.participant_id, r.group_name, r.category, r.item, r.severity, r.note]),
-      );
-    }
-  } else {
+  {
     const model = await loadEventModel(c.env.DB, eventId, ev.feature_site === 1);
     const ctxName = new Map(model.contexts.map((x) => [x.key, x]));
     if (name === 'attendance') {
@@ -311,7 +285,6 @@ reportRoutes.get('/exports/:name{[a-z-]+\\.csv}', async (c) => {
             ctx?.name ?? '',
             person ? `${person.firstName} ${person.lastName}` : 'Unknown card',
             person?.participantId ?? '',
-            person?.groupName ?? '',
             s.direction,
             s.method,
             s.voided ? 'corrected (not counted)' : (evaluation?.outcome ?? s.storedOutcome),
@@ -319,7 +292,7 @@ reportRoutes.get('/exports/:name{[a-z-]+\\.csv}', async (c) => {
             s.correctionReason,
           ];
         });
-      csv = toCsv(preamble, ['Time', 'Type', 'Where', 'Name', 'Participant ID', 'Group', 'Direction', 'How', 'Result', 'Message', 'Correction reason'], rows);
+      csv = toCsv(preamble, ['Time', 'Type', 'Where', 'Name', 'Participant ID', 'Direction', 'How', 'Result', 'Message', 'Correction reason'], rows);
     } else if (name === 'activity-summary') {
       const s = summarise(model).contexts.filter((x) => x.type === 'activity');
       csv = toCsv(
@@ -346,14 +319,13 @@ reportRoutes.get('/exports/:name{[a-z-]+\\.csv}', async (c) => {
         rows.push([
           `${person.firstName} ${person.lastName}`,
           person.participantId,
-          person.kind,
-          person.groupName,
+          person.kind === 'adult' ? 'Leader' : 'Participant',
           arrivals.join('; '),
           departures.join('; '),
           site?.states.get(person.id)?.present ? 'Yes' : 'No',
         ]);
       }
-      csv = toCsv(preamble, ['Name', 'Participant ID', 'Youth or adult', 'Group', 'Arrived', 'Departed', 'Still recorded on site'], rows);
+      csv = toCsv(preamble, ['Name', 'Participant ID', 'Role', 'Arrived', 'Departed', 'Still recorded on site'], rows);
     }
   }
 

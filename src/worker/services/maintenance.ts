@@ -5,7 +5,7 @@ import { loadEventModel, summarise } from './reports';
 
 /** Retention periods (docs/requirements.md §8). */
 export const RETENTION = {
-  sensitiveDays: 90, // dietary entries, photo consent, car registrations, card tokens, side quest collections
+  sensitiveDays: 90, // card tokens, side quest collections
   recordsDays: 730, // registrations and scans, kept for the annual report
 } as const;
 
@@ -34,22 +34,14 @@ export async function runMaintenance(env: Env, now = nowIso()): Promise<{ sensit
     .catch(() => undefined);
 
   // Stage 1: sensitive data, 90 days after close.
-  const sensitive = await env.DB.prepare(
-    `SELECT id FROM events WHERE status IN ('completed', 'archived', 'cancelled') AND sensitive_purged_at IS NULL AND ${CLOSED_AT} <= ?`,
-  )
+  const sensitive = await env.DB.prepare(`SELECT id FROM events WHERE status IN ('completed', 'archived', 'cancelled') AND sensitive_purged_at IS NULL AND ${CLOSED_AT} <= ?`)
     .bind(addDays(now, -RETENTION.sensitiveDays))
     .all<{ id: string }>();
   for (const { id } of sensitive.results) {
     await env.DB.batch([
-      env.DB.prepare(`DELETE FROM dietary_entries WHERE event_id = ?`).bind(id),
       // Who collected whom in the Side Quest: a map of children's friendships, so it goes with the sensitive data.
       env.DB.prepare(`DELETE FROM side_quest_collections WHERE event_id = ?`).bind(id),
-      env.DB.prepare(
-        `UPDATE registrations SET photo_consent = 'no', dietary_review_pending = 0, dietary_checked = NULL, car_rego = NULL, updated_at = ? WHERE event_id = ?`,
-      ).bind(now, id),
-      env.DB.prepare(
-        `UPDATE credentials SET token_ciphertext = '', status = 'revoked', revoked_at = COALESCE(revoked_at, ?) WHERE event_id = ?`,
-      ).bind(now, id),
+      env.DB.prepare(`UPDATE credentials SET token_ciphertext = '', status = 'revoked', revoked_at = COALESCE(revoked_at, ?) WHERE event_id = ?`).bind(now, id),
       env.DB.prepare(`UPDATE events SET sensitive_purged_at = ? WHERE id = ?`).bind(now, id),
       auditStatement(env.DB, { actor: { type: 'system' }, action: 'retention.purge_sensitive', eventId: id }),
     ]);
@@ -76,9 +68,7 @@ export async function runMaintenance(env: Env, now = nowIso()): Promise<{ sensit
   }
 
   // People no longer on any event roster, untouched for 2 years.
-  await env.DB.prepare(
-    `DELETE FROM people WHERE updated_at <= ? AND NOT EXISTS (SELECT 1 FROM registrations r WHERE r.person_id = people.id)`,
-  )
+  await env.DB.prepare(`DELETE FROM people WHERE updated_at <= ? AND NOT EXISTS (SELECT 1 FROM registrations r WHERE r.person_id = people.id)`)
     .bind(addDays(now, -RETENTION.recordsDays))
     .run();
 

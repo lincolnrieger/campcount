@@ -42,7 +42,6 @@ interface Duty {
 interface Rosterable {
   id: string;
   name: string;
-  groupName: string;
   leader: boolean;
 }
 
@@ -60,9 +59,7 @@ function leadersOnDuty(duties: Duty[]) {
       e.duties.push(d);
       people.set(p.registrationId, e);
     }
-  return [...people.values()]
-    .map((p) => ({ ...p, clash: p.duties.some((a) => p.duties.some((b) => overlaps(a, b))) }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  return [...people.values()].map((p) => ({ ...p, clash: p.duties.some((a) => p.duties.some((b) => overlaps(a, b))) })).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /**
@@ -138,10 +135,19 @@ export function LeaderRoster() {
     const shownDuties = data.duties.filter((d) => (dayShown === 'all' || dayInZone(d.startsAt, tz) === dayShown) && matches(d));
     const byDuty =
       shownDuties.length === 0 ? (
-        <EmptyState title="No duties match" actions={<Button onClick={() => {
-            setQuery('');
-            setDay('all');
-          }}>Show all duties</Button>} />
+        <EmptyState
+          title="No duties match"
+          actions={
+            <Button
+              onClick={() => {
+                setQuery('');
+                setDay('all');
+              }}
+            >
+              Show all duties
+            </Button>
+          }
+        />
       ) : (
         <div className="sections duty-days">
           {days
@@ -453,7 +459,6 @@ function LeaderPicker({ people, onDuty, busy, onPick }: { people: Rosterable[]; 
                 >
                   <span className="row-main">
                     <span className="row-title">{p.name}</span>
-                    {p.groupName && <span className="row-meta">{p.groupName}</span>}
                   </span>
                   {on ? <Badge tone="success">On this duty</Badge> : busy.has(p.id) ? <Badge tone="warning">Busy then</Badge> : working === p.id ? <Badge>Adding…</Badge> : null}
                 </button>

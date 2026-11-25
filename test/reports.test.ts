@@ -2,35 +2,23 @@ import { describe, expect, it } from 'vitest';
 import { hashToken } from '../src/worker/services/credentials';
 import { runMaintenance } from '../src/worker/services/maintenance';
 import { csvCell } from '../src/worker/services/reports';
-import { api, createEvent, createUser, grant, json, testEnv } from './helpers';
+import { api, createEvent, createUser, grant, json, testEnv, addPeople } from './helpers';
 
 const person = (participantId: string, o: Record<string, unknown> = {}) => ({
   participantId,
   firstName: `Kid${participantId}`,
   lastName: 'Example',
   kind: 'youth',
-  level: 'Juniors',
-  groupName: 'Example Club',
-  photoConsent: 'yes',
   ...o,
 });
 
 async function camp() {
   const admin = await createUser({ platformAdmin: true });
   const eventId = await createEvent(admin.id);
-  await testEnv.DB.prepare(`UPDATE events SET feature_dietary = 1, feature_meals = 1, feature_site = 1 WHERE id = ?`).bind(eventId).run();
+  await testEnv.DB.prepare(`UPDATE events SET feature_meals = 1, feature_site = 1 WHERE id = ?`).bind(eventId).run();
   const director = await createUser();
   await grant(director.id, 'event_manager', eventId);
-  await api(`/events/${eventId}/import/commit`, {
-    cookie: director.cookie,
-    body: {
-      rows: [
-        person('1', { hasDietaryNotes: true, dietary: [{ category: 'allergy', item: 'Peanut', severity: 'anaphylactic', note: '' }] }),
-        person('2', { firstName: '=HYPERLINK("http://evil")' }),
-        person('3'),
-      ],
-    },
-  });
+  await addPeople(eventId, director.cookie, [person('1'), person('2', { firstName: '=HYPERLINK("http://evil")' }), person('3')]);
   await api(`/events/${eventId}/credentials/issue`, { cookie: director.cookie, body: { mode: 'missing' } });
   const { cards } = await json(await api(`/events/${eventId}/credentials/print`, { cookie: director.cookie, body: {} }));
   const kayak = await json(await api(`/events/${eventId}/activities`, { cookie: director.cookie, body: { name: 'Kayak', trackSignOut: true } }));
@@ -139,19 +127,13 @@ describe('exports', () => {
     await grant(leader.id, 'scanner', c.eventId);
 
     expect((await api(`/events/${c.eventId}/exports/attendance.csv`, { cookie: manager.cookie })).status).toBe(200);
-    expect((await api(`/events/${c.eventId}/exports/dietary-list.csv`, { cookie: leader.cookie })).status).toBe(403);
-    expect((await api(`/events/${c.eventId}/exports/dietary-list.csv`, { cookie: meal.cookie })).status).toBe(403);
-    // The meal team sees allergy alerts at the scan, but not the catering report.
-    expect((await api(`/events/${c.eventId}/exports/catering.csv`, { cookie: meal.cookie })).status).toBe(403);
     expect((await api(`/events/${c.eventId}/exports/attendance.csv`, { cookie: meal.cookie })).status).toBe(403);
     expect((await api(`/events/${c.eventId}/exports/attendance.csv`, { cookie: leader.cookie })).status).toBe(403);
-    expect((await api(`/events/${c.eventId}/exports/dietary-list.csv`, { cookie: manager.cookie })).status).toBe(200);
+    expect((await api(`/events/${c.eventId}/exports/site.csv`, { cookie: manager.cookie })).status).toBe(200);
 
     const listed = await json(await api(`/events/${c.eventId}/exports`, { cookie: meal.cookie }));
     expect(listed.exports.map((e: any) => e.key)).toEqual([]);
-    const audit = await testEnv.DB.prepare(`SELECT count(*) AS n FROM audit_log WHERE event_id = ? AND action = 'export.download'`)
-      .bind(c.eventId)
-      .first<{ n: number }>();
+    const audit = await testEnv.DB.prepare(`SELECT count(*) AS n FROM audit_log WHERE event_id = ? AND action = 'export.download'`).bind(c.eventId).first<{ n: number }>();
     expect(audit!.n).toBe(2); // only the manager's two successful downloads
   });
 
@@ -162,12 +144,14 @@ describe('exports', () => {
     expect((await api(`/events/${c.eventId}/reconciliation`, { cookie: scanner.cookie })).status).toBe(403);
   });
 
-  it('catering totals carry no names; CSVs state the time zone and neutralise formulas', async () => {
+  it('has no dietary exports; CSVs state the time zone and neutralise formulas', async () => {
     const c = await camp();
-    await scans(c.eventId, c.director.cookie, c.tokens.map((token) => ({ type: 'meal', id: c.lunch, token })));
-    const catering = await (await api(`/events/${c.eventId}/exports/catering.csv`, { cookie: c.director.cookie })).text();
-    expect(catering).toContain('"allergy","Peanut","1","1"');
-    expect(catering).not.toContain('Kid1');
+    await scans(
+      c.eventId,
+      c.director.cookie,
+      c.tokens.map((token) => ({ type: 'meal', id: c.lunch, token })),
+    );
+    for (const gone of ['catering', 'dietary-list']) expect((await api(`/events/${c.eventId}/exports/${gone}.csv`, { cookie: c.director.cookie })).status).toBe(404);
 
     const attendance = await (await api(`/events/${c.eventId}/exports/attendance.csv`, { cookie: c.director.cookie })).text();
     expect(attendance).toContain('All times are Australia/Adelaide');
@@ -182,34 +166,30 @@ describe('exports', () => {
 });
 
 describe('retention', () => {
-  it('purges sensitive data after 90 days and named records after 2 years, keeping totals', async () => {
+  it('purges lanyards and the Side Quest after 90 days and named records after 2 years, keeping totals', async () => {
     const c = await camp();
     await scans(c.eventId, c.director.cookie, [{ type: 'meal', id: c.lunch, token: c.tokens[0]! }]);
     await api(`/events/${c.eventId}/transition`, { cookie: c.director.cookie, body: { to: 'completed' } });
     const closed = await testEnv.DB.prepare(`SELECT closed_at FROM events WHERE id = ?`).bind(c.eventId).first<{ closed_at: string }>();
     const at = (days: number) => new Date(Date.parse(closed!.closed_at) + days * 86400_000).toISOString();
 
-    await testEnv.DB.prepare(`UPDATE registrations SET car_rego = 'enc1.AAAAAAAAAAAAAAAAAAAAAAAAAA' WHERE event_id = ?`).bind(c.eventId).run();
     const regs = await testEnv.DB.prepare(`SELECT id FROM registrations WHERE event_id = ? LIMIT 2`).bind(c.eventId).all<{ id: string }>();
     await testEnv.DB.prepare(`INSERT INTO side_quest_collections (event_id, collector_id, collected_id, created_at) VALUES (?, ?, ?, ?)`)
       .bind(c.eventId, regs.results[0]!.id, regs.results[1]!.id, new Date().toISOString())
       .run();
     await runMaintenance(testEnv, at(89));
-    expect((await testEnv.DB.prepare(`SELECT count(*) AS n FROM dietary_entries WHERE event_id = ?`).bind(c.eventId).first<{ n: number }>())!.n).toBe(1);
+    expect((await testEnv.DB.prepare(`SELECT count(*) AS n FROM side_quest_collections WHERE event_id = ?`).bind(c.eventId).first<{ n: number }>())!.n).toBe(1);
 
     await runMaintenance(testEnv, at(91));
-    expect((await testEnv.DB.prepare(`SELECT count(*) AS n FROM dietary_entries WHERE event_id = ?`).bind(c.eventId).first<{ n: number }>())!.n).toBe(0);
     const creds = await testEnv.DB.prepare(`SELECT DISTINCT status, token_ciphertext FROM credentials WHERE event_id = ?`).bind(c.eventId).all();
     expect(creds.results).toEqual([{ status: 'revoked', token_ciphertext: '' }]);
-    const consent = await testEnv.DB.prepare(`SELECT DISTINCT photo_consent FROM registrations WHERE event_id = ?`).bind(c.eventId).all();
-    expect(consent.results).toEqual([{ photo_consent: 'no' }]);
-    const rego = await testEnv.DB.prepare(`SELECT DISTINCT car_rego FROM registrations WHERE event_id = ?`).bind(c.eventId).all();
-    expect(rego.results).toEqual([{ car_rego: null }]);
     const quest = await testEnv.DB.prepare(`SELECT count(*) AS n FROM side_quest_collections WHERE event_id = ?`).bind(c.eventId).first<{ n: number }>();
     expect(quest!.n).toBe(0);
 
     await runMaintenance(testEnv, at(731));
-    const event = await testEnv.DB.prepare(`SELECT records_purged_at, archive_summary FROM events WHERE id = ?`).bind(c.eventId).first<{ records_purged_at: string; archive_summary: string }>();
+    const event = await testEnv.DB.prepare(`SELECT records_purged_at, archive_summary FROM events WHERE id = ?`)
+      .bind(c.eventId)
+      .first<{ records_purged_at: string; archive_summary: string }>();
     expect(event!.records_purged_at).not.toBeNull();
     const summary = JSON.parse(event!.archive_summary);
     expect(summary.contexts.find((x: any) => x.type === 'meal').people).toBe(1);

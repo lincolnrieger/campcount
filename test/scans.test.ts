@@ -2,16 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { normaliseShortCode } from '../src/shared/credentials';
 import { sha256Hex } from '../src/worker/lib/crypto';
 import { hashToken } from '../src/worker/services/credentials';
-import { api, createEvent, createUser, grant, json, testEnv } from './helpers';
+import { api, createEvent, createUser, grant, json, testEnv, addPeople } from './helpers';
 
 const person = (participantId: string, o: Record<string, unknown> = {}) => ({
   participantId,
   firstName: `First${participantId}`,
   lastName: 'Person',
   kind: 'youth',
-  level: 'Seniors',
-  groupName: 'Example Club',
-  photoConsent: 'yes',
   ...o,
 });
 
@@ -27,20 +24,14 @@ interface Camp {
 async function camp(): Promise<Camp> {
   const admin = await createUser({ platformAdmin: true });
   const eventId = await createEvent(admin.id);
-  await testEnv.DB.prepare(`UPDATE events SET feature_dietary = 1, feature_meals = 1, feature_site = 1 WHERE id = ?`).bind(eventId).run();
+  await testEnv.DB.prepare(`UPDATE events SET feature_meals = 1, feature_site = 1 WHERE id = ?`).bind(eventId).run();
   const director = await createUser();
   await grant(director.id, 'event_manager', eventId);
-  const rows = [
-    person('100', { hasDietaryNotes: true, dietary: [{ category: 'allergy', item: 'Peanut', severity: 'anaphylactic', note: '' }] }),
-    person('200', { photoConsent: 'no' }),
-    person('300', { kind: 'adult', level: 'Leaders' }),
-  ];
-  await api(`/events/${eventId}/import/commit`, { cookie: director.cookie, body: { rows } });
+  const rows = [person('100'), person('200'), person('300', { kind: 'adult' })];
+  await addPeople(eventId, director.cookie, rows);
   await api(`/events/${eventId}/credentials/issue`, { cookie: director.cookie, body: { mode: 'missing' } });
   const { cards } = await json(await api(`/events/${eventId}/credentials/print`, { cookie: director.cookie, body: {} }));
-  const activity = await json(
-    await api(`/events/${eventId}/activities`, { cookie: director.cookie, body: { name: 'Kayaking', trackSignOut: true, capacity: 10 } }),
-  );
+  const activity = await json(await api(`/events/${eventId}/activities`, { cookie: director.cookie, body: { name: 'Kayaking', trackSignOut: true, capacity: 10 } }));
   const other = await json(await api(`/events/${eventId}/activities`, { cookie: director.cookie, body: { name: 'Archery' } }));
   const meal = await json(await api(`/events/${eventId}/meals`, { cookie: director.cookie, body: { name: 'Saturday lunch' } }));
   await api(`/events/${eventId}/transition`, { cookie: director.cookie, body: { to: 'open' } });
@@ -73,11 +64,10 @@ async function scanItem(ctx: { contextType: string; contextId: string | null }, 
   };
 }
 
-const upload = (eventId: string, cookie: string, scans: unknown[]) =>
-  api(`/events/${eventId}/scans`, { cookie, body: { deviceId: 'test-device-1', scans } });
+const upload = (eventId: string, cookie: string, scans: unknown[]) => api(`/events/${eventId}/scans`, { cookie, body: { deviceId: 'test-device-1', scans } });
 
 describe('scan snapshot', () => {
-  it('contains hashes and display fields only, never tokens, codes or dietary detail outside meals', async () => {
+  it('contains hashes and name and role only, never tokens or codes', async () => {
     const c = await camp();
     const leader = await staff(c.eventId, 'scanner', c.activityId);
     const res = await api(`/events/${c.eventId}/scan/activity/${c.activityId}/snapshot`, { cookie: leader.cookie });
@@ -89,18 +79,15 @@ describe('scan snapshot', () => {
     const snap = JSON.parse(text);
     // Participant IDs (the typed codes) only go to people who can see the roster.
     expect(snap.people.every((p: any) => p.participantId === undefined)).toBe(true);
-    expect(snap.people[0]).not.toHaveProperty('dietaryAlert');
-    expect(snap.people.find((p: any) => p.fullName.startsWith('First200')).noPhotos).toBe(true);
+    for (const p of snap.people) expect(Object.keys(p).sort()).toEqual(['booked', 'fullName', 'id', 'kind', 'name', 'state', 'withdrawn']);
     expect(snap.credentials[0].tokenHash).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it('shows allergy alerts to meal leaders only', async () => {
+  it('gives meal leaders the meal list, with nothing about dietary needs', async () => {
     const c = await camp();
     const meal = await staff(c.eventId, 'meal_leader');
     const snap = await json(await api(`/events/${c.eventId}/scan/meal/${c.mealId}/snapshot`, { cookie: meal.cookie }));
-    expect(snap.people.find((p: any) => p.fullName.startsWith('First100')).dietaryAlert).toBe('Allergy: Peanut (anaphylactic)');
-    // Meal leaders are not given photo markers (they don't hold photo.view_status).
-    expect(snap.people.find((p: any) => p.fullName.startsWith('First200'))).not.toHaveProperty('noPhotos');
+    expect(snap.people.find((p: any) => p.fullName.startsWith('First100'))).not.toHaveProperty('dietaryAlert');
     const gate = await staff(c.eventId, 'scanner');
     expect((await api(`/events/${c.eventId}/scan/meal/${c.mealId}/snapshot`, { cookie: gate.cookie })).status).toBe(403);
   });

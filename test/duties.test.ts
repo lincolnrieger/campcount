@@ -1,14 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { api, createEvent, createUser, grant, json } from './helpers';
+import { api, createEvent, createUser, grant, json, addPeople } from './helpers';
 
 const person = (participantId: string, kind: 'youth' | 'adult', firstName: string) => ({
   participantId,
   firstName,
   lastName: 'Person',
   kind,
-  level: kind === 'adult' ? 'Leaders' : 'Seniors',
-  groupName: 'Example Group',
-  photoConsent: 'yes',
 });
 
 async function camp() {
@@ -16,10 +13,7 @@ async function camp() {
   const eventId = await createEvent(admin.id, { status: 'open' });
   const manager = await createUser();
   await grant(manager.id, 'event_manager', eventId);
-  await api(`/events/${eventId}/import/commit`, {
-    cookie: manager.cookie,
-    body: { rows: [person('900', 'adult', 'Alex'), person('901', 'adult', 'Bo'), person('100', 'youth', 'Cam')] },
-  });
+  await addPeople(eventId, manager.cookie, [person('900', 'adult', 'Alex'), person('901', 'adult', 'Bo'), person('100', 'youth', 'Cam')]);
   await api(`/events/${eventId}/credentials/issue`, { cookie: manager.cookie, body: { mode: 'missing' } });
   const { cards } = await json(await api(`/events/${eventId}/credentials/print`, { cookie: manager.cookie, body: {} }));
   const card = (first: string) => {
@@ -38,7 +32,14 @@ describe('leader roster', () => {
     const bo = c.card('Bo');
     const res = await api(`/events/${c.eventId}/duties`, {
       cookie: c.manager.cookie,
-      body: { title: 'Gate', location: 'Main gate', notes: 'Bring a radio', startsAt: '2026-12-06T08:00:00+10:30', endsAt: '2026-12-06T10:00:00+10:30', registrationIds: [alex.registrationId] },
+      body: {
+        title: 'Gate',
+        location: 'Main gate',
+        notes: 'Bring a radio',
+        startsAt: '2026-12-06T08:00:00+10:30',
+        endsAt: '2026-12-06T10:00:00+10:30',
+        registrationIds: [alex.registrationId],
+      },
     });
     expect(res.status).toBe(201);
     const { id } = await json(res);

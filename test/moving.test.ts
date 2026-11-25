@@ -1,15 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { hashToken } from '../src/worker/services/credentials';
-import { api, createEvent, createUser, grant, json, testEnv } from './helpers';
+import { api, createEvent, createUser, grant, json, testEnv, addPeople } from './helpers';
 
 const person = (participantId: string) => ({
   participantId,
   firstName: `Mover${participantId}`,
   lastName: 'Person',
   kind: 'youth',
-  level: 'Seniors',
-  groupName: 'Example Club',
-  photoConsent: 'yes',
 });
 
 async function camp() {
@@ -18,7 +15,7 @@ async function camp() {
   const manager = await createUser();
   await grant(manager.id, 'event_manager', eventId);
   const n = String(700000 + Math.floor(Math.random() * 99999));
-  await api(`/events/${eventId}/import/commit`, { cookie: manager.cookie, body: { rows: [person(n)] } });
+  await addPeople(eventId, manager.cookie, [person(n)]);
   await api(`/events/${eventId}/credentials/issue`, { cookie: manager.cookie, body: { mode: 'missing' } });
   const { cards } = await json(await api(`/events/${eventId}/credentials/print`, { cookie: manager.cookie, body: {} }));
   const add = async (name: string, trackSignOut: boolean) =>
@@ -37,7 +34,17 @@ async function scanIn(c: Awaited<ReturnType<typeof camp>>, activityId: string) {
     cookie: c.manager.cookie,
     body: {
       deviceId: 'test-device',
-      scans: [{ id: crypto.randomUUID(), contextType: 'activity', contextId: activityId, direction: 'in', deviceTime: new Date(Date.now() - 600_000 + t++ * 1000).toISOString(), method: 'qr', credentialHash: await hashToken(c.token) }],
+      scans: [
+        {
+          id: crypto.randomUUID(),
+          contextType: 'activity',
+          contextId: activityId,
+          direction: 'in',
+          deviceTime: new Date(Date.now() - 600_000 + t++ * 1000).toISOString(),
+          method: 'qr',
+          credentialHash: await hashToken(c.token),
+        },
+      ],
     },
   });
   return (await json(res)).results[0] as { outcome: string; warning: string | null };

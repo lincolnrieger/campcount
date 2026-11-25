@@ -103,7 +103,7 @@ export function CopyEvent() {
       await copyLanyardDesign(event.id, copy.id);
       await api(`/events/${copy.id}`, {
         method: 'PATCH',
-        body: { lanyard: { photoMarker: event.lanyard.photoMarker, photoMarkerColour: event.lanyard.photoMarkerColour, photoMarkerLabel: event.lanyard.photoMarkerLabel } },
+        body: { lanyard: { printBand: event.lanyard.printBand } },
       });
       toast(`Created ${copy.name}. Give it an address, add staff and people, then open it.`);
       navigate(`/camps/${copy.id}`);
@@ -153,7 +153,10 @@ export function CopyEvent() {
             <div className="field">
               <span className="field-label">Last day</span>
               <span className="copy-ends">
-                {endsOn ? `${formatDay(endsOn)} ${endsOn.slice(0, 4)}` : '–'} <span className="meta">· {length + 1} day{length ? 's' : ''}, like this event</span>
+                {endsOn ? `${formatDay(endsOn)} ${endsOn.slice(0, 4)}` : '–'}{' '}
+                <span className="meta">
+                  · {length + 1} day{length ? 's' : ''}, like this event
+                </span>
               </span>
             </div>
           </div>

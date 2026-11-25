@@ -82,7 +82,11 @@ export function TeamEvents() {
     return { people, short };
   };
   const status = (te: TeamEvent) =>
-    te.status === 'cancelled' ? <Badge>Cancelled</Badge> : <Badge tone={te.registrationOpen ? 'success' : 'neutral'}>{te.registrationOpen ? 'Registration open' : 'Registration closed'}</Badge>;
+    te.status === 'cancelled' ? (
+      <Badge>Cancelled</Badge>
+    ) : (
+      <Badge tone={te.registrationOpen ? 'success' : 'neutral'}>{te.registrationOpen ? 'Registration open' : 'Registration closed'}</Badge>
+    );
 
   let body;
   if (loading && !data)
@@ -160,9 +164,7 @@ export function TeamEvents() {
                 <span className="row-title">
                   <Link to={te.id}>{te.name}</Link>
                 </span>
-                <span className="row-meta">
-                  {[when(te, event.timezone), te.location, sizeRule(te)].filter(Boolean).join(' · ')}
-                </span>
+                <span className="row-meta">{[when(te, event.timezone), te.location, sizeRule(te)].filter(Boolean).join(' · ')}</span>
                 <span className="row-meta">
                   {plural(te.teams.length, 'team')}
                   {te.maxTeams !== null ? ` of ${te.maxTeams}` : ''} · {plural(people, 'person', 'people')}
@@ -225,7 +227,17 @@ type TeamEventBody = {
 };
 
 /** Name, time and place, team sizes, and whether registration is open. */
-function TeamEventForm({ initial, submitLabel, onSave, onCancel }: { initial?: TeamEvent; submitLabel: string; onSave: (body: TeamEventBody) => Promise<void>; onCancel: () => void }) {
+function TeamEventForm({
+  initial,
+  submitLabel,
+  onSave,
+  onCancel,
+}: {
+  initial?: TeamEvent;
+  submitLabel: string;
+  onSave: (body: TeamEventBody) => Promise<void>;
+  onCancel: () => void;
+}) {
   const { event } = useEvent();
   const tz = event.timezone;
   const days = eventDays(event.startsOn, event.endsOn);
@@ -358,7 +370,7 @@ export function TeamEventPage() {
   const confirm = useConfirm();
   const navigate = useNavigate();
   const { data, error, loading, reload } = useApi<{ teamEvents: TeamEvent[]; canManage: boolean }>(`/events/${event.id}/team-events`);
-  const roster = useApi<{ everyone: { id: string; name: string; groupName: string }[] }>(`/events/${event.id}/activities/${teamEventId}/attendance`);
+  const roster = useApi<{ everyone: { id: string; name: string }[] }>(`/events/${event.id}/activities/${teamEventId}/attendance`);
   const [panel, setPanel] = useState<Panel>(null);
   const [q, setQ] = useState('');
   const [show, setShow] = useState<TeamShow>('all');
@@ -414,7 +426,7 @@ export function TeamEventPage() {
   const searching = q.trim() !== '';
   const shownTeams = te.teams
     .filter((t) => show === 'all' || stateOf(t) === show)
-    .map((t) => ({ team: t, members: searching && !matchesSearch(q, t.name) ? t.members.filter((m) => matchesSearch(q, m.name, m.groupName)) : t.members }))
+    .map((t) => ({ team: t, members: searching && !matchesSearch(q, t.name) ? t.members.filter((m) => matchesSearch(q, m.name)) : t.members }))
     .filter(({ team, members }) => !searching || matchesSearch(q, team.name) || members.length > 0);
 
   return (
@@ -463,8 +475,20 @@ export function TeamEventPage() {
           items={[
             { label: te.maxTeams !== null ? `Teams of ${te.maxTeams}` : 'Teams', value: te.teams.length, tone: full ? 'warning' : undefined },
             { label: 'People', value: people },
-            { label: 'Ready', value: counts.ready, tone: 'success', pressed: show === 'ready', onPress: counts.ready ? () => setShow(show === 'ready' ? 'all' : 'ready') : undefined },
-            { label: 'Short of players', value: counts.short, tone: counts.short ? 'warning' : undefined, pressed: show === 'short', onPress: counts.short ? () => setShow(show === 'short' ? 'all' : 'short') : undefined },
+            {
+              label: 'Ready',
+              value: counts.ready,
+              tone: 'success',
+              pressed: show === 'ready',
+              onPress: counts.ready ? () => setShow(show === 'ready' ? 'all' : 'ready') : undefined,
+            },
+            {
+              label: 'Short of players',
+              value: counts.short,
+              tone: counts.short ? 'warning' : undefined,
+              pressed: show === 'short',
+              onPress: counts.short ? () => setShow(show === 'short' ? 'all' : 'short') : undefined,
+            },
           ]}
         />
         <Toolbar sticky label="Find teams and people">
@@ -502,7 +526,9 @@ export function TeamEventPage() {
         </Toolbar>
 
         {te.teams.length === 0 ? (
-          <EmptyState title="No teams yet">{te.registrationOpen ? 'Teams appear here as participants make them.' : 'Add teams, or open registration so participants make their own.'}</EmptyState>
+          <EmptyState title="No teams yet">
+            {te.registrationOpen ? 'Teams appear here as participants make them.' : 'Add teams, or open registration so participants make their own.'}
+          </EmptyState>
         ) : shownTeams.length === 0 ? (
           <EmptyState
             title={searching ? `No one matches "${q}"` : 'No teams here'}
@@ -543,7 +569,13 @@ export function TeamEventPage() {
                               onSelect: async () => {
                                 const ok = await confirm({
                                   title: `Delete ${t.name}?`,
-                                  body: <p>{t.members.length ? `Its ${plural(t.members.length, 'person', 'people')} come off the team and off ${te.name}'s bookings.` : 'It has nobody on it.'}</p>,
+                                  body: (
+                                    <p>
+                                      {t.members.length
+                                        ? `Its ${plural(t.members.length, 'person', 'people')} come off the team and off ${te.name}'s bookings.`
+                                        : 'It has nobody on it.'}
+                                    </p>
+                                  ),
                                   confirm: 'Delete team',
                                   danger: true,
                                 });
@@ -560,10 +592,10 @@ export function TeamEventPage() {
                   ) : (
                     <ul className="pg-team-members">
                       {members.map((m) => (
-                        <li key={m.registrationId} className={searching && matchesSearch(q, m.name, m.groupName) ? 'is-match' : undefined}>
+                        <li key={m.registrationId} className={searching && matchesSearch(q, m.name) ? 'is-match' : undefined}>
                           <span className="row-main">
                             <span className="row-title">{m.name}</span>
-                            <span className="row-meta">{[m.level, m.groupName].filter(Boolean).join(' · ')}</span>
+                            <span className="row-meta">{m.level}</span>
                           </span>
                           {editable && (
                             <Button
@@ -635,7 +667,19 @@ export function TeamEventPage() {
             onPick={async (p) => {
               const team = te.teams.find((t) => t.id === panel.teamId)!;
               const from = te.teams.find((t) => t.members.some((m) => m.registrationId === p.id));
-              if (from && !(await confirm({ title: `Move ${p.name}?`, body: <p>They're on {from.name}. They'll move to {team.name}.</p>, confirm: 'Move' }))) return;
+              if (
+                from &&
+                !(await confirm({
+                  title: `Move ${p.name}?`,
+                  body: (
+                    <p>
+                      They're on {from.name}. They'll move to {team.name}.
+                    </p>
+                  ),
+                  confirm: 'Move',
+                }))
+              )
+                return;
               setPanel(null);
               await act(() => api(`${path}/teams/${team.id}/members`, { body: { registrationId: p.id } }), `${p.name} added to ${team.name}`);
             }}
@@ -682,7 +726,7 @@ function TeamNameForm({ initial, submitLabel, onSave, onCancel }: { initial: str
 }
 
 /** Search the event roster for someone to put on a team. */
-function PersonPicker({ everyone, onTeam, onPick }: { everyone: { id: string; name: string; groupName: string }[] | null; onTeam: Set<string>; onPick: (p: { id: string; name: string }) => void }) {
+function PersonPicker({ everyone, onTeam, onPick }: { everyone: { id: string; name: string }[] | null; onTeam: Set<string>; onPick: (p: { id: string; name: string }) => void }) {
   const [q, setQ] = useState('');
   if (!everyone) return <Loading what="people" rows={4} />;
   const matches = q.trim()
@@ -706,7 +750,6 @@ function PersonPicker({ everyone, onTeam, onPick }: { everyone: { id: string; na
               <button type="button" className="row row-button" onClick={() => onPick(p)}>
                 <span className="row-main">
                   <span className="row-title">{p.name}</span>
-                  <span className="row-meta">{p.groupName}</span>
                 </span>
                 {onTeam.has(p.id) && <Badge>On a team</Badge>}
               </button>

@@ -22,14 +22,13 @@ import {
   useRemembered,
   useToast,
 } from '../ui';
+import { ROLE_LABEL } from '../../shared/roles';
 import { useEvent } from './EventLayout';
 
 interface Person {
   id: string;
   name: string;
-  level: string;
-  groupName: string;
-  kind: string;
+  kind: 'youth' | 'adult';
   active: boolean;
 }
 interface Collection {
@@ -91,7 +90,14 @@ export function SideQuest() {
     const collectedBy = new Map<string, number>();
     for (const c of data.collections) collectedBy.set(c.collectedId, (collectedBy.get(c.collectedId) ?? 0) + 1);
     const board = [...byCollector.entries()]
-      .map(([id, list]) => ({ id, person: people.get(id), collected: list.length, rapid: list.filter((c) => rapid.has(pairKey(c))).length, by: collectedBy.get(id) ?? 0, last: list[list.length - 1]!.at }))
+      .map(([id, list]) => ({
+        id,
+        person: people.get(id),
+        collected: list.length,
+        rapid: list.filter((c) => rapid.has(pairKey(c))).length,
+        by: collectedBy.get(id) ?? 0,
+        last: list[list.length - 1]!.at,
+      }))
       .sort((a, b) => b.collected - a.collected || (a.person?.name ?? '').localeCompare(b.person?.name ?? ''));
     const placed = board.map((r) => ({ ...r, place: 1 + board.filter((x) => x.collected > r.collected).length }));
     const mutualPairs = data.collections.filter((c) => mutual(c) && c.collectorId < c.collectedId).length;
@@ -106,14 +112,35 @@ export function SideQuest() {
       help="Campers collect each other by scanning lanyards with their own phone. Take away collections that shouldn’t count, such as a stack of spare lanyards or a photo of one."
     />
   );
-  if (loading && !data) return (<>{header}<Loading what="the Side Quest" rows={6} /></>);
-  if (error || !data || !model) return (<>{header}<LoadError error={error!} onRetry={reload} what="the Side Quest" /></>);
+  if (loading && !data)
+    return (
+      <>
+        {header}
+        <Loading what="the Side Quest" rows={6} />
+      </>
+    );
+  if (error || !data || !model)
+    return (
+      <>
+        {header}
+        <LoadError error={error!} onRetry={reload} what="the Side Quest" />
+      </>
+    );
 
   const nameOf = (id: string) => model.people.get(id)?.name ?? 'Someone removed';
   const tz = event.timezone;
 
   async function remove(pairs: Collection[], what: string) {
-    if (pairs.length > 1 && !(await confirm({ title: `Take away ${pairs.length} collections?`, body: <p>They stop counting towards {what}. You can undo straight after.</p>, confirm: 'Take away', danger: true }))) return;
+    if (
+      pairs.length > 1 &&
+      !(await confirm({
+        title: `Take away ${pairs.length} collections?`,
+        body: <p>They stop counting towards {what}. You can undo straight after.</p>,
+        confirm: 'Take away',
+        danger: true,
+      }))
+    )
+      return;
     setBusy(true);
     try {
       const all: Collection[] = [];
@@ -146,7 +173,7 @@ export function SideQuest() {
     .filter((c) => !q || matchesSearch(q, nameOf(c.collectorId), nameOf(c.collectedId)))
     .slice()
     .reverse();
-  const board = model.board.filter((r) => !q || matchesSearch(q, r.person?.name ?? '', r.person?.groupName ?? ''));
+  const board = model.board.filter((r) => !q || matchesSearch(q, r.person?.name ?? ''));
   const chosen = friends.filter((c) => selected.has(pairKey(c)));
   const toggle = (k: string) =>
     setSelected((s) => {
@@ -183,7 +210,13 @@ export function SideQuest() {
             { label: 'Playing', value: model.board.length, hint: `of ${data.players} at camp` },
             { label: 'Collected', value: data.collections.length },
             { label: 'In the lead', value: top ? `${top.collected}` : '–', hint: top?.person?.name },
-            { label: 'Both ways', value: model.mutualPairs, onPress: () => (setView('friends'), setFilter('mutual')), pressed: view === 'friends' && filter === 'mutual', hint: 'Pairs who collected each other' },
+            {
+              label: 'Both ways',
+              value: model.mutualPairs,
+              onPress: () => (setView('friends'), setFilter('mutual')),
+              pressed: view === 'friends' && filter === 'mutual',
+              hint: 'Pairs who collected each other',
+            },
             {
               label: 'Rapid',
               value: rapidCount,
@@ -195,7 +228,14 @@ export function SideQuest() {
           ]}
         />
         {rapidCount > 0 && filter !== 'rapid' && (
-          <Banner tone="warning" action={<Button small onClick={() => (setView('friends'), setFilter('rapid'))}>Review</Button>}>
+          <Banner
+            tone="warning"
+            action={
+              <Button small onClick={() => (setView('friends'), setFilter('rapid'))}>
+                Review
+              </Button>
+            }
+          >
             {rapidCount} collection{rapidCount === 1 ? '' : 's'} came in bursts, which usually means a stack of lanyards or a photo.
           </Banner>
         )}
@@ -236,7 +276,7 @@ export function SideQuest() {
                     Place
                   </th>
                   <th scope="col">Name</th>
-                  <th scope="col">Level · group</th>
+                  <th scope="col">Role</th>
                   <th scope="col" className="cell-num">
                     Collected
                   </th>
@@ -259,7 +299,7 @@ export function SideQuest() {
                         {r.person?.name ?? 'Someone removed'}
                       </button>
                     </td>
-                    <td className="meta">{[r.person?.level, r.person?.groupName].filter(Boolean).join(' · ')}</td>
+                    <td className="meta">{r.person ? ROLE_LABEL[r.person.kind] : ''}</td>
                     <td className="cell-num">
                       <strong>{r.collected}</strong>
                     </td>
@@ -308,7 +348,12 @@ export function SideQuest() {
                       <tr key={k} className={model.rapid.has(k) ? 'sq-rapid' : undefined}>
                         {data.canRemove && (
                           <td className="cell-check">
-                            <input type="checkbox" aria-label={`Choose ${nameOf(c.collectorId)} collecting ${nameOf(c.collectedId)}`} checked={selected.has(k)} onChange={() => toggle(k)} />
+                            <input
+                              type="checkbox"
+                              aria-label={`Choose ${nameOf(c.collectorId)} collecting ${nameOf(c.collectedId)}`}
+                              checked={selected.has(k)}
+                              onChange={() => toggle(k)}
+                            />
                           </td>
                         )}
                         <td className="meta sq-when">{stamp(c.at, tz)}</td>
@@ -355,7 +400,7 @@ export function SideQuest() {
       <Sheet open={!!open} title={person?.name ?? 'Side Quest'} onClose={() => setOpen(null)}>
         {open && (
           <div className="sq-person">
-            <p className="meta">{[person?.level, person?.groupName].filter(Boolean).join(' · ')}</p>
+            <p className="meta">{person ? ROLE_LABEL[person.kind] : ''}</p>
             <StatStrip
               items={[
                 { label: 'Collected', value: theirs.length },

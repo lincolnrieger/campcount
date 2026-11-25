@@ -35,33 +35,78 @@ export function duplicate(d: LanyardDesign, side: SideKey, id: string): { design
 }
 
 /** A new element, placed in the middle of the card. */
-export function makeElement(d: LanyardDesign, kind: 'text' | 'field' | 'qr' | 'rect' | 'ellipse' | 'band' | 'marker', field?: FieldId): DesignElement {
+export function makeElement(d: LanyardDesign, kind: 'text' | 'field' | 'qr' | 'rect' | 'ellipse' | 'band', field?: FieldId): DesignElement {
   const { w, h } = cardSize(d.format, d.orientation);
   const big = d.format === 'large';
   const centre = (bw: number, bh: number) => ({ x: (w - bw) / 2, y: (h - bh) / 2, w: bw, h: bh });
   switch (kind) {
     case 'text':
-      return { id: newId('text'), name: 'Text', type: 'text', text: 'Your words here', ...centre(w * 0.7, big ? 10 : 7), font: 'nunito-sans', size: big ? 16 : 11, weight: 700, colour: '#16201B', align: 'center', wrap: true };
+      return {
+        id: newId('text'),
+        name: 'Text',
+        type: 'text',
+        text: 'Your words here',
+        ...centre(w * 0.7, big ? 10 : 7),
+        font: 'nunito-sans',
+        size: big ? 16 : 11,
+        weight: 700,
+        colour: '#16201B',
+        align: 'center',
+        wrap: true,
+      };
     case 'field': {
       const f = field ?? 'name';
-      return { id: newId(f), name: FIELDS[f].label, type: 'text', text: `{${f}}`, ...centre(w * 0.8, big ? 10 : 7), font: 'nunito-sans', size: big ? 18 : 12, weight: f === 'name' ? 800 : 700, colour: '#16201B', align: 'center', wrap: false };
+      return {
+        id: newId(f),
+        name: FIELDS[f].label,
+        type: 'text',
+        text: `{${f}}`,
+        ...centre(w * 0.8, big ? 10 : 7),
+        font: 'nunito-sans',
+        size: big ? 18 : 12,
+        weight: f === 'name' ? 800 : 700,
+        colour: '#16201B',
+        align: 'center',
+        wrap: false,
+      };
     }
     case 'qr': {
       const s = Math.min(w, h) * 0.55;
       return { id: newId('qr'), name: 'QR code', type: 'qr', ...centre(s, s) };
     }
     case 'rect':
-      return { id: newId('rect'), name: 'Rectangle', type: 'shape', shape: 'rect', ...centre(w * 0.5, h * 0.25), fill: '#1F5C46', stroke: 'none', strokeWidth: 0, radius: 0, opacity: 1 };
+      return {
+        id: newId('rect'),
+        name: 'Rectangle',
+        type: 'shape',
+        shape: 'rect',
+        ...centre(w * 0.5, h * 0.25),
+        fill: '#1F5C46',
+        stroke: 'none',
+        strokeWidth: 0,
+        radius: 0,
+        opacity: 1,
+      };
     case 'ellipse': {
       const s = Math.min(w, h) * 0.35;
       return { id: newId('circle'), name: 'Circle', type: 'shape', shape: 'ellipse', ...centre(s, s), fill: '#1F5C46', stroke: 'none', strokeWidth: 0, radius: 0, opacity: 1 };
     }
     case 'band':
-      return { id: newId('band'), name: 'Level band', type: 'shape', shape: 'rect', x: 0, y: 0, w, h: h * 0.15, fill: 'level', stroke: 'none', strokeWidth: 0, radius: 0, opacity: 1 };
-    case 'marker': {
-      const s = big ? 12 : 7;
-      return { id: newId('marker'), name: 'No-photo mark', type: 'marker', x: w - s - 3, y: 3, w: s, h: s };
-    }
+      return {
+        id: newId('band'),
+        name: 'Role band',
+        type: 'shape',
+        shape: 'rect',
+        x: 0,
+        y: 0,
+        w,
+        h: h * 0.15,
+        fill: 'level',
+        stroke: 'none',
+        strokeWidth: 0,
+        radius: 0,
+        opacity: 1,
+      };
   }
 }
 
@@ -88,7 +133,7 @@ export function resizeDesign(d: LanyardDesign, format: CardFormat, orientation: 
   const ss = Math.min(sx, sy);
   const scale = (e: DesignElement): DesignElement => {
     let next = { ...e, x: e.x * sx, y: e.y * sy, w: e.w * sx, h: e.h * sy } as DesignElement;
-    // QR codes and no-photo marks stay square.
+    // QR codes stay square.
     if (e.type === 'qr' || e.type === 'marker') {
       const s = Math.min(e.w, e.h) * ss;
       next = { ...next, w: s, h: s, x: e.x * sx + (e.w * sx - s) / 2, y: e.y * sy + (e.h * sy - s) / 2 } as DesignElement;
@@ -111,7 +156,12 @@ export interface Guide {
  * and other elements' edges and centres. Returns the adjusted position and
  * the guide lines to show.
  */
-export function snapMove(box: { x: number; y: number; w: number; h: number }, others: { x: number; y: number; w: number; h: number }[], card: { w: number; h: number }, threshold: number) {
+export function snapMove(
+  box: { x: number; y: number; w: number; h: number },
+  others: { x: number; y: number; w: number; h: number }[],
+  card: { w: number; h: number },
+  threshold: number,
+) {
   const xs = [0, card.w / 2, card.w, 3, card.w - 3, ...others.flatMap((o) => [o.x, o.x + o.w / 2, o.x + o.w])];
   const ys = [0, card.h / 2, card.h, 3, card.h - 3, ...others.flatMap((o) => [o.y, o.y + o.h / 2, o.y + o.h])];
   const guides: Guide[] = [];

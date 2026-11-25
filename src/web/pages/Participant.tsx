@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { levelColours } from '../../shared/lanyardDesign';
-import { textOn } from '../../shared/levels';
+import { textOn } from '../../shared/roles';
 import { dayInZone, dayLabel, timeInZone, todayInZone } from '../../shared/time';
 import { ApiFailure, api } from '../api';
 import { loadSnapshot, saveSnapshot } from '../offline/db';
@@ -117,7 +117,11 @@ export function Participant() {
       <Shell>
         <div className="pp-empty">
           <h1>{state === 'inactive' ? 'This card isn’t working' : 'Scan your lanyard'}</h1>
-          <p>{state === 'inactive' ? 'It may have been replaced with a new one. Ask a leader for help.' : 'Point your phone’s camera at the QR code on your own lanyard to open your camp page.'}</p>
+          <p>
+            {state === 'inactive'
+              ? 'It may have been replaced with a new one. Ask a leader for help.'
+              : 'Point your phone’s camera at the QR code on your own lanyard to open your camp page.'}
+          </p>
         </div>
       </Shell>
     );
@@ -299,7 +303,7 @@ function Page({ view, busy, actions, initialTab, onNotMe }: { view: SignupView; 
   const meals = programme.filter((i) => i.kind === 'meal');
   const teamEvents = view.teamEvents ?? [];
   // Leaders don't book activities, so they don't get the Book tab.
-  // Adults (per the camp's youth levels setting) don't book activities.
+  // Leaders don't book activities.
   const isAdult = view.person.kind ? view.person.kind === 'adult' : view.person.levelWord === 'Leader';
   // A link for everyone can switch parts off (the server leaves their data out too).
   const has = (f: LinkFeature) => !view.features || view.features.includes(f);
@@ -333,7 +337,9 @@ function Page({ view, busy, actions, initialTab, onNotMe }: { view: SignupView; 
       <Pass view={view} />
       <div className="pp-panel">
         {current === 'roster' && <Roster duties={duties} now={now} tz={tz} />}
-        {current === 'day' && <MyDay items={programme} mine={mine} now={now} tz={tz} onBook={canBook && view.open && view.sessions.length > 0 ? () => setTab('book') : undefined} />}
+        {current === 'day' && (
+          <MyDay items={programme} mine={mine} now={now} tz={tz} onBook={canBook && view.open && view.sessions.length > 0 ? () => setTab('book') : undefined} />
+        )}
         {current === 'book' && <Book view={view} busy={busy} onBook={actions.book} onCancel={actions.cancel} />}
         {current === 'teams' && (
           <section className="pp-section" aria-labelledby="teams-h">
@@ -395,7 +401,7 @@ function PageFoot({ email, onNotMe }: { email?: string; onNotMe?: () => void }) 
 
 const nameSize = (name: string) => (name.length <= 12 ? 'is-l' : name.length <= 20 ? 'is-m' : 'is-s');
 
-/** Who you are, at which camp. Coloured like your level's lanyard band. */
+/** Who you are, at which camp. Coloured like your role's lanyard band. */
 function Pass({ view }: { view: SignupView }) {
   const word = view.person.levelWord ?? '';
   const colour = view.person.levelColour ?? levelColours(word).bg;
@@ -606,7 +612,11 @@ function MyBookings({ view }: { view: SignupView }) {
 
 /** An .ics file of someone's bookings, for their phone's calendar. */
 function downloadCalendar(camp: string, items: { activityId: string; name: string; location: string; startsAt: string | null; endsAt: string | null }[]) {
-  const stamp = (iso: string) => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const stamp = (iso: string) =>
+    new Date(iso)
+      .toISOString()
+      .replace(/[-:]/g, '')
+      .replace(/\.\d{3}/, '');
   const esc = (t: string) => t.replace(/[\\;,]/g, (m) => `\\${m}`).replace(/\n/g, '\\n');
   const now = stamp(new Date().toISOString());
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//CampCount//Bookings//EN', 'CALSCALE:GREGORIAN'];
@@ -647,7 +657,20 @@ function Book({ view, busy, onBook, onCancel }: { view: SignupView; busy: boolea
     ...view.sessions,
     ...view.bookings
       .filter((b) => !view.sessions.some((s) => s.id === b.activityId))
-      .map((b) => ({ id: b.activityId, name: b.name, startsAt: b.startsAt, endsAt: b.endsAt, location: b.location, capacity: null, booked: 0, full: false, extra: true }) as SignupSession & { extra: boolean }),
+      .map(
+        (b) =>
+          ({
+            id: b.activityId,
+            name: b.name,
+            startsAt: b.startsAt,
+            endsAt: b.endsAt,
+            location: b.location,
+            capacity: null,
+            booked: 0,
+            full: false,
+            extra: true,
+          }) as SignupSession & { extra: boolean },
+      ),
   ];
   const dayOf = (s: { startsAt: string | null }) => (s.startsAt ? dayInZone(s.startsAt, tz) : 'any');
   const days = [...new Set(rows.map(dayOf))].sort((a, b) => (a === 'any' ? 1 : b === 'any' ? -1 : a.localeCompare(b)));
@@ -680,9 +703,7 @@ function Book({ view, busy, onBook, onCancel }: { view: SignupView; busy: boolea
                 <span className="pp-row-main">
                   <strong>{s.name}</strong>
                   <span>
-                    {clash
-                      ? `Clashes with ${clash.name}`
-                      : [s.startsAt && s.endsAt ? `until ${timeInZone(s.endsAt, tz)}` : null, s.location].filter(Boolean).join(' · ')}
+                    {clash ? `Clashes with ${clash.name}` : [s.startsAt && s.endsAt ? `until ${timeInZone(s.endsAt, tz)}` : null, s.location].filter(Boolean).join(' · ')}
                   </span>
                   {fullness(s) && <span className={s.full ? 'pp-row-count is-full' : 'pp-row-count'}>{fullness(s)}</span>}
                 </span>
@@ -737,10 +758,9 @@ function Book({ view, busy, onBook, onCancel }: { view: SignupView; busy: boolea
 }
 
 /**
- * Meals one day at a time. Each meal opens to its items by category; if
- * they have dietary needs recorded, items that conflict are marked (red:
- * contains, amber: may contain) with their alternative, and they can show
- * only what they can eat. Items load when Food is opened.
+ * Meals one day at a time. Each meal opens to its items by category, with
+ * their allergens and alternatives. No one's own dietary needs are kept, so
+ * everyone sees the same list. Items load when Food is opened.
  */
 function Food({ meals, tz, pass }: { meals: ProgrammeItem[]; tz: string; pass: string }) {
   const today = todayInZone(tz);
@@ -778,14 +798,20 @@ function Food({ meals, tz, pass }: { meals: ProgrammeItem[]; tz: string; pass: s
         </button>
         {it.yourAlternative && <p className="pp-mi-alt">Your alternative: {it.yourAlternative}</p>}
         {it.isAlternative && (it.replaces || it.alternativeFor.length > 0) && (
-          <p className="pp-mi-sub">{[it.replaces ? `Instead of ${it.replaces}` : null, it.alternativeFor.length ? `For ${it.alternativeFor.join(', ')}` : null].filter(Boolean).join(' · ')}</p>
+          <p className="pp-mi-sub">
+            {[it.replaces ? `Instead of ${it.replaces}` : null, it.alternativeFor.length ? `For ${it.alternativeFor.join(', ')}` : null].filter(Boolean).join(' · ')}
+          </p>
         )}
         {isOpen && (
           <div className="pp-mi-detail">
             {it.ingredients ? <p>{it.ingredients}</p> : <p className="pp-muted">No ingredients listed.</p>}
             {(it.contains.length > 0 || it.mayContain.length > 0 || it.dietary.length > 0) && (
               <p className="pp-mi-labels">
-                {[it.contains.length ? `Contains: ${it.contains.join(', ')}` : null, it.mayContain.length ? `May contain: ${it.mayContain.join(', ')}` : null, it.dietary.length ? `Suits: ${it.dietary.join(', ')}` : null]
+                {[
+                  it.contains.length ? `Contains: ${it.contains.join(', ')}` : null,
+                  it.mayContain.length ? `May contain: ${it.mayContain.join(', ')}` : null,
+                  it.dietary.length ? `Suits: ${it.dietary.join(', ')}` : null,
+                ]
                   .filter(Boolean)
                   .join(' · ')}
               </p>
@@ -917,7 +943,6 @@ function Board({ board }: { board: SideQuestStanding['board'] }) {
   );
 }
 
-
 /**
  * The moment of collecting someone: a full-screen splash with the count
  * rising to the new total. A repeat gets a softer, comic sheet instead.
@@ -927,9 +952,8 @@ function CollectScreen({ result, onDone, onMine }: { result: CollectResult; onDo
   const reduced = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const [shown, setShown] = useState(result.fresh && !reduced ? Math.max(0, s.collected - 1) : s.collected);
   const done = useRef<HTMLButtonElement>(null);
-  // Adults are one quest; everyone else is in their level's quest.
-  const questKey = (result.friend.kind ? result.friend.kind === 'adult' : result.friend.levelWord === 'Leader') ? 'leaders' : result.friend.level.toLowerCase();
-  const quest = s.quests.find((q) => q.key === questKey);
+  // One quest: everyone at camp.
+  const quest = s.quests[0];
   const milestone = result.fresh && (s.collected === 1 || s.collected % 10 === 0 || (quest?.done && quest.collected === quest.total));
 
   useEffect(() => {

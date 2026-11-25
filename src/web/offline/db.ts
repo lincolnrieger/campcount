@@ -127,14 +127,12 @@ export async function removeKeptImportColumns(): Promise<void> {
 export async function clearDevice(force = false): Promise<boolean> {
   if (!force && (await countUnsynced()) > 0) return false;
   const db = await open();
-  await Promise.all(
-    ['snapshots', 'outbox'].map((name) => request(db.transaction(name, 'readwrite').objectStore(name).clear())),
-  );
+  await Promise.all(['snapshots', 'outbox'].map((name) => request(db.transaction(name, 'readwrite').objectStore(name).clear())));
   return true;
 }
 
 /**
- * Wipe the cached rosters (names, groups, dietary alerts) but keep waiting
+ * Wipe the cached rosters (names) but keep waiting
  * scans, so they can upload after the next sign-in. Used when the server says
  * this device is no longer signed in (expired, revoked or a station stopped).
  */
